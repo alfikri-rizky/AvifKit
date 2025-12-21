@@ -38,15 +38,39 @@ in your IDE’s toolbar or open the [/iosApp](iosApp) directory in Xcode and run
 
 ## AvifKit Library
 
-AvifKit is a Kotlin Multiplatform library for AVIF image encoding and decoding on Android and iOS.
+AvifKit is a production-ready Kotlin Multiplatform library for AVIF image encoding and decoding on Android and iOS.
 
 ### Features
 
-- Convert images to/from AVIF format
-- Adaptive compression with target file size
-- Two compression strategies: SMART and STRICT
-- Priority presets for common scenarios
-- Support for Android and iOS platforms
+#### Core Functionality
+- ✅ **AVIF Encoding & Decoding** - Full support via native libavif integration
+- ✅ **Adaptive Compression** - Intelligent file size targeting with two strategies
+- ✅ **Priority Presets** - Quick configuration for common use cases
+- ✅ **Multi-threaded Processing** - Efficient encoding/decoding using up to 4 threads
+- ✅ **Format Detection** - Automatic image format identification
+- ✅ **Orientation Support** - EXIF orientation handling on Android, UIImage orientation on iOS
+- ✅ **Graceful Fallback** - JPEG encoding when native library unavailable
+
+#### Advanced Features
+- Image resizing with dimension constraints
+- Chroma subsampling options (YUV444, YUV422, YUV420)
+- Alpha channel quality control
+- Metadata preservation (optional)
+- Multiple input types (ByteArray, Bitmap/UIImage, file path)
+
+### Architecture
+
+AvifKit uses a **two-tier architecture**:
+
+1. **Native Mode** (Recommended):
+   - Uses libavif for true AVIF encoding/decoding
+   - Requires setup (see Platform Setup below)
+   - Production-quality AVIF output
+
+2. **Fallback Mode** (Automatic):
+   - Uses JPEG encoding when native library unavailable
+   - Works out-of-the-box without setup
+   - Good for development/testing
 
 ### Usage
 
@@ -164,17 +188,145 @@ EncodingOptions(
 )
 ```
 
-### Platform Notes
+### Platform Setup
 
 #### Android
-- Requires native library integration (libavif)
-- Falls back to JPEG if native library unavailable
-- JNI-based implementation
+
+**Implementation Status:** ✅ Complete (JNI + C++ with conditional libavif support)
+
+**Quick Start (Fallback Mode):**
+```bash
+# Build without native AVIF (uses JPEG fallback)
+./gradlew :shared:build
+```
+
+**Production Setup (Native AVIF):**
+```bash
+# 1. Download libavif
+./scripts/setup-android-libavif.sh
+
+# 2. Uncomment NDK configuration in shared/build.gradle.kts
+#    Lines 56-83 (ndk{}, externalNativeBuild{})
+
+# 3. Build with libavif support
+./gradlew :shared:build
+```
+
+**Implementation Details:**
+- Native C++ implementation via JNI (`shared/src/androidMain/cpp/`)
+- Conditional compilation: works with OR without libavif
+- EXIF orientation support (preserves portrait/landscape orientation)
+- Multi-threaded encoding/decoding
+- Build configuration in `CMakeLists.txt`
+
+**Dependencies:**
+- NDK (for native builds)
+- CMake 3.18.1+
+- libavif (auto-downloaded by setup script)
 
 #### iOS
-- Requires avif.swift integration (placeholder currently)
-- Falls back to JPEG for encoding
-- CoreGraphics-based implementation
+
+**Implementation Status:** ✅ Complete (Swift with conditional libavif support)
+
+**Quick Start (Fallback Mode):**
+```bash
+# Build without native AVIF (uses JPEG fallback)
+# Open iosApp/iosApp.xcodeproj and build
+```
+
+**Production Setup (Native AVIF):**
+```bash
+# 1. Run setup script
+./scripts/setup-ios-avif.sh
+
+# 2. Choose integration method:
+#    Option 1: CocoaPods (recommended)
+#    Option 2: Swift Package Manager
+
+# 3. Open workspace/project in Xcode and build
+```
+
+**Implementation Details:**
+- Native Swift implementation (`iosApp/Native/AVIFNativeConverter.swift`)
+- Conditional compilation: `#if canImport(libavif)`
+- UIImage orientation handling (properly encodes portrait photos)
+- CoreGraphics-based conversion
+- Kotlin stub bridges to Swift implementation
+
+**Dependencies:**
+- libavif (via CocoaPods or SPM)
+- iOS 13.0+
+
+### Implementation Status
+
+| Component | Status | Location | Notes |
+|-----------|--------|----------|-------|
+| **Core Library** | ✅ Complete | `shared/src/commonMain/` | Cross-platform API |
+| **Android Native** | ✅ Complete | `shared/src/androidMain/cpp/` | JNI + libavif |
+| **iOS Native** | ✅ Complete | `iosApp/Native/AVIFNativeConverter.swift` | Swift + libavif |
+| **Adaptive Compression** | ✅ Complete | Both platforms | SMART & STRICT strategies |
+| **Orientation Support** | ✅ Complete | Both platforms | EXIF (Android), UIImage (iOS) |
+| **Fallback Mode** | ✅ Complete | Both platforms | JPEG when libavif unavailable |
+| **Setup Scripts** | ✅ Complete | `scripts/` | Android & iOS automation |
+| **Build Configuration** | ⚠️ Partial | `shared/build.gradle.kts` | NDK config commented out |
+
+### Known Limitations & Tech Debt
+
+1. **Android NDK Configuration:**
+   - NDK config is commented out in `shared/build.gradle.kts` (lines 56-83)
+   - Must be manually uncommented for native AVIF support
+   - Reason: Allows project to build without NDK installed
+
+2. **iOS libavif Integration:**
+   - Swift implementation is complete but library not linked by default
+   - Requires manual CocoaPods/SPM setup
+   - Falls back to JPEG gracefully
+
+3. **Decoding on iOS (Fallback Mode):**
+   - Without libavif: uses standard `UIImage(data:)` decoding
+   - May not decode actual AVIF files (placeholder comment in code line 414)
+   - With libavif: full AVIF decoding works
+
+4. **Library Size:**
+   - Including libavif increases app size (~2-3MB per architecture)
+   - Consider using fallback mode if size is critical
+
+5. **Platform API Differences:**
+   - Android uses `android.graphics.Bitmap`
+   - iOS uses `UIImage`
+   - Wrapped in `PlatformBitmap` expect/actual
+
+### Verifying Setup
+
+Check if native AVIF is available:
+
+```kotlin
+val converter = AvifConverter()
+val isSupported = converter.isAvifSupported()
+
+// Android: check library version
+val version = converter.getLibraryVersion() // Shows libavif version or "Placeholder"
+
+// iOS: check in AVIFNativeConverter.swift
+AVIFNativeConverter.isAvifAvailable // true if libavif linked
+```
+
+### Testing Fallback Behavior
+
+The library automatically uses fallback when native library is unavailable:
+
+- **Encoding:** JPEG with equivalent quality settings
+- **Decoding:** Standard image decoder (JPEG, PNG, etc.)
+- **Logs:** Check for "Using JPEG fallback" or "libavif not available" messages
+
+---
+
+### Additional Resources
+
+- [Integration Guide](INTEGRATION_GUIDE.md) - Detailed setup instructions
+- [iOS Integration](docs/IOS_INTEGRATION_GUIDE.md) - iOS-specific guide
+- [Publishing Guide](docs/PUBLISHING_GUIDE.md) - How to publish to Maven
+- [Project Summary](docs/PROJECT_SUMMARY.md) - Architecture overview
 
 ---
 
