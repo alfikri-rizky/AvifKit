@@ -1,0 +1,77 @@
+*.iml
+.kotlin
+.gradle
+**/build/
+xcuserdata
+!src/**/build/
+local.properties
+.idea
+.DS_Store
+captures
+.externalNativeBuild
+.cxx
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+!*.xcodeproj/project.xcworkspace/
+!*.xcworkspace/contents.xcworkspacedata
+**/xcshareddata/WorkspaceSettings.xcsettings
+node_modules/
+
+# Maven Publishing - Sensitive Files
+# ===================================
+# NEVER commit these files! They contain credentials and private keys
+gradle.properties
+secret-key.asc
+secret-key.asc.base64
+gpg-key.txt
+gpg-secret.key
+*.keystore
+*.jks
+secring.gpg
+pubring.gpg
+*.p12
+*.pfx
+
+# GPG Keys (various formats)
+*.gpg
+*.asc
+!gradle/verification-metadata.xml.asc
+
+# Signing files
+signing.properties
+
+# Publishing logs
+maven-publish/
+.maven-publish/
+
+# Xcode Build Results
+*.xcresult
+DerivedData/
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# CocoaPods
+Pods/
+Podfile.lock
+*.podspec
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Android signing
+release.keystore
+debug.keystore
+keystore.properties
+
+# Local test files
+/tmp/
+*.tmp
+*.log
+ios_build.log
+
+docs
+.claude

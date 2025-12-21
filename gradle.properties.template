@@ -1,0 +1,61 @@
+# AvifKit - Gradle Properties Template
+# =========================================
+# Copy this file to gradle.properties and fill in your actual credentials
+# NEVER commit gradle.properties with real credentials to Git!
+# =========================================
+
+# Maven Central Publishing Configuration
+# ---------------------------------------
+
+# Sonatype Nexus credentials
+# Get these from: https://s01.oss.sonatype.org/ → Profile → User Token
+# These are NOT your JIRA credentials!
+ossrhUsername=YOUR_SONATYPE_TOKEN_USERNAME_HERE
+ossrhPassword=YOUR_SONATYPE_TOKEN_PASSWORD_HERE
+
+# GPG Signing Configuration
+# -------------------------
+# Generate GPG key: gpg --full-generate-key
+# Export key: gpg --export-secret-keys YOUR_KEY_ID | base64 | tr -d '\n'
+# Paste the entire base64 output below (it's a long string)
+signing.key=YOUR_BASE64_ENCODED_GPG_KEY_HERE
+signing.password=YOUR_GPG_KEY_PASSPHRASE_HERE
+
+# Library Information
+# -------------------
+GROUP=io.github.alfikri-rizky
+VERSION_NAME=1.0.0
+POM_NAME=AvifKit
+POM_DESCRIPTION=Kotlin Multiplatform library for converting images to AVIF format on Android and iOS
+POM_INCEPTION_YEAR=2024
+POM_URL=https://github.com/alfikri-rizky/AvifKit
+
+# License
+POM_LICENSE_NAME=MIT License
+POM_LICENSE_URL=https://opensource.org/licenses/MIT
+POM_LICENSE_DIST=repo
+
+# Developer Information
+POM_DEVELOPER_ID=alfikri-rizky
+POM_DEVELOPER_NAME=Alfikri Rizky
+POM_DEVELOPER_EMAIL=your.email@example.com
+
+# SCM Information
+POM_SCM_URL=https://github.com/alfikri-rizky/AvifKit
+POM_SCM_CONNECTION=scm:git:git://github.com/alfikri-rizky/AvifKit.git
+POM_SCM_DEV_CONNECTION=scm:git:ssh://git@github.com/alfikri-rizky/AvifKit.git
+
+# Build Optimization
+# ------------------
+org.gradle.parallel=true
+org.gradle.caching=true
+org.gradle.configureondemand=false
+org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m
+
+# Kotlin
+kotlin.code.style=official
+kotlin.mpp.stability.nowarn=true
+
+# Android
+android.useAndroidX=true
+android.enableJetifier=false

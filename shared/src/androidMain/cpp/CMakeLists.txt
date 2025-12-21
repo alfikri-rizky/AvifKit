@@ -1,0 +1,91 @@
+cmake_minimum_required(VERSION 3.18.1)
+project("avif-android-wrapper")
+
+# Set C++ standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Build configuration
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+
+# Compiler optimization flags
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
+
+# Check if libavif is available
+set(LIBAVIF_DIR ${CMAKE_SOURCE_DIR}/libavif)
+if(EXISTS ${LIBAVIF_DIR}/CMakeLists.txt)
+    message(STATUS "✅ libavif found - Building with AVIF support")
+
+    # Configure libavif build options
+    set(AVIF_CODEC_AOM ON CACHE BOOL "Use AOM codec")
+    set(AVIF_LOCAL_AOM ON CACHE BOOL "Build AOM locally")
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build static libraries")
+    set(AVIF_BUILD_APPS OFF CACHE BOOL "Don't build apps")
+    set(AVIF_BUILD_TESTS OFF CACHE BOOL "Don't build tests")
+    set(AVIF_BUILD_EXAMPLES OFF CACHE BOOL "Don't build examples")
+
+    # Add libavif subdirectory
+    add_subdirectory(${LIBAVIF_DIR} ${CMAKE_BINARY_DIR}/libavif-build EXCLUDE_FROM_ALL)
+
+    # Enable AVIF in wrapper
+    add_compile_definitions(HAVE_LIBAVIF=1)
+
+    set(HAS_LIBAVIF TRUE)
+else()
+    message(WARNING "⚠️  libavif not found - Using placeholder implementation")
+    message(WARNING "⚠️  Run: ./scripts/setup-android-libavif.sh")
+    add_compile_definitions(HAVE_LIBAVIF=0)
+
+    set(HAS_LIBAVIF FALSE)
+endif()
+
+# Create JNI wrapper library
+add_library(avif-android-wrapper SHARED
+    avif_jni_wrapper.cpp
+)
+
+# Include directories
+target_include_directories(avif-android-wrapper PRIVATE
+    ${CMAKE_SOURCE_DIR}
+)
+
+if(HAS_LIBAVIF)
+    target_include_directories(avif-android-wrapper PRIVATE
+        ${LIBAVIF_DIR}/include
+    )
+endif()
+
+# Link libraries
+target_link_libraries(avif-android-wrapper
+    android
+    jnigraphics
+    log
+)
+
+if(HAS_LIBAVIF)
+    target_link_libraries(avif-android-wrapper avif)
+endif()
+
+# Strip symbols in release builds to reduce binary size
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_custom_command(TARGET avif-android-wrapper POST_BUILD
+        COMMAND ${CMAKE_STRIP} --strip-unneeded $<TARGET_FILE:avif-android-wrapper>
+        COMMENT "Stripping symbols to reduce binary size"
+    )
+endif()
+
+# Print build summary
+message(STATUS "========================================")
+message(STATUS "AvifKit Native Library Configuration")
+message(STATUS "========================================")
+message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
+if(HAS_LIBAVIF)
+    message(STATUS "AVIF Support: ✅ ENABLED (using libavif)")
+else()
+    message(STATUS "AVIF Support: ⚠️  DISABLED (placeholder mode)")
+endif()
+message(STATUS "========================================")

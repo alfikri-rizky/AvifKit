@@ -1,0 +1,28 @@
+# Podfile for AvifKit iOS App
+# Copy this to Podfile and customize as needed
+
+platform :ios, '13.0'
+use_frameworks!
+
+target 'iosApp' do
+  # AvifKit - AVIF support
+  pod 'libavif', '~> 1.0'
+
+  # Shared KMP module
+  pod 'Shared', :path => '../shared'
+
+  # Optional: Additional dependencies
+  # pod 'Alamofire', '~> 5.8'  # Example
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+
+      # Enable AVIF support
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'HAVE_LIBAVIF=1'
+    end
+  end
+end

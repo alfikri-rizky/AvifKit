@@ -1,0 +1,93 @@
+cmake_minimum_required(VERSION 3.18.1)
+project("avif-android-wrapper")
+
+# Set C++ standard
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Build type
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE Release)
+endif()
+
+# Compiler flags for optimization
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g")
+
+# Check if libavif directory exists
+set(LIBAVIF_DIR ${CMAKE_SOURCE_DIR}/libavif)
+if(EXISTS ${LIBAVIF_DIR})
+    message(STATUS "✅ Found libavif at: ${LIBAVIF_DIR}")
+
+    # Configure libavif
+    set(AVIF_CODEC_AOM ON CACHE BOOL "Use AOM codec")
+    set(AVIF_LOCAL_AOM ON CACHE BOOL "Build AOM locally")
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build static libraries")
+    set(AVIF_BUILD_APPS OFF CACHE BOOL "Don't build apps")
+    set(AVIF_BUILD_TESTS OFF CACHE BOOL "Don't build tests")
+    set(AVIF_BUILD_EXAMPLES OFF CACHE BOOL "Don't build examples")
+
+    # Add libavif as subdirectory
+    add_subdirectory(${LIBAVIF_DIR} ${CMAKE_BINARY_DIR}/libavif-build EXCLUDE_FROM_ALL)
+
+    # Define that we have libavif
+    add_compile_definitions(HAVE_LIBAVIF=1)
+
+    message(STATUS "✅ libavif configured successfully")
+else()
+    message(WARNING "⚠️  libavif not found at ${LIBAVIF_DIR}")
+    message(WARNING "⚠️  Run: scripts/setup-android-libavif.sh")
+    message(WARNING "⚠️  Building with placeholder implementation")
+    add_compile_definitions(HAVE_LIBAVIF=0)
+endif()
+
+# Create JNI wrapper library
+add_library(avif-android-wrapper SHARED
+    avif_jni_wrapper.cpp
+)
+
+# Include directories
+target_include_directories(avif-android-wrapper PRIVATE
+    ${CMAKE_SOURCE_DIR}
+)
+
+if(EXISTS ${LIBAVIF_DIR})
+    target_include_directories(avif-android-wrapper PRIVATE
+        ${LIBAVIF_DIR}/include
+    )
+endif()
+
+# Link libraries
+target_link_libraries(avif-android-wrapper
+    android
+    jnigraphics
+    log
+)
+
+if(EXISTS ${LIBAVIF_DIR})
+    target_link_libraries(avif-android-wrapper
+        avif
+    )
+endif()
+
+# Strip symbols in release builds to reduce size
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    add_custom_command(TARGET avif-android-wrapper POST_BUILD
+        COMMAND ${CMAKE_STRIP} --strip-unneeded $<TARGET_FILE:avif-android-wrapper>
+        COMMENT "Stripping symbols from release build"
+    )
+endif()
+
+# Print build configuration
+message(STATUS "========================================")
+message(STATUS "AvifKit Android Native Library Config")
+message(STATUS "========================================")
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "C++ Standard: ${CMAKE_CXX_STANDARD}")
+message(STATUS "libavif: ${LIBAVIF_DIR}")
+if(EXISTS ${LIBAVIF_DIR})
+    message(STATUS "AVIF Support: ✅ ENABLED")
+else()
+    message(STATUS "AVIF Support: ⚠️  PLACEHOLDER (libavif not found)")
+endif()
+message(STATUS "========================================")
