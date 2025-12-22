@@ -60,17 +60,17 @@ AvifKit is a production-ready Kotlin Multiplatform library for AVIF image encodi
 
 ### Architecture
 
-AvifKit uses a **two-tier architecture**:
+AvifKit uses a **two-tier architecture** with automatic fallback:
 
-1. **Native Mode** (Recommended):
+1. **Native Mode** (Default):
    - Uses libavif for true AVIF encoding/decoding
-   - Requires setup (see Platform Setup below)
-   - Production-quality AVIF output
+   - Automatically included when you add the library dependency
+   - Production-quality AVIF output with full feature support
 
 2. **Fallback Mode** (Automatic):
-   - Uses JPEG encoding when native library unavailable
-   - Works out-of-the-box without setup
-   - Good for development/testing
+   - Activates automatically if native library fails to load
+   - Uses JPEG encoding with equivalent quality settings
+   - Ensures your app never crashes due to missing dependencies
 
 ### Usage
 
@@ -188,74 +188,83 @@ EncodingOptions(
 )
 ```
 
-### Platform Setup
+### Installation
+
+AvifKit is published as a Kotlin Multiplatform library with seamless integration for both Android and iOS platforms.
+
+#### Android (Gradle)
+
+Add the dependency to your `build.gradle.kts`:
+
+```kotlin
+dependencies {
+    implementation("io.github.alfikri-rizky:avifkit:1.0.0")
+}
+```
+
+**That's it!** The library includes pre-built native binaries for all ABIs (arm64-v8a, armeabi-v7a, x86, x86_64) with full AVIF support via libavif.
+
+#### iOS (CocoaPods)
+
+Add to your `Podfile`:
+
+```ruby
+pod 'AvifKit', '~> 1.0.0'
+```
+
+Then run:
+```bash
+pod install
+```
+
+**That's it!** CocoaPods automatically downloads and links libavif. Use the `.xcworkspace` file to open your project.
+
+#### iOS (Swift Package Manager)
+
+In Xcode:
+1. File → Add Packages...
+2. Enter repository URL: `https://github.com/alfikri-rizky/AvifKit.git`
+3. Select version: `1.0.0`
+
+Or add to your `Package.swift`:
+
+```swift
+dependencies: [
+    .package(url: "https://github.com/alfikri-rizky/AvifKit.git", from: "1.0.0")
+]
+```
+
+**That's it!** SPM automatically resolves all dependencies including libavif.
+
+---
+
+### Platform Implementation Details
 
 #### Android
+- **Native C++ implementation** via JNI (`shared/src/androidMain/cpp/`)
+- **Pre-built libavif binaries** included for all ABIs
+- **EXIF orientation support** (preserves portrait/landscape orientation)
+- **Multi-threaded encoding/decoding** (up to 4 threads)
+- **Automatic fallback** to JPEG if native library fails to load
 
-**Implementation Status:** ✅ Complete (JNI + C++ with conditional libavif support)
-
-**Quick Start (Fallback Mode):**
-```bash
-# Build without native AVIF (uses JPEG fallback)
-./gradlew :shared:build
-```
-
-**Production Setup (Native AVIF):**
-```bash
-# 1. Download libavif
-./scripts/setup-android-libavif.sh
-
-# 2. Uncomment NDK configuration in shared/build.gradle.kts
-#    Lines 56-83 (ndk{}, externalNativeBuild{})
-
-# 3. Build with libavif support
-./gradlew :shared:build
-```
-
-**Implementation Details:**
-- Native C++ implementation via JNI (`shared/src/androidMain/cpp/`)
-- Conditional compilation: works with OR without libavif
-- EXIF orientation support (preserves portrait/landscape orientation)
-- Multi-threaded encoding/decoding
-- Build configuration in `CMakeLists.txt`
-
-**Dependencies:**
-- NDK (for native builds)
-- CMake 3.18.1+
-- libavif (auto-downloaded by setup script)
+**Technical Details:**
+- NDK with CMake build system
+- Conditional compilation support
+- Optimized with `-O3` compiler flags
+- Symbol stripping for smaller binary size
 
 #### iOS
+- **Native Swift implementation** (`AVIFNativeConverter.swift`)
+- **Conditional compilation** using `#if canImport(libavif)`
+- **UIImage orientation handling** (properly encodes portrait photos)
+- **CoreGraphics-based conversion**
+- **Automatic fallback** to JPEG when libavif unavailable
 
-**Implementation Status:** ✅ Complete (Swift with conditional libavif support)
-
-**Quick Start (Fallback Mode):**
-```bash
-# Build without native AVIF (uses JPEG fallback)
-# Open iosApp/iosApp.xcodeproj and build
-```
-
-**Production Setup (Native AVIF):**
-```bash
-# 1. Run setup script
-./scripts/setup-ios-avif.sh
-
-# 2. Choose integration method:
-#    Option 1: CocoaPods (recommended)
-#    Option 2: Swift Package Manager
-
-# 3. Open workspace/project in Xcode and build
-```
-
-**Implementation Details:**
-- Native Swift implementation (`iosApp/Native/AVIFNativeConverter.swift`)
-- Conditional compilation: `#if canImport(libavif)`
-- UIImage orientation handling (properly encodes portrait photos)
-- CoreGraphics-based conversion
-- Kotlin stub bridges to Swift implementation
-
-**Dependencies:**
-- libavif (via CocoaPods or SPM)
-- iOS 13.0+
+**Technical Details:**
+- iOS 13.0+ deployment target
+- Swift 5.0+
+- Framework-based distribution
+- XCFramework support for multiple architectures
 
 ### Implementation Status
 
@@ -263,38 +272,34 @@ EncodingOptions(
 |-----------|--------|----------|-------|
 | **Core Library** | ✅ Complete | `shared/src/commonMain/` | Cross-platform API |
 | **Android Native** | ✅ Complete | `shared/src/androidMain/cpp/` | JNI + libavif |
-| **iOS Native** | ✅ Complete | `iosApp/Native/AVIFNativeConverter.swift` | Swift + libavif |
+| **iOS Native** | ✅ Complete | `shared/src/iosMain/swift/` | Swift + libavif |
 | **Adaptive Compression** | ✅ Complete | Both platforms | SMART & STRICT strategies |
 | **Orientation Support** | ✅ Complete | Both platforms | EXIF (Android), UIImage (iOS) |
 | **Fallback Mode** | ✅ Complete | Both platforms | JPEG when libavif unavailable |
-| **Setup Scripts** | ✅ Complete | `scripts/` | Android & iOS automation |
-| **Build Configuration** | ⚠️ Partial | `shared/build.gradle.kts` | NDK config commented out |
+| **Distribution** | ✅ Complete | `AvifKit.podspec`, `Package.swift` | CocoaPods & SPM support |
+| **Build Configuration** | ✅ Complete | `shared/build.gradle.kts` | Ready for publishing |
 
-### Known Limitations & Tech Debt
+### Known Limitations
 
-1. **Android NDK Configuration:**
-   - NDK config is commented out in `shared/build.gradle.kts` (lines 56-83)
-   - Must be manually uncommented for native AVIF support
-   - Reason: Allows project to build without NDK installed
+1. **Library Size:**
+   - Including libavif increases app size (~2-3MB per architecture on Android, ~1-2MB on iOS)
+   - This is standard for any AVIF library and necessary for native performance
+   - Fallback mode available if size is critical
 
-2. **iOS libavif Integration:**
-   - Swift implementation is complete but library not linked by default
-   - Requires manual CocoaPods/SPM setup
-   - Falls back to JPEG gracefully
-
-3. **Decoding on iOS (Fallback Mode):**
+2. **Decoding on iOS (Fallback Mode):**
    - Without libavif: uses standard `UIImage(data:)` decoding
-   - May not decode actual AVIF files (placeholder comment in code line 414)
-   - With libavif: full AVIF decoding works
+   - Cannot decode actual AVIF files in fallback mode
+   - With libavif (default): full AVIF decoding works
 
-4. **Library Size:**
-   - Including libavif increases app size (~2-3MB per architecture)
-   - Consider using fallback mode if size is critical
-
-5. **Platform API Differences:**
+3. **Platform API Differences:**
    - Android uses `android.graphics.Bitmap`
    - iOS uses `UIImage`
-   - Wrapped in `PlatformBitmap` expect/actual
+   - Abstracted via `PlatformBitmap` expect/actual pattern
+
+4. **Build Requirements (for library authors only):**
+   - Android: Requires NDK and CMake to build from source
+   - iOS: Requires Xcode and CocoaPods/SPM
+   - End users don't need these - they get pre-built binaries
 
 ### Verifying Setup
 
@@ -321,9 +326,64 @@ The library automatically uses fallback when native library is unavailable:
 
 ---
 
+### For Library Authors & Contributors
+
+If you want to build the library from source or contribute to development:
+
+#### Prerequisites
+- **Android:** NDK, CMake 3.18.1+
+- **iOS:** Xcode, CocoaPods or SPM
+- **Both:** JDK 11+, Kotlin 1.9+
+
+#### Setup Development Environment
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/alfikri-rizky/AvifKit.git
+cd AvifKit
+
+# 2. Run the preparation script (downloads libavif, builds everything)
+./scripts/prepare-for-publish.sh
+
+# 3. Build the project
+./gradlew :shared:build
+```
+
+#### Publishing
+
+The library uses a comprehensive publishing setup:
+
+**To Maven Central:**
+```bash
+./gradlew :shared:publishAllPublicationsToSonatypeRepository
+```
+
+**To local Maven (for testing):**
+```bash
+./gradlew :shared:publishToMavenLocal
+```
+
+**To CocoaPods:**
+```bash
+pod trunk push AvifKit.podspec
+```
+
+See the [Publishing Guide](docs/PUBLISHING_GUIDE.md) for detailed instructions.
+
+#### Scripts Reference
+
+- `scripts/setup-android-libavif.sh` - Downloads libavif for Android development
+- `scripts/setup-ios-avif.sh` - Sets up iOS dependencies (CocoaPods/SPM)
+- `scripts/prepare-for-publish.sh` - Prepares everything for release (runs both setup scripts + builds)
+- `scripts/verify-integration.sh` - Verifies the integration is working correctly
+
+**Note:** End users of your published library don't need these scripts - they're only for development and publishing.
+
+---
+
 ### Additional Resources
 
-- [Integration Guide](INTEGRATION_GUIDE.md) - Detailed setup instructions
+- [Integration Guide](docs/INTEGRATION_GUIDE.md) - Detailed setup instructions
 - [iOS Integration](docs/IOS_INTEGRATION_GUIDE.md) - iOS-specific guide
 - [Publishing Guide](docs/PUBLISHING_GUIDE.md) - How to publish to Maven
 - [Project Summary](docs/PROJECT_SUMMARY.md) - Architecture overview

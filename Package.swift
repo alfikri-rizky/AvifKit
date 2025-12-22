@@ -10,27 +10,38 @@ let package = Package(
     products: [
         .library(
             name: "AvifKit",
-            targets: ["AvifKit"]
+            targets: ["AvifKit", "Shared"]
         )
     ],
     dependencies: [
-        // libavif dependency
-        // Note: You may need to use a custom libavif SPM package
-        // Example: .package(url: "https://github.com/SDWebImage/libavif-Xcode.git", from: "1.0.0")
+        // libavif XCFramework for SPM
+        // Using SDWebImage's pre-built libavif XCFramework
+        .package(url: "https://github.com/SDWebImage/libavif-Xcode.git", from: "1.0.0")
     ],
     targets: [
+        // Swift wrapper for AVIF conversion
         .target(
             name: "AvifKit",
-            dependencies: [],
+            dependencies: [
+                "Shared",
+                .product(name: "libavif", package: "libavif-Xcode")
+            ],
             path: "shared/src/iosMain/swift",
             publicHeadersPath: nil,
-            cSettings: [
-                .define("HAVE_LIBAVIF", to: "1")
-            ],
             swiftSettings: [
-                .define("HAVE_LIBAVIF")
+                .define("canImport(libavif)")
             ]
         ),
+
+        // Kotlin Multiplatform XCFramework
+        // Pre-built from the shared module
+        // Build with: ./gradlew :shared:assembleSharedXCFramework
+        .binaryTarget(
+            name: "Shared",
+            path: "shared/build/XCFrameworks/release/Shared.xcframework"
+        ),
+
+        // Test target
         .testTarget(
             name: "AvifKitTests",
             dependencies: ["AvifKit"],

@@ -54,8 +54,9 @@ android {
         minSdk = libs.versions.android.minSdk.get().toInt()
 
         // NDK configuration for native AVIF support
-        // Uncomment when NDK is properly installed and libavif is integrated
-        /*
+        // The native library is built conditionally:
+        // - With libavif: true AVIF encoding/decoding
+        // - Without libavif: JPEG fallback mode
         ndk {
             abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
         }
@@ -69,18 +70,16 @@ android {
                 )
             }
         }
-        */
     }
 
-    // Uncomment when NDK is properly installed and libavif is integrated
-    /*
+    // CMake configuration for JNI wrapper
+    // Conditionally builds with or without libavif (see CMakeLists.txt)
     externalNativeBuild {
         cmake {
             path = file("src/androidMain/cpp/CMakeLists.txt")
             version = "3.18.1"
         }
     }
-    */
 }
 
 // Maven Publishing Configuration
