@@ -16,8 +16,9 @@ kotlin {
     }
 
     listOf(
-        iosArm64(),
-        iosSimulatorArm64()
+        iosArm64(),          // Real iOS devices
+        iosX64(),            // Intel Mac simulators
+        iosSimulatorArm64()  // Apple Silicon simulators
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
             baseName = "Shared"
