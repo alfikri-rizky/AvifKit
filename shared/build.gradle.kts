@@ -78,7 +78,7 @@ android {
     externalNativeBuild {
         cmake {
             path = file("src/androidMain/cpp/CMakeLists.txt")
-            version = "3.18.1"
+            version = "3.22.1"
         }
     }
 }
@@ -151,6 +151,9 @@ if (findProperty("GROUP") == null) {
         }
     }
 
+    // Signing disabled for Maven Local publishing
+    // Uncomment when you have valid GPG keys for Maven Central publishing
+    /*
     signing {
         val signingKey = findProperty("signing.key")?.toString() ?: System.getenv("SIGNING_KEY")
         val signingPassword = findProperty("signing.password")?.toString() ?: System.getenv("SIGNING_PASSWORD")
@@ -164,4 +167,5 @@ if (findProperty("GROUP") == null) {
     tasks.withType<Sign>().configureEach {
         onlyIf { !version.toString().endsWith("SNAPSHOT") }
     }
+    */
 }

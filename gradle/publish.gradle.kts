@@ -89,6 +89,7 @@ configure<PublishingExtension> {
     }
 }
 
+// Signing configuration for Maven Central publishing
 configure<SigningExtension> {
     // Use in-memory ASCII-armored keys
     val signingKey = findProperty("signing.key")?.toString() ?: System.getenv("SIGNING_KEY")
