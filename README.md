@@ -198,7 +198,7 @@ Add the dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.alfikri-rizky:avifkit:1.0.0")
+    implementation("io.github.alfikri-rizky:avifkit:0.1.0")
 }
 ```
 
@@ -209,7 +209,7 @@ dependencies {
 Add to your `Podfile`:
 
 ```ruby
-pod 'AvifKit', '~> 1.0.0'
+pod 'AvifKit', '~> 0.1.0'
 ```
 
 Then run:
@@ -224,13 +224,13 @@ pod install
 In Xcode:
 1. File → Add Packages...
 2. Enter repository URL: `https://github.com/alfikri-rizky/AvifKit.git`
-3. Select version: `1.0.0`
+3. Select version: `0.1.0`
 
 Or add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/alfikri-rizky/AvifKit.git", from: "1.0.0")
+    .package(url: "https://github.com/alfikri-rizky/AvifKit.git", from: "0.1.0")
 ]
 ```
 

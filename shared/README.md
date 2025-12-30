@@ -37,7 +37,7 @@ A Kotlin Multiplatform library for converting images to AVIF format, supporting 
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("io.github.alfikri-rizky:avifkit:1.0.0")
+            implementation("io.github.alfikri-rizky:avifkit:0.1.0")
         }
     }
 }
@@ -47,7 +47,7 @@ kotlin {
 
 ```gradle
 dependencies {
-    implementation("io.github.alfikri-rizky:avifkit:1.0.0")
+    implementation("io.github.alfikri-rizky:avifkit:0.1.0")
 }
 ```
 
@@ -55,13 +55,13 @@ dependencies {
 
 #### CocoaPods
 ```ruby
-pod 'AvifKitShared', '~> 1.0.0'
+pod 'AvifKitShared', '~> 0.1.0'
 ```
 
 #### Swift Package Manager
 ```swift
 dependencies: [
-    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "1.0.0")
+    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.1.0")
 ]
 ```
 
