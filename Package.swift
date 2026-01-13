@@ -37,8 +37,8 @@ let package = Package(
         // For local development: use path below (commented out for published release)
         // .binaryTarget(
         //     name: "Shared",
-        //     path: "shared/build/XCFrameworks/release/Shared.xcframework"
-        // ),
+        //         //     path: "shared/build/XCFrameworks/release/Shared.xcframework"
+        //         // ),
 
         // For published releases: use remote URL from GitHub Release
         .binaryTarget(
