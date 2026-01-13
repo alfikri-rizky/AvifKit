@@ -226,11 +226,19 @@ dependencies: [
 
 **Download from GitHub Releases:** [v0.1.0](https://github.com/alfikri-rizky/AvifKit/releases/tag/0.1.0)
 
-#### iOS (CocoaPods)
+#### iOS (CocoaPods) - Experimental 🧪
 
-> 🚧 **Coming Soon!** CocoaPods support is currently in development.
->
-> For now, please use **Swift Package Manager** (recommended) for iOS integration.
+CocoaPods support is available but experimental:
+
+```ruby
+pod 'AvifKit', '~> 0.1.0'
+```
+
+**Note:** The podspec is configured to download the pre-built XCFramework from GitHub Releases. Due to Xcode/CocoaPods validation complexities with pre-built XCFrameworks, **we recommend using Swift Package Manager** as the primary installation method.
+
+If you encounter issues with CocoaPods, please:
+1. Use SPM instead (fully supported and tested)
+2. Or install via direct XCFramework download from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/tag/0.1.0)
 
 ---
 
