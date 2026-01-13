@@ -204,37 +204,33 @@ dependencies {
 
 **That's it!** The library includes pre-built native binaries for all ABIs (arm64-v8a, armeabi-v7a, x86, x86_64) with full AVIF support via libavif.
 
-#### iOS (CocoaPods)
+#### iOS (Swift Package Manager) - Recommended ⭐
 
-Add to your `Podfile`:
-
-```ruby
-pod 'AvifKit', '~> 0.1.0'
-```
-
-Then run:
-```bash
-pod install
-```
-
-**That's it!** CocoaPods automatically downloads and links libavif. Use the `.xcworkspace` file to open your project.
-
-#### iOS (Swift Package Manager)
-
-In Xcode:
+**In Xcode:**
 1. File → Add Packages...
-2. Enter repository URL: `https://github.com/alfikri-rizky/AvifKit.git`
-3. Select version: `0.1.0`
+2. Enter repository URL: `https://github.com/alfikri-rizky/AvifKit`
+3. Select version: `0.1.0` or higher
 
-Or add to your `Package.swift`:
+**Or add to your `Package.swift`:**
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/alfikri-rizky/AvifKit.git", from: "0.1.0")
+    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.1.0")
 ]
 ```
 
-**That's it!** SPM automatically resolves all dependencies including libavif.
+**That's it!** SPM automatically:
+- ✅ Downloads the pre-built XCFramework from GitHub Releases
+- ✅ Resolves all dependencies including libavif
+- ✅ Integrates seamlessly with your Xcode project
+
+**Download from GitHub Releases:** [v0.1.0](https://github.com/alfikri-rizky/AvifKit/releases/tag/0.1.0)
+
+#### iOS (CocoaPods)
+
+> 🚧 **Coming Soon!** CocoaPods support is currently in development.
+>
+> For now, please use **Swift Package Manager** (recommended) for iOS integration.
 
 ---
 
@@ -276,7 +272,7 @@ dependencies: [
 | **Adaptive Compression** | ✅ Complete | Both platforms | SMART & STRICT strategies |
 | **Orientation Support** | ✅ Complete | Both platforms | EXIF (Android), UIImage (iOS) |
 | **Fallback Mode** | ✅ Complete | Both platforms | JPEG when libavif unavailable |
-| **Distribution** | ✅ Complete | `AvifKit.podspec`, `Package.swift` | CocoaPods & SPM support |
+| **Distribution** | ✅ Complete | `Package.swift` | SPM support (CocoaPods coming soon) |
 | **Build Configuration** | ✅ Complete | `shared/build.gradle.kts` | Ready for publishing |
 
 ### Known Limitations
