@@ -34,12 +34,18 @@ let package = Package(
         ),
 
         // Kotlin Multiplatform XCFramework
-        // Pre-built from the shared module
-        // Build with: ./gradlew :shared:assembleSharedXCFramework
+        // For local development: use path (current)
+        // For published release: use url + checksum (uncomment below)
         .binaryTarget(
             name: "Shared",
             path: "shared/build/XCFrameworks/release/Shared.xcframework"
         ),
+        // For published releases, replace the above with:
+        // .binaryTarget(
+        //     name: "Shared",
+        //     url: "https://github.com/alfikri-rizky/AvifKit/releases/download/0.1.0/Shared.xcframework.zip",
+        //     checksum: "REPLACE_WITH_ACTUAL_CHECKSUM"
+        // ),
 
         // Test target
         .testTarget(

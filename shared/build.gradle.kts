@@ -1,19 +1,24 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import com.vanniktech.maven.publish.SonatypeHost
+import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidLibrary)
-    id("maven-publish")
-    id("signing")
+    alias(libs.plugins.mavenPublish)
 }
 
 kotlin {
     androidTarget {
-        publishLibraryVariants("release", "debug")
+        publishLibraryVariants("release")  // Only publish release, not debug
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_11)
         }
     }
+
+    // Create XCFramework for iOS distribution (CocoaPods, SPM, direct usage)
+    val xcframeworkName = "Shared"
+    val xcf = XCFramework(xcframeworkName)
 
     listOf(
         iosArm64(),          // Real iOS devices
@@ -21,8 +26,11 @@ kotlin {
         iosSimulatorArm64()  // Apple Silicon simulators
     ).forEach { iosTarget ->
         iosTarget.binaries.framework {
-            baseName = "Shared"
+            baseName = xcframeworkName
             isStatic = true
+
+            // Add to XCFramework
+            xcf.add(this)
 
             // The Swift AVIFNativeConverter will be linked by Xcode at app build time
             // See: iosApp/iosApp/Native/AVIFNativeConverter.swift
@@ -83,89 +91,11 @@ android {
     }
 }
 
-// Maven Publishing Configuration
-// ==============================
+// Maven Central Publishing Configuration (New Portal API)
+// ========================================================
+// The vanniktech plugin automatically reads configuration from gradle.properties
 
-// Apply publishing script if properties are available
-if (findProperty("GROUP") != null) {
-    apply(from = "${rootProject.projectDir}/gradle/publish.gradle.kts")
-}
-
-// Fallback configuration if publish.gradle.kts is not used
-if (findProperty("GROUP") == null) {
-    group = findProperty("GROUP")?.toString() ?: "io.github.alfikri-rizky"
-    version = findProperty("VERSION_NAME")?.toString() ?: "1.0.0"
-
-    publishing {
-        publications {
-            withType<MavenPublication> {
-                artifactId = when (name) {
-                    "kotlinMultiplatform" -> "avifkit"
-                    "androidRelease" -> "avifkit-android"
-                    "iosArm64" -> "avifkit-ios-arm64"
-                    "iosSimulatorArm64" -> "avifkit-ios-simulator-arm64"
-                    else -> "avifkit-$name"
-                }
-
-                pom {
-                    name.set("AvifKit")
-                    description.set("Kotlin Multiplatform library for converting images to AVIF format")
-                    url.set("https://github.com/alfikri-rizky/AvifKit")
-
-                    licenses {
-                        license {
-                            name.set("MIT License")
-                            url.set("https://opensource.org/licenses/MIT")
-                        }
-                    }
-
-                    developers {
-                        developer {
-                            id.set("alfikri-rizky")
-                            name.set("Alfikri Rizky")
-                            email.set("rizkyalfikri@gmail.com")
-                        }
-                    }
-
-                    scm {
-                        connection.set("scm:git:git://github.com/alfikri-rizky/AvifKit.git")
-                        developerConnection.set("scm:git:ssh://github.com/alfikri-rizky/AvifKit.git")
-                        url.set("https://github.com/alfikri-rizky/AvifKit")
-                    }
-                }
-            }
-        }
-
-        repositories {
-            maven {
-                name = "sonatype"
-                val releasesRepoUrl = uri("https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/")
-                val snapshotsRepoUrl = uri("https://s01.oss.sonatype.org/content/repositories/snapshots/")
-                url = if (version.toString().endsWith("SNAPSHOT")) snapshotsRepoUrl else releasesRepoUrl
-
-                credentials {
-                    username = findProperty("ossrhUsername")?.toString() ?: System.getenv("OSSRH_USERNAME")
-                    password = findProperty("ossrhPassword")?.toString() ?: System.getenv("OSSRH_PASSWORD")
-                }
-            }
-        }
-    }
-
-    // Signing disabled for Maven Local publishing
-    // Uncomment when you have valid GPG keys for Maven Central publishing
-    /*
-    signing {
-        val signingKey = findProperty("signing.key")?.toString() ?: System.getenv("SIGNING_KEY")
-        val signingPassword = findProperty("signing.password")?.toString() ?: System.getenv("SIGNING_PASSWORD")
-
-        if (signingKey != null && signingPassword != null) {
-            useInMemoryPgpKeys(signingKey, signingPassword)
-            sign(publishing.publications)
-        }
-    }
-
-    tasks.withType<Sign>().configureEach {
-        onlyIf { !version.toString().endsWith("SNAPSHOT") }
-    }
-    */
+mavenPublishing {
+    publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
+    signAllPublications()
 }

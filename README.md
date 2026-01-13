@@ -368,8 +368,6 @@ The library uses a comprehensive publishing setup:
 pod trunk push AvifKit.podspec
 ```
 
-See the [Publishing Guide](docs/PUBLISHING_GUIDE.md) for detailed instructions.
-
 #### Scripts Reference
 
 - `scripts/setup-android-libavif.sh` - Downloads libavif for Android development
@@ -378,15 +376,6 @@ See the [Publishing Guide](docs/PUBLISHING_GUIDE.md) for detailed instructions.
 - `scripts/verify-integration.sh` - Verifies the integration is working correctly
 
 **Note:** End users of your published library don't need these scripts - they're only for development and publishing.
-
----
-
-### Additional Resources
-
-- [Integration Guide](docs/INTEGRATION_GUIDE.md) - Detailed setup instructions
-- [iOS Integration](docs/IOS_INTEGRATION_GUIDE.md) - iOS-specific guide
-- [Publishing Guide](docs/PUBLISHING_GUIDE.md) - How to publish to Maven
-- [Project Summary](docs/PROJECT_SUMMARY.md) - Architecture overview
 
 ---
 
