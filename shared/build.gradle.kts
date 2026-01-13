@@ -25,6 +25,15 @@ kotlin {
         iosX64(),            // Intel Mac simulators
         iosSimulatorArm64()  // Apple Silicon simulators
     ).forEach { iosTarget ->
+        // Set iOS deployment target to 13.0 to avoid libarclite issues
+        // libarclite was removed from Xcode 14+ (only needed for iOS < 9.0)
+        // This matches our podspec requirement: spec.ios.deployment_target = "13.0"
+        iosTarget.compilations.all {
+            compilerOptions.configure {
+                freeCompilerArgs.add("-Xoverride-konan-properties=osVersionMin=13.0")
+            }
+        }
+
         iosTarget.binaries.framework {
             baseName = xcframeworkName
             isStatic = true
