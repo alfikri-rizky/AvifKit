@@ -23,7 +23,10 @@ import libavif
     /// Get libavif version
     @objc public static var avifVersion: String {
         #if canImport(libavif)
-        return avifVersion()
+        if let cString = libavif.avifVersion() {
+            return String(cString: cString)
+        }
+        return "Unknown"
         #else
         return "libavif not available"
         #endif
@@ -132,15 +135,20 @@ import libavif
         defer { avifEncoderDestroy(encoder) }
 
         // Set encoding parameters
-        encoder.pointee.quality = Int32(quality)
-        encoder.pointee.qualityAlpha = Int32(quality)
+        // In libavif 0.11+, use quantizers instead of quality
+        // quality 0-100 maps to quantizer 63-0 (inverse relationship)
+        let quantizer = Int32(63 - (quality * 63 / 100))
+        encoder.pointee.minQuantizer = quantizer
+        encoder.pointee.maxQuantizer = quantizer
+        encoder.pointee.minQuantizerAlpha = quantizer
+        encoder.pointee.maxQuantizerAlpha = quantizer
         encoder.pointee.speed = Int32(speed)
         encoder.pointee.maxThreads = 4
 
         // Create AVIF image
         guard let avifImage = avifImageCreate(
-            Int32(width),
-            Int32(height),
+            UInt32(width),
+            UInt32(height),
             8,
             AVIF_PIXEL_FORMAT_YUV420
         ) else {
@@ -150,7 +158,7 @@ import libavif
         defer { avifImageDestroy(avifImage) }
 
         // Allocate planes
-        let allocResult = avifImageAllocatePlanes(avifImage, AVIF_PLANES_ALL.rawValue)
+        let allocResult = avifImageAllocatePlanes(avifImage, UInt32(AVIF_PLANES_ALL.rawValue))
         guard allocResult == AVIF_RESULT_OK else {
             print("Failed to allocate image planes")
             return nil
@@ -229,8 +237,9 @@ import libavif
         rgbImage.format = AVIF_RGB_FORMAT_RGBA
         rgbImage.depth = 8
 
-        let allocResult = avifRGBImageAllocatePixels(&rgbImage)
-        guard allocResult == AVIF_RESULT_OK else {
+        // In libavif 0.11+, avifRGBImageAllocatePixels returns void
+        avifRGBImageAllocatePixels(&rgbImage)
+        guard rgbImage.pixels != nil else {
             print("Failed to allocate RGB pixels")
             return nil
         }
