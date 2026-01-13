@@ -34,6 +34,19 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Create gradle.properties for CI
+        run: |
+          cat > gradle.properties << 'EOF'
+          # CI/CD Build Configuration
+          android.useAndroidX=true
+          android.enableJetifier=false
+          org.gradle.parallel=true
+          org.gradle.caching=true
+          org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m
+          kotlin.code.style=official
+          kotlin.mpp.stability.nowarn=true
+          EOF
+
       - name: Build shared module
         run: ./gradlew :shared:build --no-daemon --stacktrace
 

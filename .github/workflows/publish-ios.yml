@@ -22,6 +22,19 @@ jobs:
       - name: Setup Gradle
         uses: gradle/gradle-build-action@v2
 
+      - name: Create gradle.properties for CI
+        run: |
+          cat > gradle.properties << 'EOF'
+          # CI/CD Build Configuration
+          android.useAndroidX=true
+          android.enableJetifier=false
+          org.gradle.parallel=true
+          org.gradle.caching=true
+          org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m
+          kotlin.code.style=official
+          kotlin.mpp.stability.nowarn=true
+          EOF
+
       - name: Extract version from tag
         id: get_version
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
