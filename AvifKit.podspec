@@ -55,12 +55,14 @@ Pod::Spec.new do |spec|
     'SWIFT_VERSION' => '5.0',
     'OTHER_LDFLAGS' => '-framework UIKit -framework Foundation',
     'VALID_ARCHS' => 'arm64 x86_64',
-    'HEADER_SEARCH_PATHS' => '$(inherited) "${PODS_ROOT}/libavif/include"'
+    'HEADER_SEARCH_PATHS' => '$(inherited) "${PODS_ROOT}/libavif/include"',
+    'IPHONEOS_DEPLOYMENT_TARGET' => '13.0'
   }
 
   # User target xcconfig
   spec.user_target_xcconfig = {
-    'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386'
+    'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386',
+    'IPHONEOS_DEPLOYMENT_TARGET' => '13.0'
   }
 
   # Documentation

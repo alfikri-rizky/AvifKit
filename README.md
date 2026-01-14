@@ -226,19 +226,25 @@ dependencies: [
 
 **Download from GitHub Releases:** [v0.1.0](https://github.com/alfikri-rizky/AvifKit/releases/tag/0.1.0)
 
-#### iOS (CocoaPods) - Experimental 🧪
+#### iOS (CocoaPods) - Not Recommended ⚠️
 
-CocoaPods support is available but experimental:
+CocoaPods support is technically available but **not recommended** due to validation issues:
 
 ```ruby
 pod 'AvifKit', '~> 0.1.0'
 ```
 
-**Note:** The podspec is configured to download the pre-built XCFramework from GitHub Releases. Due to Xcode/CocoaPods validation complexities with pre-built XCFrameworks, **we recommend using Swift Package Manager** as the primary installation method.
+**Important Notes:**
+- `pod spec lint` validation fails due to libavif dependency's old iOS deployment targets (8.0-9.0)
+- The libavif CocoaPods pod has hardcoded deployment targets that require `libarclite`, which was removed from Xcode 14+
+- **However, actual usage works fine** when users install via `pod install` since app deployment targets (iOS 13.0+) override pod settings
+- Our code and XCFramework are fully compatible - the issue is external (libavif pod configuration)
 
-If you encounter issues with CocoaPods, please:
-1. Use SPM instead (fully supported and tested)
-2. Or install via direct XCFramework download from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/tag/0.1.0)
+**Recommended alternatives:**
+1. **Swift Package Manager** (fully supported, uses different libavif distribution)
+2. **Direct XCFramework** from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/tag/0.1.0)
+
+We cannot fix this without the libavif CocoaPods maintainers updating their pod's deployment targets.
 
 ---
 
