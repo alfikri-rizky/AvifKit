@@ -9,6 +9,7 @@ import com.alfikri.rizky.avifkit.AvifConverter
 import com.alfikri.rizky.avifkit.ChromaSubsample
 import com.alfikri.rizky.avifkit.EncodingOptions
 import com.alfikri.rizky.avifkit.ImageInput
+import com.alfikri.rizky.avifkit.PlatformFile
 import com.alfikri.rizky.avifkit.ui.models.ConversionResult
 import com.alfikri.rizky.avifkit.ui.models.CustomParameters
 import com.alfikri.rizky.avifkit.ui.models.ImageData
@@ -101,17 +102,19 @@ class AvifConverterViewModel(private val context: Context) : ViewModel() {
                     EncodingOptions.fromPriority(_qualityPreset.value.toPriority()!!)
                 }
 
-                // Convert to AVIF
-                val outputPath = File(context.cacheDir, "converted_${System.currentTimeMillis()}.avif").absolutePath
-                val convertedPath = avifConverter.convertToFile(
+                // Convert to AVIF using PlatformFile
+                val outputFile = File(context.cacheDir, "converted_${System.currentTimeMillis()}.avif")
+                val outputPlatformFile = PlatformFile.fromPath(outputFile.absolutePath)
+
+                val convertedPlatformFile = avifConverter.convertToFile(
                     input = ImageInput.from(imageBytes),
-                    outputPath = outputPath,
+                    output = outputPlatformFile,
                     options = encodingOptions
                 )
 
                 // Get converted file info
-                val convertedFile = File(convertedPath)
-                val convertedSize = convertedFile.length()
+                val convertedPath = convertedPlatformFile.path
+                val convertedSize = convertedPlatformFile.size()
 
                 // Calculate converted dimensions
                 var convertedWidth = originalBitmap.width

@@ -29,11 +29,13 @@ sealed class ImageInput {
 
     data class FromBitmap(val bitmap: PlatformBitmap) : ImageInput()
     data class FromPath(val path: String) : ImageInput()
+    data class FromFile(val file: PlatformFile) : ImageInput()
 
     companion object {
         fun from(data: ByteArray) = FromBytes(data)
         fun from(bitmap: PlatformBitmap) = FromBitmap(bitmap)
         fun from(path: String) = FromPath(path)
+        fun from(file: PlatformFile) = FromFile(file)
     }
 }
 

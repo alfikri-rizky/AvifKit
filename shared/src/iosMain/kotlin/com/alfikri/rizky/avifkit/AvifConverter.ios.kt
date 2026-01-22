@@ -65,6 +65,26 @@ actual class AvifConverter {
         outputPath
     }
 
+    actual suspend fun convertToFile(
+        input: ImageInput,
+        output: PlatformFile,
+        priority: Priority,
+        options: EncodingOptions?
+    ): PlatformFile = withContext(Dispatchers.Default) {
+        val encodingOptions = options ?: EncodingOptions.fromPriority(priority)
+
+        // Handle maxSize if specified
+        val avifData = if (encodingOptions.maxSize != null) {
+            convertWithAdaptiveCompression(input, encodingOptions)
+        } else {
+            convertStandard(input, encodingOptions)
+        }
+
+        // Save to PlatformFile
+        output.writeBytes(avifData.toByteArray())
+        output
+    }
+
     actual suspend fun encodeAvif(
         input: ImageInput,
         priority: Priority,
@@ -86,6 +106,7 @@ actual class AvifConverter {
                 val url = NSURL.fileURLWithPath(input.path)
                 NSData.dataWithContentsOfURL(url) ?: throw AvifError.FileError("File not found: ${input.path}")
             }
+            is ImageInput.FromFile -> input.file.readBytes().toNSData()
             is ImageInput.FromBitmap -> throw AvifError.InvalidInput
         }
 
@@ -106,6 +127,9 @@ actual class AvifConverter {
                     val url = NSURL.fileURLWithPath(input.path)
                     val nsData = NSData.dataWithContentsOfURL(url)
                     nsData?.toByteArray()?.take(12)?.toByteArray() ?: return false
+                }
+                is ImageInput.FromFile -> kotlinx.coroutines.runBlocking {
+                    input.file.readBytes().take(12).toByteArray()
                 }
                 is ImageInput.FromBitmap -> return false
             }
@@ -153,6 +177,23 @@ actual class AvifConverter {
                     format = detectFormatFromPath(input.path),
                     hasAlpha = imageHasAlpha(image),
                     fileSize = fileSize
+                )
+            }
+            is ImageInput.FromFile -> {
+                val data = input.file.readBytes()
+                val nsData = data.toNSData()
+                val image = UIImage.imageWithData(nsData)
+                    ?: throw AvifError.InvalidInput
+
+                val width = image.size.useContents { this.width }
+                val height = image.size.useContents { this.height }
+
+                ImageInfo(
+                    width = (width * image.scale).toInt(),
+                    height = (height * image.scale).toInt(),
+                    format = detectFormat(data),
+                    hasAlpha = imageHasAlpha(image),
+                    fileSize = input.file.size()
                 )
             }
             is ImageInput.FromBitmap -> {
@@ -366,6 +407,17 @@ actual class AvifConverter {
                     data
                 } else {
                     val uiImage = UIImage.imageWithData(data)
+                        ?: throw AvifError.InvalidInput
+                    encodeImageToAvif(uiImage, options)
+                }
+            }
+            is ImageInput.FromFile -> {
+                val byteData = input.file.readBytes()
+                val nsData = byteData.toNSData()
+                if (isAvifFormat(byteData)) {
+                    nsData
+                } else {
+                    val uiImage = UIImage.imageWithData(nsData)
                         ?: throw AvifError.InvalidInput
                     encodeImageToAvif(uiImage, options)
                 }

@@ -37,14 +37,14 @@ let package = Package(
         // For local development: use path below (commented out for published release)
         // .binaryTarget(
         //     name: "Shared",
-        //         //     path: "shared/build/XCFrameworks/release/Shared.xcframework"
-        //         // ),
+        //     path: "shared/build/XCFrameworks/release/Shared.xcframework"
+        // ),
 
         // For published releases: use remote URL from GitHub Release
         .binaryTarget(
             name: "Shared",
-            url: "https://github.com/alfikri-rizky/AvifKit/releases/download/0.1.0/Shared.xcframework.zip",
-            checksum: "361c16e92ea585d9c9b1b164095d9f898f909e20a90129c54a58e4f7c9a6738d"
+            url: "https://github.com/alfikri-rizky/AvifKit/releases/download/v0.1.1/Shared.xcframework.zip",
+            checksum: "b98e5874a918b8cdf20a51c75675199badbf98b41a7141b277d7d2739c43ddb9"
         ),
 
         // Test target

@@ -75,21 +75,24 @@ class AvifConverterViewModel: ObservableObject {
 
             let originalDimension = "\(Int(uiImage.size.width))x\(Int(uiImage.size.height))"
 
-            // Convert to AVIF
+            // Convert to AVIF using PlatformFile
             let input = ImageInput.companion.from(data: KotlinByteArray(data: imageData))
-            let avifData = try await avifConverter.encodeAvif(
+
+            // Create output PlatformFile
+            let tempDir = FileManager.default.temporaryDirectory
+            let outputURL = tempDir.appendingPathComponent("converted_\(Date().timeIntervalSince1970).avif")
+            let outputPlatformFile = PlatformFile.companion.fromPath(path: outputURL.path)
+
+            // Use convertToFile with PlatformFile
+            let convertedFile = try await avifConverter.convertToFile(
                 input: input,
+                output: outputPlatformFile,
                 priority: qualityPreset.toPriority() ?? Priority.balanced,
                 options: encodingOptions
             )
 
-            // Save to temporary file
-            let tempDir = FileManager.default.temporaryDirectory
-            let outputURL = tempDir.appendingPathComponent("converted_\(Date().timeIntervalSince1970).avif")
-            try avifData.toData().write(to: outputURL)
-
-            // Get converted file info
-            let convertedSize = Int64(avifData.size)
+            // Get converted file info from PlatformFile
+            let convertedSize = Int64(truncating: try await convertedFile.size())
 
             // Calculate converted dimensions (considering maxDimension)
             var convertedWidth = Int(uiImage.size.width)

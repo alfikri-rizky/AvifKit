@@ -3,7 +3,7 @@ name: Publish iOS
 on:
   push:
     tags:
-      - '[0-9]+.[0-9]+.[0-9]+'  # Trigger on version tags (e.g., 0.1.0, 1.2.3)
+      - 'v[0-9]+.[0-9]+.[0-9]+'  # Trigger on version tags (e.g., v0.1.1, v1.2.3)
 
 permissions:
   contents: write  # Required to create releases and push commits
@@ -15,6 +15,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for git operations
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -40,10 +42,14 @@ jobs:
 
       - name: Extract version from tag
         id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: |
+          # Remove 'v' prefix from tag (v0.1.1 -> 0.1.1)
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
 
       - name: Build XCFramework
-        run: ./gradlew :shared:assembleSharedXCFramework --no-daemon --console=plain
+        run: ./gradlew :shared:assembleSharedReleaseXCFramework --no-daemon --console=plain
 
       - name: Package XCFramework
         run: |
@@ -55,79 +61,94 @@ jobs:
         run: |
           CHECKSUM=$(swift package compute-checksum build/release/Shared.xcframework.zip)
           echo "CHECKSUM=$CHECKSUM" >> $GITHUB_OUTPUT
-          echo "Checksum: $CHECKSUM"
+          echo "📦 Checksum: $CHECKSUM"
 
-      - name: Update Package.swift with remote URL
+      - name: Update Package.swift with checksum
         run: |
-          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          VERSION="v${{ steps.get_version.outputs.VERSION }}"
           CHECKSUM="${{ steps.checksum.outputs.CHECKSUM }}"
 
-          # Comment out the local path binaryTarget
-          sed -i '' '/path: "shared\/build\/XCFrameworks\/release\/Shared.xcframework"/,/),/ {
-            s/^/        \/\/ /
-          }' Package.swift
+          # Replace placeholder checksum with actual checksum
+          sed -i '' "s/CHECKSUM_PLACEHOLDER_UPDATE_AFTER_BUILD/$CHECKSUM/" Package.swift
 
-          # Uncomment and update the remote binaryTarget
-          sed -i '' '/For published releases, replace the above with:/,/),/ {
-            s/^        \/\/ //
-            s/REPLACE_WITH_ACTUAL_CHECKSUM/'"$CHECKSUM"'/
-            s/0\.1\.0/'"$VERSION"'/
-          }' Package.swift
+          # Update version in URL (should already be correct, but ensure it)
+          sed -i '' "s|download/v[0-9]\+\.[0-9]\+\.[0-9]\+|download/$VERSION|" Package.swift
 
-          # Show the changes
-          echo "Updated Package.swift:"
-          cat Package.swift
+          echo "✅ Updated Package.swift"
+          echo "Checksum: $CHECKSUM"
+          echo "Version: $VERSION"
 
       - name: Commit Package.swift changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Package.swift
-          git commit -m "Update Package.swift for release ${{ steps.get_version.outputs.VERSION }} [skip ci]" || echo "No changes to commit"
-          git push origin HEAD:main || echo "Failed to push, continuing..."
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update Package.swift checksum for release ${{ steps.get_version.outputs.VERSION }} [skip ci]"
+            git push origin HEAD:main || echo "⚠️ Failed to push, continuing..."
+          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           files: build/release/Shared.xcframework.zip
           body: |
-            ## AvifKit ${{ steps.get_version.outputs.VERSION }}
+            ## AvifKit v${{ steps.get_version.outputs.VERSION }}
 
             ### 📦 Installation
 
-            #### CocoaPods
+            #### Kotlin Multiplatform (Recommended)
+            ```kotlin
+            kotlin {
+                sourceSets {
+                    commonMain.dependencies {
+                        implementation("io.github.alfikri-rizky:avifkit:${{ steps.get_version.outputs.VERSION }}")
+                    }
+                }
+            }
+            ```
+
+            #### Android Only
+            ```kotlin
+            dependencies {
+                implementation("io.github.alfikri-rizky:avifkit:${{ steps.get_version.outputs.VERSION }}")
+            }
+            ```
+
+            #### iOS - Swift Package Manager
+            ```swift
+            dependencies: [
+                .package(url: "https://github.com/alfikri-rizky/AvifKit.git", from: "${{ steps.get_version.outputs.VERSION }}")
+            ]
+            ```
+
+            #### iOS - CocoaPods
             ```ruby
             pod 'AvifKit', '~> ${{ steps.get_version.outputs.VERSION }}'
             ```
 
-            #### Swift Package Manager
-            ```swift
-            dependencies: [
-                .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "${{ steps.get_version.outputs.VERSION }}")
-            ]
-            ```
-
-            #### Maven Central (Android/KMM)
-            ```gradle
-            implementation("io.github.alfikri-rizky:avifkit:${{ steps.get_version.outputs.VERSION }}")
-            ```
-
             ### ✨ Features
-            - 🖼️ AVIF encoding for iOS and Android
+            - 🖼️ AVIF encoding/decoding for iOS and Android
             - 🎯 Adaptive compression strategies (SMART/STRICT)
             - ⚡ Quality presets (SPEED/BALANCED/QUALITY/STORAGE)
             - 📱 Native performance using libavif
             - 🔄 Kotlin Multiplatform shared code
+            - 📂 PlatformFile API for cross-platform file operations
+            - ✅ Android: libavif bundled in AAR automatically
+            - ✅ iOS: libavif resolved via SPM/CocoaPods automatically
 
             ### 🔐 XCFramework Checksum
             ```
             ${{ steps.checksum.outputs.CHECKSUM }}
             ```
 
-            ### 📚 Documentation
+            ### 📚 Links
             - [README](https://github.com/alfikri-rizky/AvifKit/blob/main/README.md)
-            - [iOS Publishing Guide](https://github.com/alfikri-rizky/AvifKit/blob/main/IOS_PUBLISHING_GUIDE.md)
+            - [Shared Module README](https://github.com/alfikri-rizky/AvifKit/blob/main/shared/README.md)
             - [Maven Central](https://central.sonatype.com/artifact/io.github.alfikri-rizky/avifkit/${{ steps.get_version.outputs.VERSION }})
+            - [Publishing Guide](https://github.com/alfikri-rizky/AvifKit/blob/main/PUBLISH_V0.1.1.md)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -136,8 +157,7 @@ jobs:
         env:
           COCOAPODS_TRUNK_TOKEN: ${{ secrets.COCOAPODS_TRUNK_TOKEN }}
         run: |
-          # Setup CocoaPods trunk
-          echo "Publishing to CocoaPods..."
+          echo "📦 Publishing to CocoaPods..."
           pod trunk push AvifKit.podspec --allow-warnings
 
       - name: Build Summary
@@ -151,9 +171,14 @@ jobs:
           echo "### 📦 Distribution" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ GitHub Release created" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ XCFramework uploaded" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Package.swift updated" >> $GITHUB_STEP_SUMMARY
+          echo "- ✅ Package.swift updated with checksum" >> $GITHUB_STEP_SUMMARY
           if [ "${{ vars.ENABLE_COCOAPODS_PUBLISH }}" == "true" ]; then
             echo "- ✅ CocoaPods published" >> $GITHUB_STEP_SUMMARY
           else
-            echo "- ⏭️ CocoaPods publishing skipped (manual)" >> $GITHUB_STEP_SUMMARY
+            echo "- ⏭️ CocoaPods publishing skipped (set ENABLE_COCOAPODS_PUBLISH variable to enable)" >> $GITHUB_STEP_SUMMARY
           fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Verify GitHub release at: https://github.com/alfikri-rizky/AvifKit/releases/tag/v${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "2. Test SPM installation in an iOS project" >> $GITHUB_STEP_SUMMARY
+          echo "3. Publish to Maven Central if not done yet" >> $GITHUB_STEP_SUMMARY

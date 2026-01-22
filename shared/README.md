@@ -30,61 +30,104 @@ A Kotlin Multiplatform library for converting images to AVIF format, supporting 
 
 ## 📦 Installation
 
-### Gradle (Kotlin DSL)
+### Kotlin Multiplatform (Recommended)
+
+Add to your **shared module's** `build.gradle.kts`:
 
 ```kotlin
-// In your shared module's build.gradle.kts
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("io.github.alfikri-rizky:avifkit:0.1.0")
+            implementation("io.github.alfikri-rizky:avifkit:0.1.1")
         }
     }
 }
 ```
 
-### Android
+✅ **That's it!** The library works on both Android and iOS:
+- **Android**: Native libavif automatically included in AAR
+- **iOS**: libavif automatically resolved via SPM/CocoaPods
 
-```gradle
+### Android Only
+
+```kotlin
 dependencies {
-    implementation("io.github.alfikri-rizky:avifkit:0.1.0")
+    implementation("io.github.alfikri-rizky:avifkit:0.1.1")
 }
 ```
 
-### iOS
+✅ Native libavif binaries included for all ABIs (arm64-v8a, armeabi-v7a, x86, x86_64)
 
-#### CocoaPods
-```ruby
-pod 'AvifKitShared', '~> 0.1.0'
-```
+### iOS Only
 
 #### Swift Package Manager
+
+In Xcode:
+1. File → Add Packages...
+2. Enter: `https://github.com/alfikri-rizky/AvifKit`
+3. Version: `0.1.1` or later
+
+Or in `Package.swift`:
 ```swift
 dependencies: [
-    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.1.0")
+    .package(url: "https://github.com/alfikri-rizky/AvifKit.git", from: "0.1.1")
 ]
 ```
 
-**Note**: iOS requires additional Swift bridge setup. See [iOS Integration Guide](../SWIFT_INTEGRATION_SETUP.md).
+✅ libavif automatically resolved as dependency
+
+#### CocoaPods
+
+Add to your `Podfile`:
+```ruby
+pod 'AvifKit', '~> 0.1.1'
+```
+
+Then run:
+```bash
+pod install
+```
+
+✅ libavif automatically installed as dependency
 
 ## 🚀 Quick Start
 
-### Basic Usage
+### Basic Usage - Convert to File
 
 ```kotlin
 import com.alfikri.rizky.avifkit.AvifConverter
 import com.alfikri.rizky.avifkit.ImageInput
 import com.alfikri.rizky.avifkit.Priority
+import com.alfikri.rizky.avifkit.PlatformFile
 
 // Create converter instance
 val converter = AvifConverter()
 
-// Convert image with preset
+// Prepare input and output
+val input = ImageInput.from(imageByteArray)
+val outputFile = PlatformFile.fromPath("/path/to/output.avif")
+
+// Convert to AVIF file
+val resultFile = converter.convertToFile(
+    input = input,
+    output = outputFile,
+    priority = Priority.BALANCED
+)
+
+println("Converted AVIF size: ${resultFile.size()} bytes")
+```
+
+### Convert to ByteArray (In-Memory)
+
+```kotlin
+// Convert to ByteArray without saving to disk
 val input = ImageInput.from(imageByteArray)
 val avifData = converter.encodeAvif(
     input = input,
     priority = Priority.BALANCED
 )
+
+// avifData is now a ByteArray containing AVIF image
 ```
 
 ### Custom Parameters
@@ -106,8 +149,11 @@ val options = EncodingOptions(
     compressionStrategy = CompressionStrategy.SMART
 )
 
-val avifData = converter.encodeAvif(
+// Convert with custom options
+val resultFile = converter.convertToFile(
     input = input,
+    output = outputFile,
+    priority = Priority.BALANCED,
     options = options
 )
 ```
@@ -156,16 +202,25 @@ Priority.STORAGE    // Quality 65, Speed 8
 
 ```kotlin
 import android.graphics.BitmapFactory
+import com.alfikri.rizky.avifkit.*
 
-// From Bitmap
+// From Bitmap - convert to file
 val bitmap = BitmapFactory.decodeFile(imagePath)
 val input = ImageInput.from(bitmap)
+val outputFile = PlatformFile.fromPath("/sdcard/output.avif")
+val result = converter.convertToFile(input, outputFile, Priority.BALANCED)
+
+// From File - convert to ByteArray
+val inputFile = PlatformFile.fromPath("/sdcard/input.jpg")
+val input = ImageInput.from(inputFile)
 val avifData = converter.encodeAvif(input, Priority.BALANCED)
 
-// From ByteArray
-val bytes = File(imagePath).readBytes()
-val input = ImageInput.from(bytes)
-val avifData = converter.encodeAvif(input, Priority.BALANCED)
+// From Uri (Content Provider)
+val uri = Uri.parse("content://...")
+val inputFile = PlatformFile.fromUri(context, uri)
+val input = ImageInput.from(inputFile)
+val outputFile = PlatformFile.fromPath(context.cacheDir.resolve("output.avif").path)
+val result = converter.convertToFile(input, outputFile, Priority.BALANCED)
 ```
 
 ### iOS
@@ -174,34 +229,54 @@ val avifData = converter.encodeAvif(input, Priority.BALANCED)
 import Shared
 import UIKit
 
-// From UIImage
+// From UIImage - convert to file
 let image = UIImage(named: "photo")!
 let data = image.pngData()!
 let input = ImageInput.companion.from(data: KotlinByteArray(data: data))
 
+// Create output file
+let tempDir = FileManager.default.temporaryDirectory
+let outputURL = tempDir.appendingPathComponent("output.avif")
+let outputFile = PlatformFile.companion.fromPath(path: outputURL.path)
+
 Task {
-    let avifData = try await converter.encodeAvif(
-        input: input,
-        priority: Priority.balanced,
-        options: nil
-    )
+    do {
+        let resultFile = try await converter.convertToFile(
+            input: input,
+            output: outputFile,
+            priority: Priority.balanced,
+            options: nil
+        )
+
+        let fileSize = try await resultFile.size()
+        print("AVIF file size: \(fileSize) bytes")
+    } catch {
+        print("Error: \(error)")
+    }
 }
 ```
 
-**Important**: iOS requires AVIFNativeConverter Swift bridge. See setup guide.
+✅ **No manual setup needed!** When you add the library via SPM or CocoaPods, libavif is automatically included.
 
 ## 🏗️ Architecture
 
 ### Cross-Platform Core
-- `AvifConverter` - Main conversion API
-- `ImageInput` - Unified image input (Bitmap/ByteArray/File)
+- `AvifConverter` - Main conversion API with `encodeAvif()` and `convertToFile()`
+- `ImageInput` - Unified image input (Bitmap/ByteArray/File/PlatformFile)
+- `PlatformFile` - Cross-platform file abstraction for Android & iOS
 - `EncodingOptions` - Configurable encoding parameters
-- `Priority` - Quality presets
-- `CompressionStrategy` - Adaptive compression modes
+- `Priority` - Quality presets (Speed, Balanced, Quality, Storage)
+- `CompressionStrategy` - Adaptive compression modes (SMART, STRICT)
 
-### Platform-Specific
-- **Android**: Uses native libavif via JNI
-- **iOS**: Uses Swift bridge to libavif
+### Platform-Specific Implementation
+- **Android**: Native libavif via JNI, bundled in AAR
+- **iOS**: Native libavif via Swift bridge, resolved by SPM/CocoaPods
+
+### File Handling
+- **PlatformFile**: Unified file API across platforms
+  - Android: Supports file paths, content:// URIs, SAF documents
+  - iOS: Supports file paths, security-scoped resources
+  - Both: Async read/write operations with proper resource management
 
 ## 📊 Compression Strategy Comparison
 
@@ -220,21 +295,28 @@ Task {
 - **Min SDK**: 24 (Android 7.0)
 - **Compile SDK**: 35
 - **Kotlin**: 2.2.20+
+- **Native Libraries**: Included automatically in AAR
 
 ### iOS
-- **iOS**: 14.0+
+- **iOS**: 13.0+
 - **Xcode**: 15.0+
 - **Swift**: 5.9+
+- **libavif**: Automatically resolved via SPM/CocoaPods
 
-## 📝 iOS Integration Setup
+## 📝 No Manual Setup Required!
 
-iOS requires additional setup for the Swift bridge. Follow these steps:
+When you add AvifKit to your project:
 
-1. Add `AVIFNativeConverter.swift` to your Xcode project
-2. Ensure it's added to your app target
-3. Clean and rebuild
+✅ **Android**: Native libavif binaries are automatically included in the AAR for all ABIs
+✅ **iOS**: libavif is automatically downloaded and linked via SPM or CocoaPods
 
-Detailed instructions: [SWIFT_INTEGRATION_SETUP.md](../SWIFT_INTEGRATION_SETUP.md)
+You don't need to:
+- ❌ Download libavif manually
+- ❌ Configure build scripts
+- ❌ Add Swift bridge files
+- ❌ Link frameworks manually
+
+Just add the dependency and start coding! 🎉
 
 ## 🤝 Contributing
 
@@ -270,11 +352,12 @@ SOFTWARE.
 
 - [GitHub Repository](https://github.com/alfikri-rizky/AvifKit)
 - [Issue Tracker](https://github.com/alfikri-rizky/AvifKit/issues)
-- [Changelog](../CHANGELOG.md)
-- [Publishing Guide](../PUBLISHING_GUIDE.md)
+- [Maven Central](https://central.sonatype.com/artifact/io.github.alfikri-rizky/avifkit)
+- [Publishing Guide](../PUBLISH_V0.1.1.md)
+- [libavif Integration Guide](../docs/LIBAVIF_INTEGRATION.md)
 
 ## 💬 Support
 
-- 📧 Email: your.email@example.com
+- 📧 Email: rizkyalfikri@gmail.com
 - 🐛 Issues: [GitHub Issues](https://github.com/alfikri-rizky/AvifKit/issues)
 - 💬 Discussions: [GitHub Discussions](https://github.com/alfikri-rizky/AvifKit/discussions)

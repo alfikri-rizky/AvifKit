@@ -198,7 +198,7 @@ Add the dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.alfikri-rizky:avifkit:0.1.0")
+    implementation("io.github.alfikri-rizky:avifkit:0.1.1")
 }
 ```
 
@@ -231,7 +231,7 @@ dependencies: [
 CocoaPods support is technically available but **not recommended** due to validation issues:
 
 ```ruby
-pod 'AvifKit', '~> 0.1.0'
+pod 'AvifKit', '~> 0.1.1'
 ```
 
 **Important Notes:**
@@ -242,7 +242,7 @@ pod 'AvifKit', '~> 0.1.0'
 
 **Recommended alternatives:**
 1. **Swift Package Manager** (fully supported, uses different libavif distribution)
-2. **Direct XCFramework** from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/tag/0.1.0)
+2. **Direct XCFramework** from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.1)
 
 We cannot fix this without the libavif CocoaPods maintainers updating their pod's deployment targets.
 

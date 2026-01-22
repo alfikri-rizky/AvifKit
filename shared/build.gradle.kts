@@ -100,6 +100,7 @@ android {
 // Maven Central Publishing Configuration (New Portal API)
 // ========================================================
 // The vanniktech plugin automatically reads configuration from gradle.properties
+// Coordinates come from: GROUP, VERSION_NAME, POM_ARTIFACT_ID
 
 mavenPublishing {
     publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)

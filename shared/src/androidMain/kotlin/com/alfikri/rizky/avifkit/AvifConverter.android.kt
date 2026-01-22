@@ -94,6 +94,26 @@ actual class AvifConverter {
         outputPath
     }
 
+    actual suspend fun convertToFile(
+        input: ImageInput,
+        output: PlatformFile,
+        priority: Priority,
+        options: EncodingOptions?
+    ): PlatformFile = withContext(Dispatchers.IO) {
+        val encodingOptions = options ?: EncodingOptions.fromPriority(priority)
+
+        // Handle maxSize if specified
+        val avifData = if (encodingOptions.maxSize != null) {
+            convertWithAdaptiveCompression(input, encodingOptions)
+        } else {
+            convertStandard(input, encodingOptions)
+        }
+
+        // Save to PlatformFile
+        output.writeBytes(avifData)
+        output
+    }
+
     actual suspend fun encodeAvif(
         input: ImageInput,
         priority: Priority,
@@ -112,6 +132,7 @@ actual class AvifConverter {
         val data = when (input) {
             is ImageInput.FromBytes -> input.data
             is ImageInput.FromPath -> File(input.path).readBytes()
+            is ImageInput.FromFile -> input.file.readBytes()
             is ImageInput.FromBitmap -> throw AvifError.InvalidInput
         }
 
@@ -129,6 +150,9 @@ actual class AvifConverter {
             val data = when (input) {
                 is ImageInput.FromBytes -> input.data
                 is ImageInput.FromPath -> File(input.path).readBytes().take(12).toByteArray()
+                is ImageInput.FromFile -> kotlinx.coroutines.runBlocking {
+                    input.file.readBytes().take(12).toByteArray()
+                }
                 is ImageInput.FromBitmap -> return false
             }
             isAvifFormat(data)
@@ -169,6 +193,23 @@ actual class AvifConverter {
                         options.outConfig == Bitmap.Config.ARGB_8888
                     } else false,
                     fileSize = file.length()
+                )
+            }
+
+            is ImageInput.FromFile -> {
+                val data = input.file.readBytes()
+                val options = BitmapFactory.Options().apply {
+                    inJustDecodeBounds = true
+                }
+                BitmapFactory.decodeByteArray(data, 0, data.size, options)
+                ImageInfo(
+                    width = options.outWidth,
+                    height = options.outHeight,
+                    format = detectFormat(data),
+                    hasAlpha = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        options.outConfig == Bitmap.Config.ARGB_8888
+                    } else false,
+                    fileSize = input.file.size()
                 )
             }
 
@@ -387,6 +428,19 @@ actual class AvifConverter {
                         ?: throw AvifError.DecodingFailed("Failed to decode file: ${input.path}")
                     // Apply EXIF orientation from file
                     val orientedBitmap = applyExifOrientationFromFile(bitmap, input.path)
+                    encodeBitmapToAvif(orientedBitmap, options)
+                }
+            }
+
+            is ImageInput.FromFile -> {
+                val data = input.file.readBytes()
+                if (isAvifFormat(data)) {
+                    data
+                } else {
+                    val bitmap = BitmapFactory.decodeByteArray(data, 0, data.size)
+                        ?: throw AvifError.DecodingFailed("Failed to decode file: ${input.file.name}")
+                    // Apply EXIF orientation if present
+                    val orientedBitmap = applyExifOrientation(bitmap, data)
                     encodeBitmapToAvif(orientedBitmap, options)
                 }
             }

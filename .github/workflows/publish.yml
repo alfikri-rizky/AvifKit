@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to publish (e.g., 1.0.0)'
+        description: 'Version to publish (e.g., 0.1.1)'
         required: true
 
 jobs:
@@ -45,6 +45,14 @@ jobs:
           org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m
           kotlin.code.style=official
           kotlin.mpp.stability.nowarn=true
+
+          # Maven Central Publishing (New Portal API)
+          mavenCentralUsername=${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          mavenCentralPassword=${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+
+          # GPG Signing
+          signingInMemoryKey=${{ secrets.SIGNING_IN_MEMORY_KEY }}
+          signingInMemoryKeyPassword=${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
           EOF
 
       - name: Build shared module
@@ -54,30 +62,22 @@ jobs:
         run: ./gradlew :shared:test --no-daemon --stacktrace
 
       - name: Publish to Maven Central
-        env:
-          OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
-          OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
-          SIGNING_KEY_ID: ${{ secrets.SIGNING_KEY_ID }}
-          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
-          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: |
-          ./gradlew :shared:publishAllPublicationsToSonatypeRepository \
+          ./gradlew :shared:publishToMavenCentral \
             --no-daemon \
             --stacktrace \
-            -PossrhUsername="${OSSRH_USERNAME}" \
-            -PossrhPassword="${OSSRH_PASSWORD}" \
-            -Psigning.keyId="${SIGNING_KEY_ID}" \
-            -Psigning.password="${SIGNING_PASSWORD}" \
-            -Psigning.key="${SIGNING_KEY}"
+            --no-configuration-cache
 
-      - name: Close and release repository
+      - name: Build Summary
         if: success()
         run: |
-          echo "✅ Artifacts published to staging repository"
-          echo "📝 Next steps:"
-          echo "1. Go to https://s01.oss.sonatype.org"
-          echo "2. Login with your OSSRH credentials"
-          echo "3. Find your staging repository"
-          echo "4. Click 'Close' and wait for validation"
-          echo "5. Click 'Release' to publish to Maven Central"
-          echo "6. Wait ~2 hours for sync"
+          echo "### ✅ Published to Maven Central!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Artifact:** \`io.github.alfikri-rizky:avifkit\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "📝 **Next steps:**" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to https://central.sonatype.com/" >> $GITHUB_STEP_SUMMARY
+          echo "2. Login with your credentials" >> $GITHUB_STEP_SUMMARY
+          echo "3. Go to 'Deployments' section" >> $GITHUB_STEP_SUMMARY
+          echo "4. Find your deployment and click 'Publish'" >> $GITHUB_STEP_SUMMARY
+          echo "5. Wait ~15 minutes for Maven Central to sync" >> $GITHUB_STEP_SUMMARY

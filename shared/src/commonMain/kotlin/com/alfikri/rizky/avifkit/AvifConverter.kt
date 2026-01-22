@@ -34,6 +34,21 @@ expect class AvifConverter() {
     ): String
 
     /**
+     * Convert any supported image format to AVIF and save to PlatformFile
+     * @param input Can be ByteArray, Bitmap, file path, or PlatformFile
+     * @param output PlatformFile where the AVIF will be saved
+     * @param priority Quick preset for common scenarios (default: BALANCED)
+     * @param options Custom encoding options (overrides priority if provided)
+     * @return PlatformFile pointing to the saved file
+     */
+    suspend fun convertToFile(
+        input: ImageInput,
+        output: PlatformFile,
+        priority: Priority = Priority.BALANCED,
+        options: EncodingOptions? = null
+    ): PlatformFile
+
+    /**
      * Encode image to AVIF format and return as ByteArray
      * @param input Can be ByteArray, Bitmap, or file path
      * @param priority Quick preset for common scenarios (default: BALANCED)
