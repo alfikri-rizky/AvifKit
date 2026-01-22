@@ -40,6 +40,12 @@ jobs:
           kotlin.mpp.stability.nowarn=true
           EOF
 
+      - name: Setup Android libavif
+        run: |
+          chmod +x scripts/setup-android-libavif.sh
+          # Run setup script non-interactively (auto-answer "n" to update prompt if exists)
+          echo "n" | ./scripts/setup-android-libavif.sh || true
+
       - name: Extract version from tag
         id: get_version
         run: |

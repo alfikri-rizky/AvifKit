@@ -34,6 +34,12 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Setup Android libavif
+        run: |
+          chmod +x scripts/setup-android-libavif.sh
+          # Run setup script non-interactively (auto-answer "n" to update prompt if exists)
+          echo "n" | ./scripts/setup-android-libavif.sh || true
+
       - name: Create gradle.properties for CI
         run: |
           cat > gradle.properties << 'EOF'
