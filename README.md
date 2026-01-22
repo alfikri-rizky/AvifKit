@@ -215,7 +215,7 @@ dependencies {
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.1.0")
+    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.1.1")
 ]
 ```
 
@@ -224,7 +224,7 @@ dependencies: [
 - ✅ Resolves all dependencies including libavif
 - ✅ Integrates seamlessly with your Xcode project
 
-**Download from GitHub Releases:** [v0.1.0](https://github.com/alfikri-rizky/AvifKit/releases/tag/0.1.0)
+**Download from GitHub Releases:** [v0.1.1](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.1)
 
 #### iOS (CocoaPods) - Not Recommended ⚠️
 
