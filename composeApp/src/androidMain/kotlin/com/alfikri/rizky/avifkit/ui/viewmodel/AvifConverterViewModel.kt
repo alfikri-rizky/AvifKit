@@ -9,12 +9,13 @@ import com.alfikri.rizky.avifkit.AvifConverter
 import com.alfikri.rizky.avifkit.ChromaSubsample
 import com.alfikri.rizky.avifkit.EncodingOptions
 import com.alfikri.rizky.avifkit.ImageInput
-import com.alfikri.rizky.avifkit.PlatformFile
 import com.alfikri.rizky.avifkit.ui.models.ConversionResult
 import com.alfikri.rizky.avifkit.ui.models.CustomParameters
 import com.alfikri.rizky.avifkit.ui.models.ImageData
 import com.alfikri.rizky.avifkit.ui.models.QualityPreset
 import com.alfikri.rizky.avifkit.ui.models.UploadUiState
+// Import FileKit extension functions
+import io.github.vinceglb.filekit.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -104,7 +105,7 @@ class AvifConverterViewModel(private val context: Context) : ViewModel() {
 
                 // Convert to AVIF using PlatformFile
                 val outputFile = File(context.cacheDir, "converted_${System.currentTimeMillis()}.avif")
-                val outputPlatformFile = PlatformFile.fromPath(outputFile.absolutePath)
+                val outputPlatformFile = PlatformFile(outputFile)
 
                 val convertedPlatformFile = avifConverter.convertToFile(
                     input = ImageInput.from(imageBytes),

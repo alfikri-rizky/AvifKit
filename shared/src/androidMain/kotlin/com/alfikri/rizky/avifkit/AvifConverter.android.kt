@@ -10,6 +10,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.ByteArrayInputStream
+// Import FileKit extension functions
+import io.github.vinceglb.filekit.*
 
 actual class AvifConverter {
 
@@ -110,7 +112,7 @@ actual class AvifConverter {
         }
 
         // Save to PlatformFile
-        output.writeBytes(avifData)
+        output.write(avifData)
         output
     }
 

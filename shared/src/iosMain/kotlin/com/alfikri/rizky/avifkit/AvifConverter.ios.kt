@@ -7,6 +7,8 @@ import platform.UIKit.*
 import platform.CoreGraphics.*
 import kotlinx.cinterop.*
 import platform.posix.memcpy
+// Import FileKit extension functions
+import io.github.vinceglb.filekit.*
 
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 actual class AvifConverter {
@@ -81,7 +83,7 @@ actual class AvifConverter {
         }
 
         // Save to PlatformFile
-        output.writeBytes(avifData.toByteArray())
+        output.write(avifData.toByteArray())
         output
     }
 

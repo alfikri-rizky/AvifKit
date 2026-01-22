@@ -81,7 +81,7 @@ class AvifConverterViewModel: ObservableObject {
             // Create output PlatformFile
             let tempDir = FileManager.default.temporaryDirectory
             let outputURL = tempDir.appendingPathComponent("converted_\(Date().timeIntervalSince1970).avif")
-            let outputPlatformFile = PlatformFile.companion.fromPath(path: outputURL.path)
+            let outputPlatformFile = PlatformFileFactory.shared.fromPath(path: outputURL.path)
 
             // Use convertToFile with PlatformFile
             let convertedFile = try await avifConverter.convertToFile(
@@ -92,7 +92,7 @@ class AvifConverterViewModel: ObservableObject {
             )
 
             // Get converted file info from PlatformFile
-            let convertedSize = Int64(truncating: try await convertedFile.size())
+            let convertedSize = try await PlatformFileHelper.shared.getSize(file: convertedFile)
 
             // Calculate converted dimensions (considering maxDimension)
             var convertedWidth = Int(uiImage.size.width)
@@ -125,7 +125,7 @@ class AvifConverterViewModel: ObservableObject {
                 subsample: encodingOptions.subsample,
                 metadata: encodingOptions.preserveMetadata,
                 dimension: convertedDimension,
-                fileSize: convertedSize
+                fileSize: Int64(truncating: convertedSize as! NSNumber)
             )
 
             let result = ConversionResult(

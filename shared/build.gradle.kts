@@ -47,6 +47,10 @@ kotlin {
         commonMain.dependencies {
             // Coroutines for async operations
             implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
+            // FileKit for cross-platform file handling
+            api("io.github.vinceglb:filekit-core:0.12.0")
+            // kotlinx-io for FileKit's I/O operations
+            implementation("org.jetbrains.kotlinx:kotlinx-io-core:0.8.2")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
@@ -99,8 +103,9 @@ android {
 
 // Maven Central Publishing Configuration (New Portal API)
 // ========================================================
-// The vanniktech plugin automatically reads configuration from gradle.properties
-// Coordinates come from: GROUP, VERSION_NAME, POM_ARTIFACT_ID
+// The vanniktech plugin automatically reads these from gradle.properties:
+// - GROUP, VERSION_NAME, POM_ARTIFACT_ID for coordinates
+// - All POM_* properties for metadata (name, description, url, license, developers, scm, etc.)
 
 mavenPublishing {
     publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)

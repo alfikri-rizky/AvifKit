@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.18.1)
+cmake_minimum_required(VERSION 3.22.1)
 project("avif-android-wrapper")
 
 # Set C++ standard
@@ -20,12 +20,22 @@ if(EXISTS ${LIBAVIF_DIR}/CMakeLists.txt)
     message(STATUS "✅ libavif found - Building with AVIF support")
 
     # Configure libavif build options
-    set(AVIF_CODEC_AOM ON CACHE BOOL "Use AOM codec")
-    set(AVIF_LOCAL_AOM ON CACHE BOOL "Build AOM locally")
+    set(AVIF_CODEC_AOM LOCAL CACHE STRING "Use AOM codec (build locally)" FORCE)
+    set(AVIF_CODEC_AOM_ENCODE ON CACHE BOOL "Enable AOM encoding" FORCE)
+    set(AVIF_CODEC_AOM_DECODE ON CACHE BOOL "Enable AOM decoding" FORCE)
+    set(AVIF_LIBYUV OFF CACHE BOOL "Disable libyuv dependency")
     set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build static libraries")
     set(AVIF_BUILD_APPS OFF CACHE BOOL "Don't build apps")
     set(AVIF_BUILD_TESTS OFF CACHE BOOL "Don't build tests")
     set(AVIF_BUILD_EXAMPLES OFF CACHE BOOL "Don't build examples")
+
+    # AOM-specific options for Android
+    set(CONFIG_PIC 1 CACHE BOOL "Build position-independent code")
+    set(ENABLE_CCACHE OFF CACHE BOOL "Disable ccache")
+    set(ENABLE_DOCS OFF CACHE BOOL "Disable AOM docs")
+    set(ENABLE_TESTS OFF CACHE BOOL "Disable AOM tests")
+    set(ENABLE_TOOLS OFF CACHE BOOL "Disable AOM tools")
+    set(ENABLE_EXAMPLES OFF CACHE BOOL "Disable AOM examples")
 
     # Add libavif subdirectory
     add_subdirectory(${LIBAVIF_DIR} ${CMAKE_BINARY_DIR}/libavif-build EXCLUDE_FROM_ALL)
