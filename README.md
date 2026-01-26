@@ -198,7 +198,7 @@ Add the dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.alfikri-rizky:avifkit:0.1.2")
+    implementation("io.github.alfikri-rizky:avifkit:0.1.3-SNAPSHOT")
 }
 ```
 
@@ -209,13 +209,13 @@ dependencies {
 **In Xcode:**
 1. File → Add Packages...
 2. Enter repository URL: `https://github.com/alfikri-rizky/AvifKit`
-3. Select version: `0.1.2` or higher
+3. Select version: `0.1.3-SNAPSHOT` or higher
 
 **Or add to your `Package.swift`:**
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.1.2")
+    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.1.3-SNAPSHOT")
 ]
 ```
 
@@ -224,14 +224,14 @@ dependencies: [
 - ✅ Resolves all dependencies including libavif
 - ✅ Integrates seamlessly with your Xcode project
 
-**Download from GitHub Releases:** [v0.1.2](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.2)
+**Download from GitHub Releases:** [v0.1.3-SNAPSHOT](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.3-SNAPSHOT)
 
 #### iOS (CocoaPods) - Not Recommended ⚠️
 
 CocoaPods support is technically available but **not recommended** due to validation issues:
 
 ```ruby
-pod 'AvifKit', '~> 0.1.2'
+pod 'AvifKit', '~> 0.1.3-SNAPSHOT'
 ```
 
 **Important Notes:**
@@ -242,7 +242,7 @@ pod 'AvifKit', '~> 0.1.2'
 
 **Recommended alternatives:**
 1. **Swift Package Manager** (fully supported, uses different libavif distribution)
-2. **Direct XCFramework** from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.2)
+2. **Direct XCFramework** from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.3-SNAPSHOT)
 
 We cannot fix this without the libavif CocoaPods maintainers updating their pod's deployment targets.
 
