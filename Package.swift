@@ -16,7 +16,7 @@ let package = Package(
     dependencies: [
         // libavif XCFramework for SPM
         // Using SDWebImage's pre-built libavif XCFramework
-        .package(url: "https://github.com/SDWebImage/libavif-Xcode.git", from: "1.0.0")
+        .package(url: "https://github.com/SDWebImage/libavif-Xcode.git", from: "0.11.1")
     ],
     targets: [
         // Swift wrapper for AVIF conversion
@@ -34,18 +34,19 @@ let package = Package(
         ),
 
         // Kotlin Multiplatform XCFramework
-        // For local development: use path below (commented out for published release)
-        // .binaryTarget(
-        //     name: "Shared",
-        //     path: "shared/build/XCFrameworks/release/Shared.xcframework"
-        // ),
-
-        // For published releases: use remote URL from GitHub Release
+        // For local development and SNAPSHOT builds: use local path
         .binaryTarget(
             name: "Shared",
-            url: "https://github.com/alfikri-rizky/AvifKit/releases/download/v0.1.1/Shared.xcframework.zip",
-            checksum: "b98e5874a918b8cdf20a51c75675199badbf98b41a7141b277d7d2739c43ddb9"
+            path: "shared/build/XCFrameworks/release/Shared.xcframework"
         ),
+
+        // For published releases: use remote URL from GitHub Release
+        // Uncomment and update checksum when publishing v0.1.3
+        // .binaryTarget(
+        //     name: "Shared",
+        //     url: "https://github.com/alfikri-rizky/AvifKit/releases/download/v0.1.3/Shared.xcframework.zip",
+        //     checksum: "UPDATE_THIS_CHECKSUM_AFTER_BUILDING"
+        // ),
 
         // Test target
         .testTarget(
