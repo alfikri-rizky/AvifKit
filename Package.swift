@@ -34,20 +34,17 @@ let package = Package(
         ),
 
         // Kotlin Multiplatform XCFramework
-        // For local development and SNAPSHOT builds: use local path
+        // For published releases: use remote URL from GitHub Release
         .binaryTarget(
             name: "Shared",
-            path: "shared/build/XCFrameworks/release/Shared.xcframework"
-            url: "https://github.com/alfikri-rizky/AvifKit/releases/download/v0.1.2/Shared.xcframework.zip",
-            checksum: "7db27895250d99fbaefea3640949dec58f316208dfdeaae831f3f255ef842392"
+            url: "https://github.com/alfikri-rizky/AvifKit/releases/download/v0.1.3/Shared.xcframework.zip",
+            checksum: "736b95fab9db2ad596c70bb1317ffdc25ecb6d056848fbeeea9ddff5ef257adf"
         ),
 
-        // For published releases: use remote URL from GitHub Release
-        // Uncomment and update checksum when publishing v0.1.3
+        // For local development and SNAPSHOT builds: use local path
         // .binaryTarget(
         //     name: "Shared",
-        //     url: "https://github.com/alfikri-rizky/AvifKit/releases/download/v0.1.3/Shared.xcframework.zip",
-        //     checksum: "UPDATE_THIS_CHECKSUM_AFTER_BUILDING"
+        //     path: "shared/build/XCFrameworks/release/Shared.xcframework"
         // ),
 
         // Test target
