@@ -103,17 +103,12 @@ android {
 
 // Maven Central Publishing Configuration (New Portal API)
 // ========================================================
-// Explicitly configure POM metadata for Maven Central validation
+// The plugin reads GROUP, VERSION_NAME, POM_ARTIFACT_ID from gradle.properties
+// We explicitly configure the POM metadata here for Maven Central validation
 
 mavenPublishing {
     publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
     signAllPublications()
-
-    coordinates(
-        groupId = "io.github.alfikri-rizky",
-        artifactId = "avifkit",
-        version = "0.1.3-SNAPSHOT"
-    )
 
     pom {
         name.set("AvifKit")
