@@ -112,7 +112,7 @@ mavenPublishing {
 
     pom {
         name.set("AvifKit")
-        description.set("Kotlin Multiplatform library for converting images to AVIF format on Android and iOS")
+        description.set("Kotlin Multiplatform library for converting images to AVIF format on Android and iOS with libavif and AOM codec support")
         inceptionYear.set("2025")
         url.set("https://github.com/alfikri-rizky/AvifKit")
 
