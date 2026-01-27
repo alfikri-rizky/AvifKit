@@ -73,7 +73,8 @@ data class ConversionResult(
     val originalImageUri: String,
     val convertedImagePath: String,
     val originalData: ImageData,
-    val convertedData: ImageData
+    val convertedData: ImageData,
+    val decodedBitmap: Any? = null // Platform-specific bitmap (Android: Bitmap, iOS: UIImage)
 )
 
 /**

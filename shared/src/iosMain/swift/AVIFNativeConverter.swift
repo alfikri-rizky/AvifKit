@@ -224,10 +224,17 @@ import libavif
             return nil
         }
 
-        // Decode
+        // Parse AVIF structure first
+        let parseResult = avifDecoderParse(decoder)
+        guard parseResult == AVIF_RESULT_OK else {
+            print("Failed to parse AVIF structure: \(parseResult)")
+            return nil
+        }
+
+        // Decode first image
         let decodeResult = avifDecoderNextImage(decoder)
         guard decodeResult == AVIF_RESULT_OK else {
-            print("Failed to decode AVIF")
+            print("Failed to decode AVIF: \(decodeResult)")
             return nil
         }
 

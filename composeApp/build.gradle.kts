@@ -34,6 +34,7 @@ kotlin {
             implementation(libs.coil.network.ktor)
             implementation(libs.navigation.compose)
             implementation(projects.shared)
+//            implementation("io.github.alfikri-rizky:avifkit:0.1.2")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

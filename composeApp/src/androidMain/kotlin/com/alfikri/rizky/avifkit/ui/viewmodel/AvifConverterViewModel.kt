@@ -150,11 +150,17 @@ class AvifConverterViewModel(private val context: Context) : ViewModel() {
                     fileSize = convertedSize
                 )
 
+                // Decode the AVIF file back to verify encoding/decoding works
+                val decodedBitmap = avifConverter.decodeAvif(
+                    input = ImageInput.from(convertedPlatformFile)
+                )
+
                 val result = ConversionResult(
                     originalImageUri = currentState.imageUri,
                     convertedImagePath = convertedPath,
                     originalData = originalData,
-                    convertedData = convertedData
+                    convertedData = convertedData,
+                    decodedBitmap = decodedBitmap
                 )
 
                 _uiState.value = UploadUiState.Success(result)
