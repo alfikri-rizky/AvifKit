@@ -103,11 +103,44 @@ android {
 
 // Maven Central Publishing Configuration (New Portal API)
 // ========================================================
-// The vanniktech plugin automatically reads these from gradle.properties:
-// - GROUP, VERSION_NAME, POM_ARTIFACT_ID for coordinates
-// - All POM_* properties for metadata (name, description, url, license, developers, scm, etc.)
+// Explicitly configure POM metadata for Maven Central validation
 
 mavenPublishing {
     publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
     signAllPublications()
+
+    coordinates(
+        groupId = "io.github.alfikri-rizky",
+        artifactId = "avifkit",
+        version = "0.1.3-SNAPSHOT"
+    )
+
+    pom {
+        name.set("AvifKit")
+        description.set("Kotlin Multiplatform library for converting images to AVIF format on Android and iOS")
+        inceptionYear.set("2025")
+        url.set("https://github.com/alfikri-rizky/AvifKit")
+
+        licenses {
+            license {
+                name.set("MIT License")
+                url.set("https://opensource.org/licenses/MIT")
+                distribution.set("repo")
+            }
+        }
+
+        developers {
+            developer {
+                id.set("alfikri-rizky")
+                name.set("Rizky Alfikri")
+                email.set("rizkyalfikri@gmail.com")
+            }
+        }
+
+        scm {
+            url.set("https://github.com/alfikri-rizky/AvifKit")
+            connection.set("scm:git:git://github.com/alfikri-rizky/AvifKit.git")
+            developerConnection.set("scm:git:ssh://git@github.com/alfikri-rizky/AvifKit.git")
+        }
+    }
 }
