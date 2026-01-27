@@ -128,6 +128,11 @@ class AvifConverterViewModel: ObservableObject {
                 fileSize: Int64(truncating: convertedSize as! NSNumber)
             )
 
+            // Decode the AVIF file back to verify encoding/decoding works
+            let decodedImage = try await avifConverter.decodeAvif(
+                input: ImageInput.companion.from(file: convertedFile)
+            )
+
             let result = ConversionResult(
                 originalImageUri: "", // Not used on iOS
                 convertedImagePath: outputURL.path,

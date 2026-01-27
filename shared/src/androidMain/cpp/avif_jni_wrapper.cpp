@@ -49,6 +49,16 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeEncode(
 
     LOGI("Using libavif for encoding");
 
+    // Check codec availability first
+    const char* codecName = avifCodecName(AVIF_CODEC_CHOICE_AUTO, AVIF_CODEC_FLAG_CAN_ENCODE);
+    if (codecName && codecName[0] != '\0') {
+        LOGI("Available encoder codec: %s", codecName);
+    } else {
+        env->ReleaseByteArrayElements(pixels, pixelData, JNI_ABORT);
+        LOGE("No encoder codec available! AOM codec not found.");
+        return nullptr;
+    }
+
     // Create AVIF encoder
     avifEncoder* encoder = avifEncoderCreate();
     if (!encoder) {
@@ -62,6 +72,7 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeEncode(
     encoder->qualityAlpha = quality;  // Same quality for alpha
     encoder->speed = speed;
     encoder->maxThreads = 4;  // Use up to 4 threads
+    encoder->codecChoice = AVIF_CODEC_CHOICE_AUTO;
 
     // Determine pixel format from subsample
     avifPixelFormat pixelFormat;
@@ -124,17 +135,29 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeEncode(
         return nullptr;
     }
 
-    // Create Java byte array for result
-    jbyteArray result = env->NewByteArray(output.size);
-    if (result) {
-        env->SetByteArrayRegion(result, 0, output.size,
-                               reinterpret_cast<const jbyte*>(output.data));
+    // Check if output is empty (codec not available)
+    if (output.size == 0 || output.data == nullptr) {
+        avifRWDataFree(&output);
+        LOGE("Encoder produced empty output! AOM codec may not be linked properly.");
+        LOGE("output.size=%zu, output.data=%p", output.size, output.data);
+        return nullptr;
     }
-
-    avifRWDataFree(&output);
 
     LOGI("Successfully encoded AVIF: %dx%d, output size=%zu bytes",
          width, height, output.size);
+
+    // Create Java byte array for result
+    jbyteArray result = env->NewByteArray(output.size);
+    if (!result) {
+        avifRWDataFree(&output);
+        LOGE("Failed to allocate Java byte array for encoded data");
+        return nullptr;
+    }
+
+    env->SetByteArrayRegion(result, 0, output.size,
+                           reinterpret_cast<const jbyte*>(output.data));
+
+    avifRWDataFree(&output);
 
     return result;
 
@@ -195,6 +218,23 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeDecode(
 
     LOGI("Using libavif for decoding");
 
+    // Check decoder codec availability
+    const char* decoderCodecName = avifCodecName(AVIF_CODEC_CHOICE_AUTO, AVIF_CODEC_FLAG_CAN_DECODE);
+    if (decoderCodecName && decoderCodecName[0] != '\0') {
+        LOGI("Available decoder codec: %s", decoderCodecName);
+    } else {
+        env->ReleaseByteArrayElements(avifData, data, JNI_ABORT);
+        LOGE("No decoder codec available! AOM decoder not found.");
+        return nullptr;
+    }
+
+    // Log first few bytes of AVIF data for debugging
+    LOGI("AVIF data first 16 bytes: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
+         (unsigned char)data[0], (unsigned char)data[1], (unsigned char)data[2], (unsigned char)data[3],
+         (unsigned char)data[4], (unsigned char)data[5], (unsigned char)data[6], (unsigned char)data[7],
+         (unsigned char)data[8], (unsigned char)data[9], (unsigned char)data[10], (unsigned char)data[11],
+         (unsigned char)data[12], (unsigned char)data[13], (unsigned char)data[14], (unsigned char)data[15]);
+
     // Create decoder
     avifDecoder* decoder = avifDecoderCreate();
     if (!decoder) {
@@ -222,14 +262,32 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeDecode(
         return nullptr;
     }
 
+    LOGI("Parse successful, calling avifDecoderParse...");
+
+    // Parse the AVIF structure first
+    parseResult = avifDecoderParse(decoder);
+    if (parseResult != AVIF_RESULT_OK) {
+        avifDecoderDestroy(decoder);
+        env->ReleaseByteArrayElements(avifData, data, JNI_ABORT);
+        LOGE("Failed in avifDecoderParse: %s", avifResultToString(parseResult));
+        LOGE("Decoder state - imageCount: %d, imageIndex: %d", decoder->imageCount, decoder->imageIndex);
+        return nullptr;
+    }
+
+    LOGI("Parse successful - imageCount: %d, imageIndex: %d", decoder->imageCount, decoder->imageIndex);
+
     // Decode first image
     avifResult decodeResult = avifDecoderNextImage(decoder);
     if (decodeResult != AVIF_RESULT_OK) {
         avifDecoderDestroy(decoder);
         env->ReleaseByteArrayElements(avifData, data, JNI_ABORT);
         LOGE("Failed to decode AVIF: %s", avifResultToString(decodeResult));
+        LOGE("After decode - imageCount: %d, imageIndex: %d", decoder->imageCount, decoder->imageIndex);
         return nullptr;
     }
+
+    LOGI("Decode successful - image dimensions: %dx%d, depth: %d",
+         decoder->image->width, decoder->image->height, decoder->image->depth);
 
     // Get decoded image
     avifImage* image = decoder->image;
@@ -284,22 +342,47 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeDecode(
     jclass decodedImageClass = env->FindClass("com/alfikri/rizky/avifkit/DecodedImage");
     if (!decodedImageClass) {
         LOGE("Failed to find DecodedImage class");
+        // Check for pending JNI exceptions
+        if (env->ExceptionCheck()) {
+            env->ExceptionDescribe();
+            env->ExceptionClear();
+        }
         return nullptr;
     }
 
     jmethodID constructor = env->GetMethodID(decodedImageClass, "<init>", "([III)V");
     if (!constructor) {
         LOGE("Failed to find DecodedImage constructor");
+        // Check for pending JNI exceptions
+        if (env->ExceptionCheck()) {
+            env->ExceptionDescribe();
+            env->ExceptionClear();
+        }
         return nullptr;
     }
 
     // Create int array for pixels
     jintArray pixelArray = env->NewIntArray(pixels.size());
-    env->SetIntArrayRegion(pixelArray, 0, pixels.size(), pixels.data());
+    if (!pixelArray) {
+        LOGE("Failed to allocate pixel array");
+        return nullptr;
+    }
+
+    env->SetIntArrayRegion(pixelArray, 0, pixels.size(), reinterpret_cast<const jint*>(pixels.data()));
 
     // Create and return DecodedImage object
     jobject result = env->NewObject(decodedImageClass, constructor,
                                     pixelArray, width, height);
+
+    if (!result) {
+        LOGE("Failed to create DecodedImage object");
+        // Check for pending JNI exceptions
+        if (env->ExceptionCheck()) {
+            env->ExceptionDescribe();
+            env->ExceptionClear();
+        }
+        return nullptr;
+    }
 
     LOGI("Successfully decoded AVIF: %dx%d", width, height);
 
@@ -344,10 +427,20 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeDecode(
     }
 
     jintArray pixelArray = env->NewIntArray(pixels.size());
-    env->SetIntArrayRegion(pixelArray, 0, pixels.size(), pixels.data());
+    if (!pixelArray) {
+        LOGE("Failed to allocate pixel array");
+        return nullptr;
+    }
+
+    env->SetIntArrayRegion(pixelArray, 0, pixels.size(), reinterpret_cast<const jint*>(pixels.data()));
 
     jobject result = env->NewObject(decodedImageClass, constructor,
                                     pixelArray, width, height);
+
+    if (!result) {
+        LOGE("Failed to create DecodedImage object");
+        return nullptr;
+    }
 
     LOGI("Returned placeholder test image: %dx%d", width, height);
 

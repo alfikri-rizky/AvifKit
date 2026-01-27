@@ -493,8 +493,19 @@ actual class AvifConverter {
         }
 
         // Decode using native method (works with or without libavif)
-        val decoded = nativeDecode(avifData)
-            ?: throw AvifError.DecodingFailed("Native decoding failed")
+        val decoded = try {
+            Log.d(TAG, "Calling nativeDecode with ${avifData.size} bytes")
+            val result = nativeDecode(avifData)
+            if (result == null) {
+                Log.e(TAG, "nativeDecode returned null")
+                throw AvifError.DecodingFailed("Native decoding returned null")
+            }
+            Log.d(TAG, "nativeDecode succeeded: ${result.width}x${result.height}")
+            result
+        } catch (e: Exception) {
+            Log.e(TAG, "Exception during native decode", e)
+            throw AvifError.DecodingFailed("Native decoding failed: ${e.message}")
+        }
 
         return Bitmap.createBitmap(
             decoded.pixels,

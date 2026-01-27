@@ -456,19 +456,22 @@ actual class AvifConverter {
     }
 
     private fun decodeAvifToImage(avifData: NSData): UIImage {
-        // PLACEHOLDER: Decode AVIF data
-        // In production, use avif.swift library here
-        /*
-        let decoder = AVIFDecoder()
-        let image = try decoder.decode(avifData)
-        return image
-        */
+        // Use native AVIF converter for decoding
+        val converter = AVIFNativeConverter()
 
-        // For now, try to decode as regular image
-        NSLog("PLACEHOLDER: Decoding as regular image. Integrate avif.swift for actual AVIF decoding.")
+        // Check if native AVIF is available
+        if (!AVIFNativeConverter.isAvifAvailable()) {
+            NSLog("⚠️ libavif not available, using standard image decoding fallback")
+            // Fallback to standard image decoding
+            return UIImage.imageWithData(avifData)
+                ?: throw AvifError.DecodingFailed("Failed to decode AVIF data")
+        }
 
-        return UIImage.imageWithData(avifData)
-            ?: throw AvifError.DecodingFailed("Failed to decode AVIF data")
+        // Decode with native converter (now includes avifDecoderParse fix)
+        val decodedImage = converter.decodeAvif(avifData)
+            ?: throw AvifError.DecodingFailed("Native AVIF decoding failed")
+
+        return decodedImage
     }
 
     private fun resizeImage(image: UIImage, maxDimension: Int): UIImage {

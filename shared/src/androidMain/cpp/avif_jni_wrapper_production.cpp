@@ -208,13 +208,22 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeDecode(
     decoder->ignoreXMP = AVIF_TRUE;
     decoder->ignoreExif = AVIF_FALSE;  // IMPORTANT: Preserve EXIF for orientation data
 
-    // Parse AVIF data
-    avifResult parseResult = avifDecoderSetIOMemory(
+    // Set up decoder memory
+    avifResult setIOResult = avifDecoderSetIOMemory(
         decoder,
         reinterpret_cast<const uint8_t*>(data),
         dataLength
     );
 
+    if (setIOResult != AVIF_RESULT_OK) {
+        avifDecoderDestroy(decoder);
+        env->ReleaseByteArrayElements(avifData, data, JNI_ABORT);
+        LOGE("Failed to set decoder memory: %s", avifResultToString(setIOResult));
+        return nullptr;
+    }
+
+    // Parse AVIF structure
+    avifResult parseResult = avifDecoderParse(decoder);
     if (parseResult != AVIF_RESULT_OK) {
         avifDecoderDestroy(decoder);
         env->ReleaseByteArrayElements(avifData, data, JNI_ABORT);

@@ -96,7 +96,7 @@ fun ResultScreen(
         // Image Preview Card
         val currentImageUri = if (selectedTab == 0) result.originalImageUri else "file://${result.convertedImagePath}"
         val currentData = if (selectedTab == 0) result.originalData else result.convertedData
-        val imageLabel = if (selectedTab == 0) "Original Image" else "AVIF Image"
+        val imageLabel = if (selectedTab == 0) "Original Image" else "AVIF Image (Decoded via decodeAvif())"
 
         ImagePreviewCard(
             imageUri = currentImageUri,
@@ -110,7 +110,9 @@ fun ResultScreen(
             onResetZoom = {
                 scale = 1f
                 offset = Offset.Zero
-            }
+            },
+            // Use decoded bitmap for AVIF tab to verify decodeAvif works
+            decodedBitmap = if (selectedTab == 1) result.decodedBitmap as? android.graphics.Bitmap else null
         )
 
         // Image Details Card
@@ -281,7 +283,8 @@ private fun ImagePreviewCard(
     offset: Offset,
     onTransform: (Float, Offset) -> Unit,
     onResetZoom: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    decodedBitmap: android.graphics.Bitmap? = null
 ) {
     // Create transformable state for proper gesture handling
     val state = rememberTransformableState { zoomChange, panChange, _ ->
@@ -332,7 +335,8 @@ private fun ImagePreviewCard(
                 contentAlignment = Alignment.Center
             ) {
                 AsyncImage(
-                    model = imageUri,
+                    // Use decoded bitmap if available, otherwise use URI
+                    model = decodedBitmap ?: imageUri,
                     contentDescription = imageLabel,
                     modifier = Modifier
                         .fillMaxSize()
