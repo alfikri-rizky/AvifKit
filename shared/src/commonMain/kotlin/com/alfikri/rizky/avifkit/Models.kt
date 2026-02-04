@@ -90,11 +90,11 @@ data class EncodingOptions(
                 )
                 Priority.QUALITY -> EncodingOptions(
                     quality = 95,
-                    speed = 2,
+                    speed = 5,
                     subsample = ChromaSubsample.YUV444,
                     alphaQuality = 98,
                     preserveMetadata = true,
-                    maxDimension = null
+                    maxDimension = 4096
                 )
                 Priority.STORAGE -> EncodingOptions(
                     quality = 65,

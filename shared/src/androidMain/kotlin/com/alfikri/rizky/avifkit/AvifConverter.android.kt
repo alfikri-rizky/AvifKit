@@ -450,69 +450,96 @@ actual class AvifConverter {
     }
 
     private fun encodeBitmapToAvif(bitmap: Bitmap, options: EncodingOptions): ByteArray {
-        // Resize if needed
-        val resizedBitmap = options.maxDimension?.let { maxDim ->
-            resizeBitmap(bitmap, maxDim)
-        } ?: bitmap
+        try {
+            // Resize if needed
+            val resizedBitmap = options.maxDimension?.let { maxDim ->
+                resizeBitmap(bitmap, maxDim)
+            } ?: bitmap
 
-        if (!nativeLibraryLoaded) {
-            // Fallback: encode as JPEG if native library not loaded
-            Log.w(TAG, "Native library not loaded, using JPEG fallback")
-            val stream = java.io.ByteArrayOutputStream()
-            resizedBitmap.compress(Bitmap.CompressFormat.JPEG, options.quality, stream)
-            return stream.toByteArray()
+            if (!nativeLibraryLoaded) {
+                // Fallback: encode as JPEG if native library not loaded
+                Log.w(TAG, "Native library not loaded, using JPEG fallback")
+                val stream = java.io.ByteArrayOutputStream()
+                resizedBitmap.compress(Bitmap.CompressFormat.JPEG, options.quality, stream)
+                return stream.toByteArray()
+            }
+
+            // Convert bitmap to byte array
+            val pixels = bitmapToByteArray(resizedBitmap)
+
+            // Get subsample value (0=444, 1=422, 2=420)
+            val subsampleValue = when (options.subsample) {
+                ChromaSubsample.YUV444 -> 0
+                ChromaSubsample.YUV422 -> 1
+                ChromaSubsample.YUV420 -> 2
+            }
+
+            // Encode using native method (works with or without libavif)
+            return nativeEncode(
+                pixels,
+                resizedBitmap.width,
+                resizedBitmap.height,
+                options.quality,
+                options.speed,
+                subsampleValue
+            ) ?: throw AvifError.EncodingFailed("Native encoding failed")
+        } catch (e: OutOfMemoryError) {
+            Log.e(TAG, "OutOfMemoryError during AVIF encoding", e)
+            throw AvifError.OutOfMemory
+        } catch (e: AvifError) {
+            // Re-throw AvifError as-is
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Unexpected error during encoding", e)
+            throw AvifError.EncodingFailed("Encoding failed: ${e.message}")
         }
-
-        // Convert bitmap to byte array
-        val pixels = bitmapToByteArray(resizedBitmap)
-
-        // Get subsample value (0=444, 1=422, 2=420)
-        val subsampleValue = when (options.subsample) {
-            ChromaSubsample.YUV444 -> 0
-            ChromaSubsample.YUV422 -> 1
-            ChromaSubsample.YUV420 -> 2
-        }
-
-        // Encode using native method (works with or without libavif)
-        return nativeEncode(
-            pixels,
-            resizedBitmap.width,
-            resizedBitmap.height,
-            options.quality,
-            options.speed,
-            subsampleValue
-        ) ?: throw AvifError.EncodingFailed("Native encoding failed")
     }
 
     private fun decodeAvifToBitmap(avifData: ByteArray): Bitmap {
-        if (!nativeLibraryLoaded) {
-            // Fallback: try to decode as standard image format
-            Log.w(TAG, "Native library not loaded, using standard image decoding")
-            return BitmapFactory.decodeByteArray(avifData, 0, avifData.size)
-                ?: throw AvifError.DecodingFailed("Failed to decode image data")
-        }
-
-        // Decode using native method (works with or without libavif)
-        val decoded = try {
-            Log.d(TAG, "Calling nativeDecode with ${avifData.size} bytes")
-            val result = nativeDecode(avifData)
-            if (result == null) {
-                Log.e(TAG, "nativeDecode returned null")
-                throw AvifError.DecodingFailed("Native decoding returned null")
+        try {
+            if (!nativeLibraryLoaded) {
+                // Fallback: try to decode as standard image format
+                Log.w(TAG, "Native library not loaded, using standard image decoding")
+                return BitmapFactory.decodeByteArray(avifData, 0, avifData.size)
+                    ?: throw AvifError.DecodingFailed("Failed to decode image data")
             }
-            Log.d(TAG, "nativeDecode succeeded: ${result.width}x${result.height}")
-            result
-        } catch (e: Exception) {
-            Log.e(TAG, "Exception during native decode", e)
-            throw AvifError.DecodingFailed("Native decoding failed: ${e.message}")
-        }
 
-        return Bitmap.createBitmap(
-            decoded.pixels,
-            decoded.width,
-            decoded.height,
-            Bitmap.Config.ARGB_8888
-        )
+            // Decode using native method (works with or without libavif)
+            val decoded = try {
+                Log.d(TAG, "Calling nativeDecode with ${avifData.size} bytes")
+                val result = nativeDecode(avifData)
+                if (result == null) {
+                    Log.e(TAG, "nativeDecode returned null")
+                    throw AvifError.DecodingFailed("Native decoding returned null")
+                }
+                Log.d(TAG, "nativeDecode succeeded: ${result.width}x${result.height}")
+                result
+            } catch (e: OutOfMemoryError) {
+                Log.e(TAG, "OutOfMemoryError during native decode", e)
+                throw AvifError.OutOfMemory
+            } catch (e: AvifError) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Exception during native decode", e)
+                throw AvifError.DecodingFailed("Native decoding failed: ${e.message}")
+            }
+
+            return Bitmap.createBitmap(
+                decoded.pixels,
+                decoded.width,
+                decoded.height,
+                Bitmap.Config.ARGB_8888
+            )
+        } catch (e: OutOfMemoryError) {
+            Log.e(TAG, "OutOfMemoryError during AVIF decoding", e)
+            throw AvifError.OutOfMemory
+        } catch (e: AvifError) {
+            // Re-throw AvifError as-is
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Unexpected error during decoding", e)
+            throw AvifError.DecodingFailed("Decoding failed: ${e.message}")
+        }
     }
 
     /**

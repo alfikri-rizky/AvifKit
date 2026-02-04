@@ -428,50 +428,74 @@ actual class AvifConverter {
     }
 
     private fun encodeImageToAvif(image: UIImage, options: EncodingOptions): NSData {
-        // Use native AVIF converter with orientation support
-        val converter = AVIFNativeConverter()
+        try {
+            // Use native AVIF converter with orientation support
+            val converter = AVIFNativeConverter()
 
-        // Check if native AVIF is available
-        if (!AVIFNativeConverter.isAvifAvailable()) {
-            NSLog("⚠️ libavif not available, using JPEG fallback")
-            // Fallback to JPEG (which properly handles orientation)
-            val jpegData = UIImageJPEGRepresentation(image, options.quality / 100.0)
-                ?: throw AvifError.EncodingFailed("Failed to encode image")
-            return jpegData
+            // Check if native AVIF is available
+            if (!AVIFNativeConverter.isAvifAvailable()) {
+                NSLog("⚠️ libavif not available, using JPEG fallback")
+                // Fallback to JPEG (which properly handles orientation)
+                val jpegData = UIImageJPEGRepresentation(image, options.quality / 100.0)
+                    ?: throw AvifError.EncodingFailed("Failed to encode image")
+                return jpegData
+            }
+
+            // Prepare encoding options as NSDictionary
+            @Suppress("UNCHECKED_CAST")
+            val encodingOptions = mapOf<Any?, Any?>(
+                "quality" to options.quality,
+                "speed" to options.speed,
+                "maxDimension" to (options.maxDimension ?: 0)
+            ) as NSDictionary
+
+            // Encode with native converter (handles orientation automatically)
+            val avifData = converter.encodeImageWithOptions(image, encodingOptions)
+                ?: throw AvifError.EncodingFailed("Native AVIF encoding failed")
+
+            return avifData
+        } catch (e: AvifError) {
+            // Re-throw AvifError as-is
+            throw e
+        } catch (e: Exception) {
+            NSLog("❌ Unexpected error during encoding: ${e.message}")
+            // Check if it's a memory-related error
+            if (e.message?.contains("memory", ignoreCase = true) == true) {
+                throw AvifError.OutOfMemory
+            }
+            throw AvifError.EncodingFailed("Encoding failed: ${e.message}")
         }
-
-        // Prepare encoding options as NSDictionary
-        @Suppress("UNCHECKED_CAST")
-        val encodingOptions = mapOf<Any?, Any?>(
-            "quality" to options.quality,
-            "speed" to options.speed,
-            "maxDimension" to (options.maxDimension ?: 0)
-        ) as NSDictionary
-
-        // Encode with native converter (handles orientation automatically)
-        val avifData = converter.encodeImageWithOptions(image, encodingOptions)
-            ?: throw AvifError.EncodingFailed("Native AVIF encoding failed")
-
-        return avifData
     }
 
     private fun decodeAvifToImage(avifData: NSData): UIImage {
-        // Use native AVIF converter for decoding
-        val converter = AVIFNativeConverter()
+        try {
+            // Use native AVIF converter for decoding
+            val converter = AVIFNativeConverter()
 
-        // Check if native AVIF is available
-        if (!AVIFNativeConverter.isAvifAvailable()) {
-            NSLog("⚠️ libavif not available, using standard image decoding fallback")
-            // Fallback to standard image decoding
-            return UIImage.imageWithData(avifData)
-                ?: throw AvifError.DecodingFailed("Failed to decode AVIF data")
+            // Check if native AVIF is available
+            if (!AVIFNativeConverter.isAvifAvailable()) {
+                NSLog("⚠️ libavif not available, using standard image decoding fallback")
+                // Fallback to standard image decoding
+                return UIImage.imageWithData(avifData)
+                    ?: throw AvifError.DecodingFailed("Failed to decode AVIF data")
+            }
+
+            // Decode with native converter (now includes avifDecoderParse fix)
+            val decodedImage = converter.decodeAvif(avifData)
+                ?: throw AvifError.DecodingFailed("Native AVIF decoding failed")
+
+            return decodedImage
+        } catch (e: AvifError) {
+            // Re-throw AvifError as-is
+            throw e
+        } catch (e: Exception) {
+            NSLog("❌ Unexpected error during decoding: ${e.message}")
+            // Check if it's a memory-related error
+            if (e.message?.contains("memory", ignoreCase = true) == true) {
+                throw AvifError.OutOfMemory
+            }
+            throw AvifError.DecodingFailed("Decoding failed: ${e.message}")
         }
-
-        // Decode with native converter (now includes avifDecoderParse fix)
-        val decodedImage = converter.decodeAvif(avifData)
-            ?: throw AvifError.DecodingFailed("Native AVIF decoding failed")
-
-        return decodedImage
     }
 
     private fun resizeImage(image: UIImage, maxDimension: Int): UIImage {

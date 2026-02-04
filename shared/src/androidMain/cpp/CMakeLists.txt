@@ -1,6 +1,20 @@
 cmake_minimum_required(VERSION 3.22.1)
 project("avif-android-wrapper")
 
+# Android 15+ compatibility: 16 KB page size alignment
+# CRITICAL: This MUST be set BEFORE any add_library() or add_subdirectory() calls
+# Required for Google Play starting November 1st, 2025
+# See: https://developer.android.com/16kb-page-size
+if(ANDROID)
+    # Set linker flags for 16 KB page alignment (16384 = 16 * 1024)
+    # This ensures LOAD segments are aligned to 16 KB boundaries
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,max-page-size=16384")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-z,max-page-size=16384")
+    set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -Wl,-z,max-page-size=16384")
+
+    message(STATUS "✅ Enabled 16 KB page alignment for Android 15+ compatibility")
+endif()
+
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -77,6 +91,15 @@ target_link_libraries(avif-android-wrapper
 
 if(HAS_LIBAVIF)
     target_link_libraries(avif-android-wrapper avif)
+endif()
+
+# Android 15+ compatibility: Apply 16 KB page alignment to the target
+# This MUST be done after target_link_libraries()
+if(ANDROID)
+    target_link_options(avif-android-wrapper PRIVATE
+        "-Wl,-z,max-page-size=16384"
+    )
+    message(STATUS "✅ Applied 16 KB page alignment to avif-android-wrapper")
 endif()
 
 # Strip symbols in release builds to reduce binary size
