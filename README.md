@@ -44,12 +44,14 @@ AvifKit is a production-ready Kotlin Multiplatform library for AVIF image encodi
 
 #### Core Functionality
 - ✅ **AVIF Encoding & Decoding** - Full support via native libavif integration
+- ✅ **Android 15+ Compatible** - 16 KB page size alignment (Google Play requirement)
 - ✅ **Adaptive Compression** - Intelligent file size targeting with two strategies
 - ✅ **Priority Presets** - Quick configuration for common use cases
 - ✅ **Multi-threaded Processing** - Efficient encoding/decoding using up to 4 threads
 - ✅ **Format Detection** - Automatic image format identification
 - ✅ **Orientation Support** - EXIF orientation handling on Android, UIImage orientation on iOS
 - ✅ **Graceful Fallback** - JPEG encoding when native library unavailable
+- ✅ **Memory Safety** - OutOfMemory error handling
 
 #### Advanced Features
 - Image resizing with dimension constraints
@@ -198,7 +200,7 @@ Add the dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.alfikri-rizky:avifkit:0.1.3-SNAPSHOT")
+    implementation("io.github.alfikri-rizky:avifkit:0.1.4")
 }
 ```
 
@@ -209,13 +211,13 @@ dependencies {
 **In Xcode:**
 1. File → Add Packages...
 2. Enter repository URL: `https://github.com/alfikri-rizky/AvifKit`
-3. Select version: `0.1.3-SNAPSHOT` or higher
+3. Select version: `0.1.4` or higher
 
 **Or add to your `Package.swift`:**
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.1.3-SNAPSHOT")
+    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.1.4")
 ]
 ```
 
@@ -224,14 +226,14 @@ dependencies: [
 - ✅ Resolves all dependencies including libavif
 - ✅ Integrates seamlessly with your Xcode project
 
-**Download from GitHub Releases:** [v0.1.3-SNAPSHOT](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.3-SNAPSHOT)
+**Download from GitHub Releases:** [v0.1.4](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.4)
 
 #### iOS (CocoaPods) - Not Recommended ⚠️
 
 CocoaPods support is technically available but **not recommended** due to validation issues:
 
 ```ruby
-pod 'AvifKit', '~> 0.1.3-SNAPSHOT'
+pod 'AvifKit', '~> 0.1.4'
 ```
 
 **Important Notes:**
@@ -242,7 +244,7 @@ pod 'AvifKit', '~> 0.1.3-SNAPSHOT'
 
 **Recommended alternatives:**
 1. **Swift Package Manager** (fully supported, uses different libavif distribution)
-2. **Direct XCFramework** from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.3-SNAPSHOT)
+2. **Direct XCFramework** from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.4)
 
 We cannot fix this without the libavif CocoaPods maintainers updating their pod's deployment targets.
 
