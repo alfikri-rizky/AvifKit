@@ -105,7 +105,7 @@ android {
 // ========================================================
 // Reads GROUP, VERSION_NAME, POM_ARTIFACT_ID from gradle.properties
 // For CI/CD, these are set in .github/workflows/publish.yml
-version = "0.1.5"  // Set version explicitly for local builds
+version = "0.1.6"  // Set version explicitly for local builds
 
 mavenPublishing {
     publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
