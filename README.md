@@ -200,7 +200,7 @@ Add the dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.alfikri-rizky:avifkit:0.1.4")
+    implementation("io.github.alfikri-rizky:avifkit:0.1.5")
 }
 ```
 
@@ -211,29 +211,60 @@ dependencies {
 **In Xcode:**
 1. File → Add Packages...
 2. Enter repository URL: `https://github.com/alfikri-rizky/AvifKit`
-3. Select version: `0.1.4` or higher
+3. Select version: `0.1.5` or higher
+4. **Important:** After adding the package, **clean build folder** (Cmd+Shift+K) before first build
 
 **Or add to your `Package.swift`:**
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.1.4")
+    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.1.5")
 ]
 ```
 
-**That's it!** SPM automatically:
-- ✅ Downloads the pre-built XCFramework from GitHub Releases
-- ✅ Resolves all dependencies including libavif
+**Setup Notes:**
+- ✅ SPM automatically downloads the pre-built XCFramework from GitHub Releases
+- ✅ Resolves all dependencies including libavif (requires ~500MB disk space for dependencies)
 - ✅ Integrates seamlessly with your Xcode project
+- ⚠️ **First-time setup:** The libavif dependency includes AOM codec submodules which can take 5-10 minutes to download
+- ⚠️ **Important:** Always do a clean build (Product → Clean Build Folder) after adding the package to ensure `canImport(libavif)` evaluates correctly
 
-**Download from GitHub Releases:** [v0.1.4](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.4)
+**Troubleshooting:**
+
+If you see "⚠️ libavif not available, using JPEG fallback":
+
+1. **Ensure sufficient disk space** (at least 1GB free for SPM dependencies)
+2. **Clean all caches:**
+   ```bash
+   # Clear SPM cache
+   rm -rf ~/Library/Caches/org.swift.swiftpm
+   rm -rf ~/Library/org.swift.swiftpm
+
+   # Clear Xcode derived data
+   rm -rf ~/Library/Developer/Xcode/DerivedData
+   ```
+3. **In Xcode:**
+   - File → Packages → Reset Package Caches
+   - File → Packages → Update to Latest Package Versions
+   - Product → Clean Build Folder (Cmd+Shift+K)
+   - Product → Build (Cmd+B)
+
+4. **Verify libavif is loaded:**
+   ```swift
+   import AvifKit
+
+   print("AVIF available:", AVIFNativeConverter.isAvifAvailable)  // Should be true
+   print("AVIF version:", AVIFNativeConverter.avifVersion)        // Should be "0.11.1"
+   ```
+
+**Download from GitHub Releases:** [v0.1.5](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.5)
 
 #### iOS (CocoaPods) - Not Recommended ⚠️
 
 CocoaPods support is technically available but **not recommended** due to validation issues:
 
 ```ruby
-pod 'AvifKit', '~> 0.1.4'
+pod 'AvifKit', '~> 0.1.5'
 ```
 
 **Important Notes:**
@@ -244,7 +275,7 @@ pod 'AvifKit', '~> 0.1.4'
 
 **Recommended alternatives:**
 1. **Swift Package Manager** (fully supported, uses different libavif distribution)
-2. **Direct XCFramework** from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.4)
+2. **Direct XCFramework** from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.5)
 
 We cannot fix this without the libavif CocoaPods maintainers updating their pod's deployment targets.
 

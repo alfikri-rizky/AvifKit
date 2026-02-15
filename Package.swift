@@ -27,18 +27,15 @@ let package = Package(
                 .product(name: "libavif", package: "libavif-Xcode")
             ],
             path: "shared/src/iosMain/swift",
-            publicHeadersPath: nil,
-            swiftSettings: [
-                .define("canImport(libavif)")
-            ]
+            publicHeadersPath: nil
         ),
 
         // Kotlin Multiplatform XCFramework
         // For published releases: use remote URL from GitHub Release
         .binaryTarget(
             name: "Shared",
-            url: "https://github.com/alfikri-rizky/AvifKit/releases/download/v0.1.4/Shared.xcframework.zip",
-            checksum: "a600def48b0a28c23166be1d31c30fe2f504792ab98d815eaa9b5e9373fd4f64"
+            url: "https://github.com/alfikri-rizky/AvifKit/releases/download/v0.1.6/Shared.xcframework.zip",
+            checksum: "bbd454e0e09274639a2b807bbda7dd4ea0fb18f19cc5136893af61e63a22f675"
         ),
 
         // For local development and SNAPSHOT builds: use local path

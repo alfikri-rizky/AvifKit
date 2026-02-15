@@ -52,6 +52,11 @@ jobs:
           kotlin.code.style=official
           kotlin.mpp.stability.nowarn=true
 
+          # Library Information - CRITICAL for Maven Central namespace
+          GROUP=io.github.alfikri-rizky
+          VERSION_NAME=${{ github.event.inputs.version }}
+          POM_ARTIFACT_ID=avifkit
+
           # Maven Central Publishing (New Portal API)
           mavenCentralUsername=${{ secrets.MAVEN_CENTRAL_USERNAME }}
           mavenCentralPassword=${{ secrets.MAVEN_CENTRAL_PASSWORD }}

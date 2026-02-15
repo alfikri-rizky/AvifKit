@@ -103,16 +103,13 @@ android {
 
 // Maven Central Publishing Configuration (New Portal API)
 // ========================================================
-// IMPORTANT: Set group and version explicitly to avoid namespace issues
-// The gradle.properties file is in .gitignore, so CI/CD needs these hardcoded
-group = "io.github.alfikri-rizky"
-version = "0.1.4"
+// Reads GROUP, VERSION_NAME, POM_ARTIFACT_ID from gradle.properties
+// For CI/CD, these are set in .github/workflows/publish.yml
+version = "0.1.6"  // Set version explicitly for local builds
 
 mavenPublishing {
     publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
     signAllPublications()
-
-    coordinates("io.github.alfikri-rizky", "avifkit", "0.1.4")
 
     pom {
         name.set("AvifKit")

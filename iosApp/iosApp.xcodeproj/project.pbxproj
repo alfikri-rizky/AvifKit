@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		690159642F41946F0002C25D /* libavif in Frameworks */ = {isa = PBXBuildFile; productRef = 690159632F41946F0002C25D /* libavif */; };
 		699A705C2EF7EDED006150C7 /* AVIFNativeConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 699A70592EF7EDED006150C7 /* AVIFNativeConverter.swift */; };
 /* End PBXBuildFile section */
 
@@ -47,6 +48,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				690159642F41946F0002C25D /* libavif in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -101,6 +103,7 @@
 			);
 			name = iosApp;
 			packageProductDependencies = (
+				690159632F41946F0002C25D /* libavif */,
 			);
 			productName = iosApp;
 			productReference = BE285A95943DF454383C8D6E /* AvifKit.app */;
@@ -130,6 +133,9 @@
 			);
 			mainGroup = 880558F0666D16196A43AE0A;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				690159622F41946F0002C25D /* XCRemoteSwiftPackageReference "libavif-Xcode" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 23DC5C6C6965550AA17CCA0E /* Products */;
 			projectDirPath = "";
@@ -385,6 +391,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		690159622F41946F0002C25D /* XCRemoteSwiftPackageReference "libavif-Xcode" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/SDWebImage/libavif-Xcode.git";
+			requirement = {
+				kind = exactVersion;
+				version = 0.11.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		690159632F41946F0002C25D /* libavif */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 690159622F41946F0002C25D /* XCRemoteSwiftPackageReference "libavif-Xcode" */;
+			productName = libavif;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 36DF951B90B523CD6F2375A7 /* Project object */;
 }

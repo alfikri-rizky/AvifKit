@@ -62,6 +62,10 @@ Podfile.lock
 .build/
 .swiftpm/
 
+# XCFramework Distribution
+*.xcframework.zip
+iosApp/iosApp.xcodeproj/project.xcworkspace/xcshareddata/
+
 # Android signing
 release.keystore
 debug.keystore
