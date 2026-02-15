@@ -8,6 +8,9 @@ plugins {
     alias(libs.plugins.mavenPublish)
 }
 
+group = "io.github.alfikri-rizky"
+version = "0.1.6"
+
 kotlin {
     androidTarget {
         publishLibraryVariants("release")  // Only publish release, not debug
@@ -103,9 +106,8 @@ android {
 
 // Maven Central Publishing Configuration (New Portal API)
 // ========================================================
-// Reads GROUP, VERSION_NAME, POM_ARTIFACT_ID from gradle.properties
+// Group and version set at top of file
 // For CI/CD, these are set in .github/workflows/publish.yml
-version = "0.1.6"  // Set version explicitly for local builds
 
 mavenPublishing {
     publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)

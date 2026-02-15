@@ -200,7 +200,7 @@ Add the dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.alfikri-rizky:avifkit:0.1.5")
+    implementation("io.github.alfikri-rizky:avifkit:0.1.6")
 }
 ```
 
@@ -211,14 +211,14 @@ dependencies {
 **In Xcode:**
 1. File → Add Packages...
 2. Enter repository URL: `https://github.com/alfikri-rizky/AvifKit`
-3. Select version: `0.1.5` or higher
+3. Select version: `0.1.6` or higher
 4. **Important:** After adding the package, **clean build folder** (Cmd+Shift+K) before first build
 
 **Or add to your `Package.swift`:**
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.1.5")
+    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.1.6")
 ]
 ```
 
@@ -257,14 +257,14 @@ If you see "⚠️ libavif not available, using JPEG fallback":
    print("AVIF version:", AVIFNativeConverter.avifVersion)        // Should be "0.11.1"
    ```
 
-**Download from GitHub Releases:** [v0.1.5](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.5)
+**Download from GitHub Releases:** [v0.1.6](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.6)
 
 #### iOS (CocoaPods) - Not Recommended ⚠️
 
 CocoaPods support is technically available but **not recommended** due to validation issues:
 
 ```ruby
-pod 'AvifKit', '~> 0.1.5'
+pod 'AvifKit', '~> 0.1.6'
 ```
 
 **Important Notes:**
@@ -275,7 +275,7 @@ pod 'AvifKit', '~> 0.1.5'
 
 **Recommended alternatives:**
 1. **Swift Package Manager** (fully supported, uses different libavif distribution)
-2. **Direct XCFramework** from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.5)
+2. **Direct XCFramework** from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.6)
 
 We cannot fix this without the libavif CocoaPods maintainers updating their pod's deployment targets.
 
