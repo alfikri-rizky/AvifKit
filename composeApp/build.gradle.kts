@@ -34,7 +34,7 @@ kotlin {
             implementation(libs.coil.network.ktor)
             implementation(libs.navigation.compose)
             implementation(projects.shared)  // Use local project with 16 KB fix
-//            implementation("io.github.alfikri-rizky:avifkit:0.1.3")
+//            implementation("io.github.alfikri-rizky:avifkit:0.1.4")
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
