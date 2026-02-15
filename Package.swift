@@ -27,10 +27,7 @@ let package = Package(
                 .product(name: "libavif", package: "libavif-Xcode")
             ],
             path: "shared/src/iosMain/swift",
-            publicHeadersPath: nil,
-            swiftSettings: [
-                .define("canImport(libavif)")
-            ]
+            publicHeadersPath: nil
         ),
 
         // Kotlin Multiplatform XCFramework
