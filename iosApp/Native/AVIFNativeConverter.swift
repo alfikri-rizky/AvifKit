@@ -120,7 +120,9 @@ import libavif
     ) -> Data? {
         // Clamp speed to max 6 to stay in AOM_USAGE_GOOD_QUALITY mode.
         // Speed >= 7 triggers AOM_USAGE_REALTIME which uses CBR rate control,
-        // incompatible with quantizer-based still image encoding on libaom 2.0.2.
+        // incompatible with quantizer-based still image encoding.
+        // NOTE: libaom from SDWebImage/libaom-Xcode 2.0.2 lacks AOM_USAGE_ALL_INTRA.
+        // If libaom is upgraded to 3.0+ (with ALL_INTRA), this clamp can be removed.
         let clampedSpeed = min(speed, 6)
         // Convert UIImage to RGBA buffer (respects orientation)
         let (pixelData, width, height) = uiImageToRGBA(image)
@@ -138,14 +140,10 @@ import libavif
         }
         defer { avifEncoderDestroy(encoder) }
 
-        // Set encoding parameters
-        // In libavif 0.11+, use quantizers instead of quality
-        // quality 0-100 maps to quantizer 63-0 (inverse relationship)
-        let quantizer = Int32(63 - (quality * 63 / 100))
-        encoder.pointee.minQuantizer = quantizer
-        encoder.pointee.maxQuantizer = quantizer
-        encoder.pointee.minQuantizerAlpha = quantizer
-        encoder.pointee.maxQuantizerAlpha = quantizer
+        // Set encoding parameters using the modern quality API (libavif >= 1.0.0)
+        // quality: 0 = worst, 100 = best (lossless)
+        encoder.pointee.quality = Int32(quality)
+        encoder.pointee.qualityAlpha = Int32(quality)
         encoder.pointee.speed = Int32(clampedSpeed)
         encoder.pointee.maxThreads = 4
 

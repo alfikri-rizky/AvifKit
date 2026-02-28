@@ -16,7 +16,7 @@ let package = Package(
     dependencies: [
         // libavif XCFramework for SPM
         // Using SDWebImage's pre-built libavif XCFramework
-        .package(url: "https://github.com/SDWebImage/libavif-Xcode.git", from: "0.11.1")
+        .package(url: "https://github.com/SDWebImage/libavif-Xcode.git", from: "1.0.0")
     ],
     targets: [
         // Swift wrapper for AVIF conversion
