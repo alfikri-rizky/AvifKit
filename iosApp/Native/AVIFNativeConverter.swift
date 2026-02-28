@@ -140,12 +140,23 @@ import libavif
         }
         defer { avifEncoderDestroy(encoder) }
 
-        // Set encoding parameters using the modern quality API (libavif >= 1.0.0)
-        // quality: 0 = worst, 100 = best (lossless)
-        encoder.pointee.quality = Int32(quality)
-        encoder.pointee.qualityAlpha = Int32(quality)
+        // Set encoding parameters
+        // quality 0-100 maps to quantizer 63-0 (inverse relationship)
+        // Using quantizer API for compatibility with libavif 0.11.x and 1.0.0
+        let quantizer = Int32(63 - (quality * 63 / 100))
+        encoder.pointee.minQuantizer = quantizer
+        encoder.pointee.maxQuantizer = quantizer
+        encoder.pointee.minQuantizerAlpha = quantizer
+        encoder.pointee.maxQuantizerAlpha = quantizer
         encoder.pointee.speed = Int32(clampedSpeed)
-        encoder.pointee.maxThreads = 4
+
+        // Enable multi-threaded encoding with auto-tiling
+        // Without tiling, maxThreads has no effect (only 1 tile = 1 thread).
+        // autoTiling lets libavif split the image into optimal tile grid,
+        // enabling parallel encoding across multiple CPU cores.
+        let coreCount = Int32(ProcessInfo.processInfo.activeProcessorCount)
+        encoder.pointee.maxThreads = max(coreCount, 4)
+        encoder.pointee.autoTiling = AVIF_TRUE
 
         // Create AVIF image
         guard let avifImage = avifImageCreate(
