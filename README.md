@@ -47,7 +47,7 @@ AvifKit is a production-ready Kotlin Multiplatform library for AVIF image encodi
 - ✅ **Android 15+ Compatible** - 16 KB page size alignment (Google Play requirement)
 - ✅ **Adaptive Compression** - Intelligent file size targeting with two strategies
 - ✅ **Priority Presets** - Quick configuration for common use cases
-- ✅ **Multi-threaded Processing** - Efficient encoding/decoding using up to 4 threads
+- ✅ **Multi-threaded Processing** - Parallel encoding/decoding with auto-tiling across all CPU cores
 - ✅ **Format Detection** - Automatic image format identification
 - ✅ **Orientation Support** - EXIF orientation handling on Android, UIImage orientation on iOS
 - ✅ **Graceful Fallback** - JPEG encoding when native library unavailable
@@ -200,7 +200,7 @@ Add the dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.alfikri-rizky:avifkit:0.1.6")
+    implementation("io.github.alfikri-rizky:avifkit:0.1.7")
 }
 ```
 
@@ -211,14 +211,14 @@ dependencies {
 **In Xcode:**
 1. File → Add Packages...
 2. Enter repository URL: `https://github.com/alfikri-rizky/AvifKit`
-3. Select version: `0.1.6` or higher
+3. Select version: `0.1.7` or higher
 4. **Important:** After adding the package, **clean build folder** (Cmd+Shift+K) before first build
 
 **Or add to your `Package.swift`:**
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.1.6")
+    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.1.7")
 ]
 ```
 
@@ -254,17 +254,17 @@ If you see "⚠️ libavif not available, using JPEG fallback":
    import AvifKit
 
    print("AVIF available:", AVIFNativeConverter.isAvifAvailable)  // Should be true
-   print("AVIF version:", AVIFNativeConverter.avifVersion)        // Should be "0.11.1"
+   print("AVIF version:", AVIFNativeConverter.avifVersion)        // Should be "1.0.0"
    ```
 
-**Download from GitHub Releases:** [v0.1.6](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.6)
+**Download from GitHub Releases:** [v0.1.7](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.7)
 
 #### iOS (CocoaPods) - Not Recommended ⚠️
 
 CocoaPods support is technically available but **not recommended** due to validation issues:
 
 ```ruby
-pod 'AvifKit', '~> 0.1.6'
+pod 'AvifKit', '~> 0.1.7'
 ```
 
 **Important Notes:**
@@ -275,7 +275,7 @@ pod 'AvifKit', '~> 0.1.6'
 
 **Recommended alternatives:**
 1. **Swift Package Manager** (fully supported, uses different libavif distribution)
-2. **Direct XCFramework** from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.6)
+2. **Direct XCFramework** from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.7)
 
 We cannot fix this without the libavif CocoaPods maintainers updating their pod's deployment targets.
 
@@ -287,7 +287,7 @@ We cannot fix this without the libavif CocoaPods maintainers updating their pod'
 - **Native C++ implementation** via JNI (`shared/src/androidMain/cpp/`)
 - **Pre-built libavif binaries** included for all ABIs
 - **EXIF orientation support** (preserves portrait/landscape orientation)
-- **Multi-threaded encoding/decoding** (up to 4 threads)
+- **Multi-threaded encoding/decoding** with auto-tiling (uses all CPU cores)
 - **Automatic fallback** to JPEG if native library fails to load
 
 **Technical Details:**
@@ -300,12 +300,15 @@ We cannot fix this without the libavif CocoaPods maintainers updating their pod'
 - **Native Swift implementation** (`AVIFNativeConverter.swift`)
 - **Conditional compilation** using `#if canImport(libavif)`
 - **UIImage orientation handling** (properly encodes portrait photos)
-- **CoreGraphics-based conversion**
+- **Optimized pixel extraction** — fast path for `.up` orientation skips double-render
+- **Smart alpha handling** — uses `noneSkipLast` for opaque images to skip premultiplication
+- **Auto-tiling** — parallel encoding across all CPU cores
 - **Automatic fallback** to JPEG when libavif unavailable
 
 **Technical Details:**
 - iOS 13.0+ deployment target
 - Swift 5.0+
+- libavif 1.0.0 via SDWebImage/libavif-Xcode SPM
 - Framework-based distribution
 - XCFramework support for multiple architectures
 
@@ -419,6 +422,26 @@ pod trunk push AvifKit.podspec
 - `scripts/verify-integration.sh` - Verifies the integration is working correctly
 
 **Note:** End users of your published library don't need these scripts - they're only for development and publishing.
+
+---
+
+### Changelog
+
+#### v0.1.7
+- **iOS Performance:** Enabled auto-tiling for parallel multi-core AVIF encoding (significant speedup)
+- **iOS Performance:** Optimized pixel extraction — fast path skips UIGraphics double-render for `.up` orientation
+- **iOS Performance:** Smart alpha handling — avoids premultiplication overhead for opaque images (JPEG, etc.)
+- **iOS:** Upgraded libavif-Xcode SPM dependency from 0.11.1 to 1.0.0
+- **iOS Fix:** Fixed `EncodingFailed` crash when using `SPEED` preset (speed ≥ 7 triggered incompatible REALTIME mode in libaom)
+- **iOS Fix:** Fixed protocol conformance error in `AvifKitNativeHandler` (Swift method signature mismatch)
+- **iOS:** Improved error logging with `avifResultToString` for native encoding failures
+
+#### v0.1.6
+- Initial production release with full AVIF encoding/decoding
+- Android and iOS native support via libavif
+- Adaptive compression strategies (SMART/STRICT)
+- Priority presets (SPEED/BALANCED/QUALITY/STORAGE)
+- SPM and Maven Central distribution
 
 ---
 
