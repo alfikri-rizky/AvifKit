@@ -75,18 +75,25 @@ jobs:
           VERSION="v${{ steps.get_version.outputs.VERSION }}"
           CHECKSUM="${{ steps.checksum.outputs.CHECKSUM }}"
 
-          # Replace placeholder checksum with actual checksum
-          sed -i '' "s/CHECKSUM_PLACEHOLDER_UPDATE_AFTER_BUILD/$CHECKSUM/" Package.swift
+          # Checkout main branch (we're on detached HEAD from the tag)
+          git fetch origin main
+          git checkout main
 
-          # Update version in URL (should already be correct, but ensure it)
-          sed -i '' "s|download/v[0-9]\+\.[0-9]\+\.[0-9]\+|download/$VERSION|" Package.swift
+          # Replace any existing checksum (placeholder or old) with the real one
+          sed -i '' "s|checksum: \"[a-fA-F0-9]*\"|checksum: \"$CHECKSUM\"|" Package.swift
+          sed -i '' "s|checksum: \"CHECKSUM_PLACEHOLDER_UPDATE_AFTER_BUILD\"|checksum: \"$CHECKSUM\"|" Package.swift
+
+          # Ensure the URL points to the correct version
+          sed -i '' "s|download/v[0-9]*\.[0-9]*\.[0-9]*/|download/$VERSION/|" Package.swift
 
           echo "✅ Updated Package.swift"
           echo "Checksum: $CHECKSUM"
           echo "Version: $VERSION"
+          cat Package.swift | grep -A1 "checksum"
 
-      - name: Commit Package.swift changes
+      - name: Commit Package.swift and update tag
         run: |
+          VERSION="v${{ steps.get_version.outputs.VERSION }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Package.swift
@@ -94,7 +101,12 @@ jobs:
             echo "No changes to commit"
           else
             git commit -m "Update Package.swift checksum for release ${{ steps.get_version.outputs.VERSION }} [skip ci]"
-            git push origin HEAD:main || echo "⚠️ Failed to push, continuing..."
+            git push origin main
+
+            # Move the tag to this new commit so SPM resolves the correct Package.swift
+            git tag -f "$VERSION"
+            git push origin "$VERSION" --force
+            echo "✅ Tag $VERSION updated to include correct checksum"
           fi
 
       - name: Create GitHub Release
