@@ -35,7 +35,7 @@ let package = Package(
         .binaryTarget(
             name: "Shared",
             url: "https://github.com/alfikri-rizky/AvifKit/releases/download/v0.1.7/Shared.xcframework.zip",
-            checksum: "ec0912072007cd847fc4968f4a3ea2f1a23801506ad861b23e70e0eaf924267a"
+            checksum: "6d3a88d85d09b9cda87004f4e1a200e31c195926d0fa4f6ec16396aea579667e"
         ),
 
         // For local development and SNAPSHOT builds: use local path
