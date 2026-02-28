@@ -116,9 +116,7 @@ actual class AvifConverter {
     }
 
     actual fun isAvifSupported(): Boolean {
-        // On iOS, AVIF support depends on the integration of avif.swift library
-        // For now, return true as we have the structure in place
-        return true
+        return AvifKitIos.isNativeAvifAvailable()
     }
 
     actual fun isAvifFile(input: ImageInput): Boolean {
@@ -429,19 +427,15 @@ actual class AvifConverter {
 
     private fun encodeImageToAvif(image: UIImage, options: EncodingOptions): NSData {
         try {
-            // Use native AVIF converter with orientation support
-            val converter = AVIFNativeConverter()
+            val handler = AvifKitIos.getHandler()
 
-            // Check if native AVIF is available
-            if (!AVIFNativeConverter.isAvifAvailable()) {
+            if (handler == null || !handler.isAvailable()) {
                 NSLog("⚠️ libavif not available, using JPEG fallback")
-                // Fallback to JPEG (which properly handles orientation)
                 val jpegData = UIImageJPEGRepresentation(image, options.quality / 100.0)
                     ?: throw AvifError.EncodingFailed("Failed to encode image")
                 return jpegData
             }
 
-            // Prepare encoding options as NSDictionary
             @Suppress("UNCHECKED_CAST")
             val encodingOptions = mapOf<Any?, Any?>(
                 "quality" to options.quality,
@@ -449,8 +443,7 @@ actual class AvifConverter {
                 "maxDimension" to (options.maxDimension ?: 0)
             ) as NSDictionary
 
-            // Encode with native converter (handles orientation automatically)
-            val avifData = converter.encodeImageWithOptions(image, encodingOptions)
+            val avifData = handler.encodeImageWithOptions(image, encodingOptions)
                 ?: throw AvifError.EncodingFailed("Native AVIF encoding failed")
 
             return avifData
@@ -469,19 +462,15 @@ actual class AvifConverter {
 
     private fun decodeAvifToImage(avifData: NSData): UIImage {
         try {
-            // Use native AVIF converter for decoding
-            val converter = AVIFNativeConverter()
+            val handler = AvifKitIos.getHandler()
 
-            // Check if native AVIF is available
-            if (!AVIFNativeConverter.isAvifAvailable()) {
+            if (handler == null || !handler.isAvailable()) {
                 NSLog("⚠️ libavif not available, using standard image decoding fallback")
-                // Fallback to standard image decoding
                 return UIImage.imageWithData(avifData)
                     ?: throw AvifError.DecodingFailed("Failed to decode AVIF data")
             }
 
-            // Decode with native converter (now includes avifDecoderParse fix)
-            val decodedImage = converter.decodeAvif(avifData)
+            val decodedImage = handler.decodeAvif(avifData)
                 ?: throw AvifError.DecodingFailed("Native AVIF decoding failed")
 
             return decodedImage

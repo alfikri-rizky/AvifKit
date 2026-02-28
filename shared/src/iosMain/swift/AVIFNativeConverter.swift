@@ -411,3 +411,39 @@ extension UIImage {
                alphaInfo != .noneSkipLast
     }
 }
+
+// MARK: - AvifKit Native Handler Bridge
+
+import Shared
+
+/// Swift implementation of IosAvifNativeHandler from the KMP Shared framework.
+/// Bridges the Swift libavif calls to the Kotlin AvifConverter via the handler pattern.
+@objc public class AvifKitNativeHandler: NSObject, IosAvifNativeHandler {
+
+    private let converter = AVIFNativeConverter()
+
+    public func isAvailable() -> Bool {
+        return AVIFNativeConverter.isAvifAvailable
+    }
+
+    public func encodeImageWithOptions(image: UIImage, options: NSDictionary) -> NSData? {
+        return converter.encodeImageWithOptions(image, options: options) as NSData?
+    }
+
+    public func decodeAvif(avifData: NSData) -> UIImage? {
+        return converter.decodeAvif(avifData as Data)
+    }
+
+    public func getVersion() -> String {
+        return AVIFNativeConverter.avifVersion
+    }
+}
+
+/// Call at app startup to enable native AVIF support.
+@objc public class AvifKitSetup: NSObject {
+
+    @objc public static func registerNativeHandler() {
+        let handler = AvifKitNativeHandler()
+        AvifKitIos.shared.registerHandler(handler: handler)
+    }
+}
