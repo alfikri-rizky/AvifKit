@@ -36,9 +36,10 @@ jobs:
 
       - name: Setup Android libavif
         run: |
+          # Remove orphaned gitlink directory so setup script does a fresh clone
+          rm -rf shared/src/androidMain/cpp/libavif
           chmod +x scripts/setup-android-libavif.sh
-          # Run setup script non-interactively (auto-answer "n" to update prompt if exists)
-          echo "n" | ./scripts/setup-android-libavif.sh || true
+          ./scripts/setup-android-libavif.sh
 
       - name: Create gradle.properties for CI
         run: |
