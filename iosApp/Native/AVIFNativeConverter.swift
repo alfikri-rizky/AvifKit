@@ -118,6 +118,10 @@ import libavif
         quality: Int,
         speed: Int
     ) -> Data? {
+        // Clamp speed to max 6 to stay in AOM_USAGE_GOOD_QUALITY mode.
+        // Speed >= 7 triggers AOM_USAGE_REALTIME which uses CBR rate control,
+        // incompatible with quantizer-based still image encoding on libaom 2.0.2.
+        let clampedSpeed = min(speed, 6)
         // Convert UIImage to RGBA buffer (respects orientation)
         let (pixelData, width, height) = uiImageToRGBA(image)
 
@@ -142,7 +146,7 @@ import libavif
         encoder.pointee.maxQuantizer = quantizer
         encoder.pointee.minQuantizerAlpha = quantizer
         encoder.pointee.maxQuantizerAlpha = quantizer
-        encoder.pointee.speed = Int32(speed)
+        encoder.pointee.speed = Int32(clampedSpeed)
         encoder.pointee.maxThreads = 4
 
         // Create AVIF image
@@ -188,7 +192,8 @@ import libavif
         defer { avifRWDataFree(&output) }
 
         guard encodeResult == AVIF_RESULT_OK else {
-            print("Failed to encode AVIF")
+            let errStr = String(cString: avifResultToString(encodeResult))
+            print("Failed to encode AVIF: \(errStr)")
             return nil
         }
 
@@ -269,13 +274,56 @@ import libavif
 
     /// Convert UIImage to RGBA buffer, respecting orientation
     /// This ensures images taken in portrait mode are correctly oriented
+    ///
+    /// Performance optimizations:
+    /// - Fast path: skips UIGraphics double-render when orientation is .up
+    /// - Uses noneSkipLast alpha for opaque images (avoids premultiplication overhead)
     private func uiImageToRGBA(_ image: UIImage) -> (pixels: UnsafeMutablePointer<UInt8>?, width: Int, height: Int) {
-        // Use the image's size (which respects orientation) not CGImage size
+        let bytesPerPixel = 4
+        let bitsPerComponent = 8
+
+        // Determine alpha format based on whether source image has alpha
+        // Using noneSkipLast for opaque images avoids per-pixel premultiplication
+        let sourceHasAlpha: Bool = {
+            guard let cgImage = image.cgImage else { return false }
+            let info = cgImage.alphaInfo
+            return info != .none && info != .noneSkipFirst && info != .noneSkipLast
+        }()
+        let alphaInfo: CGImageAlphaInfo = sourceHasAlpha ? .premultipliedLast : .noneSkipLast
+
+        // Fast path: if orientation is already .up, draw CGImage directly
+        // This skips the costly UIGraphicsBeginImageContextWithOptions double-render
+        if image.imageOrientation == .up, let cgImage = image.cgImage {
+            let width = cgImage.width
+            let height = cgImage.height
+            let bytesPerRow = width * bytesPerPixel
+
+            guard let data = malloc(height * bytesPerRow) else {
+                return (nil, width, height)
+            }
+            let pixels = data.assumingMemoryBound(to: UInt8.self)
+
+            guard let context = CGContext(
+                data: pixels,
+                width: width,
+                height: height,
+                bitsPerComponent: bitsPerComponent,
+                bytesPerRow: bytesPerRow,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: alphaInfo.rawValue
+            ) else {
+                free(data)
+                return (nil, width, height)
+            }
+
+            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+            return (pixels, width, height)
+        }
+
+        // Slow path: orientation needs correction, use UIGraphics to normalize
         let width = Int(image.size.width * image.scale)
         let height = Int(image.size.height * image.scale)
-        let bytesPerPixel = 4
         let bytesPerRow = width * bytesPerPixel
-        let bitsPerComponent = 8
 
         guard let data = malloc(height * bytesPerRow) else {
             return (nil, width, height)
@@ -290,14 +338,13 @@ import libavif
             bitsPerComponent: bitsPerComponent,
             bytesPerRow: bytesPerRow,
             space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            bitmapInfo: alphaInfo.rawValue
         ) else {
             free(data)
             return (nil, width, height)
         }
 
-        // IMPORTANT: Draw the UIImage, not the CGImage, to respect orientation
-        // UIGraphicsBeginImageContext applies orientation transformations automatically
+        // Draw via UIGraphics to apply orientation transforms
         UIGraphicsBeginImageContextWithOptions(image.size, false, image.scale)
         image.draw(in: CGRect(origin: .zero, size: image.size))
         let orientedImage = UIGraphicsGetImageFromCurrentImageContext()
@@ -409,5 +456,38 @@ extension UIImage {
         return alphaInfo != .none &&
                alphaInfo != .noneSkipFirst &&
                alphaInfo != .noneSkipLast
+    }
+}
+
+// MARK: - AvifKit Native Handler Bridge
+
+import Shared
+
+@objc public class AvifKitNativeHandler: NSObject, IosAvifNativeHandler {
+
+    private let converter = AVIFNativeConverter()
+
+    public func isAvailable() -> Bool {
+        return AVIFNativeConverter.isAvifAvailable
+    }
+
+    public func encodeImageWithOptions(image: UIImage, options: [AnyHashable : Any]) -> Data? {
+        return converter.encodeImageWithOptions(image, options: options as NSDictionary) as Data?
+    }
+
+    public func decodeAvif(avifData: Data) -> UIImage? {
+        return converter.decodeAvif(avifData)
+    }
+
+    public func getVersion() -> String {
+        return AVIFNativeConverter.avifVersion
+    }
+}
+
+@objc public class AvifKitSetup: NSObject {
+
+    @objc public static func registerNativeHandler() {
+        let handler = AvifKitNativeHandler()
+        AvifKitIos.shared.registerHandler(handler: handler)
     }
 }
