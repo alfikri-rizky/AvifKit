@@ -9,7 +9,7 @@ plugins {
 }
 
 group = "io.github.alfikri-rizky"
-version = "0.1.8"
+version = "0.1.9"
 
 kotlin {
     androidTarget {
