@@ -200,7 +200,7 @@ Add the dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.alfikri-rizky:avifkit:0.1.9")
+    implementation("io.github.alfikri-rizky:avifkit:0.2.0")
 }
 ```
 
@@ -211,14 +211,14 @@ dependencies {
 **In Xcode:**
 1. File → Add Packages...
 2. Enter repository URL: `https://github.com/alfikri-rizky/AvifKit`
-3. Select version: `0.1.9` or higher
+3. Select version: `0.2.0` or higher
 4. **Important:** After adding the package, **clean build folder** (Cmd+Shift+K) before first build
 
 **Or add to your `Package.swift`:**
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.1.9")
+    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.2.0")
 ]
 ```
 
@@ -254,17 +254,17 @@ If you see "⚠️ libavif not available, using JPEG fallback":
    import AvifKit
 
    print("AVIF available:", AVIFNativeConverter.isAvifAvailable)  // Should be true
-   print("AVIF version:", AVIFNativeConverter.avifVersion)        // Should be "1.0.0"
+   print("AVIF version:", AVIFNativeConverter.avifVersion)        // Should be "0.11.1"
    ```
 
-**Download from GitHub Releases:** [v0.1.9](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.9)
+**Download from GitHub Releases:** [v0.2.0](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.2.0)
 
 #### iOS (CocoaPods) - Not Recommended ⚠️
 
 CocoaPods support is technically available but **not recommended** due to validation issues:
 
 ```ruby
-pod 'AvifKit', '~> 0.1.9'
+pod 'AvifKit', '~> 0.2.0'
 ```
 
 **Important Notes:**
@@ -275,7 +275,7 @@ pod 'AvifKit', '~> 0.1.9'
 
 **Recommended alternatives:**
 1. **Swift Package Manager** (fully supported, uses different libavif distribution)
-2. **Direct XCFramework** from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.1.9)
+2. **Direct XCFramework** from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.2.0)
 
 We cannot fix this without the libavif CocoaPods maintainers updating their pod's deployment targets.
 
@@ -308,7 +308,7 @@ We cannot fix this without the libavif CocoaPods maintainers updating their pod'
 **Technical Details:**
 - iOS 13.0+ deployment target
 - Swift 5.0+
-- libavif 1.0.0 via SDWebImage/libavif-Xcode SPM
+- libavif 0.11.x via SDWebImage/libavif-Xcode SPM (pinned below 1.0.0 for API compatibility)
 - Framework-based distribution
 - XCFramework support for multiple architectures
 
@@ -426,6 +426,12 @@ pod trunk push AvifKit.podspec
 ---
 
 ### Changelog
+
+#### v0.2.0
+- **iOS Fix:** Fixed libavif not available on production — pinned libavif-Xcode to 0.11.x (1.0.0 had breaking API changes)
+- **Android Fix:** Fixed libaom download failure in CI — pre-clone libaom source to avoid unreliable googlesource tarball endpoint
+- **Android:** Pinned libavif to stable v1.2.1 tag for reproducible builds
+- **Android:** Patched LocalAom.cmake for CMake 3.22 compatibility (NDK default)
 
 #### v0.1.9
 - **iOS Performance:** Enabled auto-tiling for parallel multi-core AVIF encoding (significant speedup)

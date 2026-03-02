@@ -3,6 +3,8 @@ import UIKit
 
 #if canImport(libavif)
 import libavif
+// NOTE: This code targets libavif 0.11.x API (SDWebImage/libavif-Xcode < 1.0.0)
+// libavif 1.0.0 changed minQuantizer/maxQuantizer, avifImageAllocatePlanes, etc.
 #endif
 
 /// Native AVIF converter for iOS
