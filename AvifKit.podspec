@@ -1,11 +1,11 @@
 Pod::Spec.new do |spec|
   spec.name         = "AvifKit"
-  spec.version      = "0.2.0"
+  spec.version      = "0.2.1"
   spec.summary      = "Kotlin Multiplatform AVIF converter library for iOS and Android"
   spec.description  = <<-DESC
     AvifKit is a comprehensive Kotlin Multiplatform library for converting images
     to AVIF format. It provides a unified API across iOS and Android with
-    native performance using libavif.
+    native performance using avif.swift (aom encoder + dav1d decoder).
 
     Features:
     - AVIF encoding with adaptive compression
@@ -46,16 +46,15 @@ Pod::Spec.new do |spec|
     rm Shared.xcframework.zip
   CMD
 
-  # Dependencies
-  # libavif provides the actual AVIF encoding/decoding functionality
-  spec.dependency "libavif", "~> 0.11"
+  # avif.swift provides the actual AVIF encoding/decoding functionality
+  spec.dependency "avif", "~> 2.1"
 
   # Framework configuration
   spec.pod_target_xcconfig = {
     'SWIFT_VERSION' => '5.0',
     'OTHER_LDFLAGS' => '-framework UIKit -framework Foundation',
     'VALID_ARCHS' => 'arm64 x86_64',
-    'HEADER_SEARCH_PATHS' => '$(inherited) "${PODS_ROOT}/libavif/include"',
+    'HEADER_SEARCH_PATHS' => '$(inherited)',
     'IPHONEOS_DEPLOYMENT_TARGET' => '13.0'
   }
 

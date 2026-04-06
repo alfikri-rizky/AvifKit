@@ -43,7 +43,7 @@ AvifKit is a production-ready Kotlin Multiplatform library for AVIF image encodi
 ### Features
 
 #### Core Functionality
-- ✅ **AVIF Encoding & Decoding** - Full support via native libavif integration
+- ✅ **AVIF Encoding & Decoding** - Full support via native AVIF libraries (avif.swift on iOS, libavif on Android)
 - ✅ **Android 15+ Compatible** - 16 KB page size alignment (Google Play requirement)
 - ✅ **Adaptive Compression** - Intelligent file size targeting with two strategies
 - ✅ **Priority Presets** - Quick configuration for common use cases
@@ -200,7 +200,7 @@ Add the dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.alfikri-rizky:avifkit:0.2.0")
+    implementation("io.github.alfikri-rizky:avifkit:0.2.1")
 }
 ```
 
@@ -211,27 +211,27 @@ dependencies {
 **In Xcode:**
 1. File → Add Packages...
 2. Enter repository URL: `https://github.com/alfikri-rizky/AvifKit`
-3. Select version: `0.2.0` or higher
+3. Select version: `0.2.1` or higher
 4. **Important:** After adding the package, **clean build folder** (Cmd+Shift+K) before first build
 
 **Or add to your `Package.swift`:**
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.2.0")
+    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.2.1")
 ]
 ```
 
 **Setup Notes:**
 - ✅ SPM automatically downloads the pre-built XCFramework from GitHub Releases
-- ✅ Resolves all dependencies including libavif (requires ~500MB disk space for dependencies)
+- ✅ Resolves avif.swift dependency (pre-built aom encoder + dav1d decoder — no source compilation)
 - ✅ Integrates seamlessly with your Xcode project
-- ⚠️ **First-time setup:** The libavif dependency includes AOM codec submodules which can take 5-10 minutes to download
-- ⚠️ **Important:** Always do a clean build (Product → Clean Build Folder) after adding the package to ensure `canImport(libavif)` evaluates correctly
+- ⚠️ **First-time setup:** Dependencies may take a few minutes to download on first resolve
+- ⚠️ **Important:** Always do a clean build (Product → Clean Build Folder) after adding the package
 
 **Troubleshooting:**
 
-If you see "⚠️ libavif not available, using JPEG fallback":
+If you see "⚠️ Using JPEG fallback — avif.swift not available":
 
 1. **Ensure sufficient disk space** (at least 1GB free for SPM dependencies)
 2. **Clean all caches:**
@@ -249,35 +249,31 @@ If you see "⚠️ libavif not available, using JPEG fallback":
    - Product → Clean Build Folder (Cmd+Shift+K)
    - Product → Build (Cmd+B)
 
-4. **Verify libavif is loaded:**
+4. **Verify AVIF is available:**
    ```swift
    import AvifKit
 
    print("AVIF available:", AVIFNativeConverter.isAvifAvailable)  // Should be true
-   print("AVIF version:", AVIFNativeConverter.avifVersion)        // Should be "0.11.1"
    ```
 
-**Download from GitHub Releases:** [v0.2.0](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.2.0)
+**Download from GitHub Releases:** [v0.2.1](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.2.1)
 
 #### iOS (CocoaPods) - Not Recommended ⚠️
 
 CocoaPods support is technically available but **not recommended** due to validation issues:
 
 ```ruby
-pod 'AvifKit', '~> 0.2.0'
+pod 'AvifKit', '~> 0.2.1'
 ```
 
 **Important Notes:**
-- `pod spec lint` validation fails due to libavif dependency's old iOS deployment targets (8.0-9.0)
-- The libavif CocoaPods pod has hardcoded deployment targets that require `libarclite`, which was removed from Xcode 14+
+- CocoaPods validation may fail due to transitive dependency configuration issues
 - **However, actual usage works fine** when users install via `pod install` since app deployment targets (iOS 13.0+) override pod settings
-- Our code and XCFramework are fully compatible - the issue is external (libavif pod configuration)
+- Our code and XCFramework are fully compatible
 
 **Recommended alternatives:**
-1. **Swift Package Manager** (fully supported, uses different libavif distribution)
-2. **Direct XCFramework** from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.2.0)
-
-We cannot fix this without the libavif CocoaPods maintainers updating their pod's deployment targets.
+1. **Swift Package Manager** (fully supported, recommended)
+2. **Direct XCFramework** from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.2.1)
 
 ---
 
@@ -298,18 +294,16 @@ We cannot fix this without the libavif CocoaPods maintainers updating their pod'
 
 #### iOS
 - **Native Swift implementation** (`AVIFNativeConverter.swift`)
-- **Conditional compilation** using `#if canImport(libavif)`
+- **Powered by [avif.swift](https://github.com/awxkee/avif.swift)** — high-level `AVIFEncoder`/`AVIFDecoder` API
+- **aom encoder + dav1d decoder** — pre-built XCFramework dependencies, no source compilation needed
 - **UIImage orientation handling** (properly encodes portrait photos)
-- **Optimized pixel extraction** — fast path for `.up` orientation skips double-render
-- **Smart alpha handling** — uses `noneSkipLast` for opaque images to skip premultiplication
-- **Auto-tiling** — parallel encoding across all CPU cores
-- **Automatic fallback** to JPEG when libavif unavailable
+- **Automatic fallback** to JPEG when avif.swift unavailable
 
 **Technical Details:**
 - iOS 13.0+ deployment target
 - Swift 5.0+
-- libavif 0.11.x via SDWebImage/libavif-Xcode SPM (pinned below 1.0.0 for API compatibility)
-- Framework-based distribution
+- avif.swift 2.1.x (aom for encoding, dav1d for fast decoding)
+- Pre-built XCFramework dependencies — no C library compilation required
 - XCFramework support for multiple architectures
 
 ### Implementation Status
@@ -426,6 +420,14 @@ pod trunk push AvifKit.podspec
 ---
 
 ### Changelog
+
+#### v0.2.1
+- **iOS:** Replaced `libavif-Xcode` (raw C API) with [`avif.swift`](https://github.com/awxkee/avif.swift) — high-level Swift AVIF encoder/decoder
+- **iOS:** Uses pre-built aom encoder + dav1d decoder (no source compilation, faster SPM resolution)
+- **iOS:** Massively simplified `AVIFNativeConverter.swift` — removed ~250 lines of manual pixel buffer management
+- **iOS:** Simplified orientation handling via `normalizeOrientation()` before encoding
+- **CocoaPods:** Updated dependency from `libavif ~> 0.11` to `avif ~> 2.1`
+- **SPM:** Updated dependency from `SDWebImage/libavif-Xcode` to `awxkee/avif.swift 2.1.x`
 
 #### v0.2.0
 - **iOS Fix:** Fixed libavif not available on production — pinned libavif-Xcode to 0.11.x (1.0.0 had breaking API changes)

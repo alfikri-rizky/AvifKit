@@ -14,11 +14,10 @@ let package = Package(
         )
     ],
     dependencies: [
-        // libavif XCFramework for SPM
-        // Using SDWebImage's pre-built libavif XCFramework
-        // Pin to 0.11.x — libavif 1.0.0 has breaking API changes
-        // (minQuantizer/maxQuantizer removed, avifImageAllocatePlanes signature changed, etc.)
-        .package(url: "https://github.com/SDWebImage/libavif-Xcode.git", "0.11.1"..<"1.0.0")
+        // AVIF encoding/decoding via avif.swift
+        // Uses aom for encoding and dav1d for fast decoding
+        // Pre-built XCFramework dependencies — no source compilation needed
+        .package(url: "https://github.com/awxkee/avif.swift.git", "2.1.0"..<"3.0.0")
     ],
     targets: [
         // Swift wrapper for AVIF conversion
@@ -26,7 +25,7 @@ let package = Package(
             name: "AvifKit",
             dependencies: [
                 "Shared",
-                .product(name: "libavif", package: "libavif-Xcode")
+                .product(name: "avif", package: "avif.swift")
             ],
             path: "shared/src/iosMain/swift",
             publicHeadersPath: nil
@@ -36,8 +35,8 @@ let package = Package(
         // For published releases: use remote URL from GitHub Release
         .binaryTarget(
             name: "Shared",
-            url: "https://github.com/alfikri-rizky/AvifKit/releases/download/v0.2.0/Shared.xcframework.zip",
-            checksum: "4f5326f21abc0e984e533b5bffebbf0ab4a507f5c50b348a4c83c96190e336b5"
+            url: "https://github.com/alfikri-rizky/AvifKit/releases/download/v0.2.1/Shared.xcframework.zip",
+            checksum: "CHECKSUM_PLACEHOLDER_UPDATE_AFTER_BUILD"
         ),
 
         // For local development and SNAPSHOT builds: use local path

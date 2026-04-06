@@ -1,36 +1,31 @@
 import Foundation
 import UIKit
 
-#if canImport(libavif)
-import libavif
-// NOTE: This code targets libavif 0.11.x API (SDWebImage/libavif-Xcode < 1.0.0)
-// libavif 1.0.0 changed minQuantizer/maxQuantizer, avifImageAllocatePlanes, etc.
+#if canImport(avif)
+import avif
 #endif
 
 /// Native AVIF converter for iOS
-/// Provides encoding and decoding functionality using libavif
+/// Provides encoding and decoding functionality using avif.swift
 @objc public class AVIFNativeConverter: NSObject {
 
     // MARK: - Configuration
 
-    /// Check if libavif is available
+    /// Check if avif.swift is available
     @objc public static var isAvifAvailable: Bool {
-        #if canImport(libavif)
+        #if canImport(avif)
         return true
         #else
         return false
         #endif
     }
 
-    /// Get libavif version
+    /// Get avif.swift version
     @objc public static var avifVersion: String {
-        #if canImport(libavif)
-        if let cString = libavif.avifVersion() {
-            return String(cString: cString)
-        }
-        return "Unknown"
+        #if canImport(avif)
+        return "avif.swift 2.x"
         #else
-        return "libavif not available"
+        return "avif.swift not available"
         #endif
     }
 
@@ -47,8 +42,8 @@ import libavif
         quality: Int,
         speed: Int
     ) -> Data? {
-        #if canImport(libavif)
-        return encodeWithLibavif(image, quality: quality, speed: speed)
+        #if canImport(avif)
+        return encodeWithAvifSwift(image, quality: quality, speed: speed)
         #else
         return encodePlaceholder(image, quality: quality)
         #endif
@@ -78,8 +73,8 @@ import libavif
     /// - Parameter avifData: AVIF encoded data
     /// - Returns: Decoded image or nil on failure
     @objc public func decodeAvif(_ avifData: Data) -> UIImage? {
-        #if canImport(libavif)
-        return decodeWithLibavif(avifData)
+        #if canImport(avif)
+        return decodeWithAvifSwift(avifData)
         #else
         return decodePlaceholder(avifData)
         #endif
@@ -111,11 +106,11 @@ import libavif
         ]
     }
 
-    // MARK: - Private Implementation
+    // MARK: - Private Implementation (avif.swift)
 
-    #if canImport(libavif)
+    #if canImport(avif)
 
-    private func encodeWithLibavif(
+    private func encodeWithAvifSwift(
         _ image: UIImage,
         quality: Int,
         speed: Int
@@ -123,282 +118,29 @@ import libavif
         // Clamp speed to max 6 to stay in AOM_USAGE_GOOD_QUALITY mode.
         // Speed >= 7 triggers AOM_USAGE_REALTIME which uses CBR rate control,
         // incompatible with quantizer-based still image encoding.
-        // NOTE: libaom from SDWebImage/libaom-Xcode 2.0.2 lacks AOM_USAGE_ALL_INTRA.
-        // If libaom is upgraded to 3.0+ (with ALL_INTRA), this clamp can be removed.
         let clampedSpeed = min(speed, 6)
-        // Convert UIImage to RGBA buffer (respects orientation)
-        let (pixelData, width, height) = uiImageToRGBA(image)
 
-        guard let pixels = pixelData else {
-            print("Failed to convert image to RGBA")
-            return nil
-        }
-        defer { free(pixels) }
+        // Normalize orientation before encoding
+        let orientedImage = normalizeOrientation(image)
 
-        // Create AVIF encoder
-        guard let encoder = avifEncoderCreate() else {
-            print("Failed to create AVIF encoder")
-            return nil
-        }
-        defer { avifEncoderDestroy(encoder) }
+        // avif.swift quality is 0.0 to 1.0
+        let qualityNormalized = Double(quality) / 100.0
 
-        // Set encoding parameters
-        // quality 0-100 maps to quantizer 63-0 (inverse relationship)
-        // Using quantizer API for compatibility with libavif 0.11.x and 1.0.0
-        let quantizer = Int32(63 - (quality * 63 / 100))
-        encoder.pointee.minQuantizer = quantizer
-        encoder.pointee.maxQuantizer = quantizer
-        encoder.pointee.minQuantizerAlpha = quantizer
-        encoder.pointee.maxQuantizerAlpha = quantizer
-        encoder.pointee.speed = Int32(clampedSpeed)
-
-        // Enable multi-threaded encoding with auto-tiling
-        // Without tiling, maxThreads has no effect (only 1 tile = 1 thread).
-        // autoTiling lets libavif split the image into optimal tile grid,
-        // enabling parallel encoding across multiple CPU cores.
-        let coreCount = Int32(ProcessInfo.processInfo.activeProcessorCount)
-        encoder.pointee.maxThreads = max(coreCount, 4)
-        encoder.pointee.autoTiling = AVIF_TRUE
-
-        // Create AVIF image
-        guard let avifImage = avifImageCreate(
-            UInt32(width),
-            UInt32(height),
-            8,
-            AVIF_PIXEL_FORMAT_YUV420
-        ) else {
-            print("Failed to create AVIF image")
-            return nil
-        }
-        defer { avifImageDestroy(avifImage) }
-
-        // Allocate planes
-        let allocResult = avifImageAllocatePlanes(avifImage, UInt32(AVIF_PLANES_ALL.rawValue))
-        guard allocResult == AVIF_RESULT_OK else {
-            print("Failed to allocate image planes")
-            return nil
-        }
-
-        // Setup RGB image
-        var rgbImage = avifRGBImage()
-        avifRGBImageSetDefaults(&rgbImage, avifImage)
-        rgbImage.format = AVIF_RGB_FORMAT_RGBA
-        rgbImage.depth = 8
-        rgbImage.pixels = pixels
-        rgbImage.rowBytes = UInt32(width * 4)
-
-        // Convert RGB to YUV
-        let convertResult = avifImageRGBToYUV(avifImage, &rgbImage)
-        guard convertResult == AVIF_RESULT_OK else {
-            print("Failed to convert RGB to YUV")
-            return nil
-        }
-
-        // Encode
-        var output = avifRWData()
-        output.data = nil
-        output.size = 0
-
-        let encodeResult = avifEncoderWrite(encoder, avifImage, &output)
-        defer { avifRWDataFree(&output) }
-
-        guard encodeResult == AVIF_RESULT_OK else {
-            let errStr = String(cString: avifResultToString(encodeResult))
-            print("Failed to encode AVIF: \(errStr)")
-            return nil
-        }
-
-        // Convert to Data
-        return Data(bytes: output.data, count: output.size)
-    }
-
-    private func decodeWithLibavif(_ avifData: Data) -> UIImage? {
-        // Create decoder
-        guard let decoder = avifDecoderCreate() else {
-            print("Failed to create AVIF decoder")
-            return nil
-        }
-        defer { avifDecoderDestroy(decoder) }
-
-        decoder.pointee.maxThreads = 4
-
-        // Set input
-        let result = avifData.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) -> avifResult in
-            guard let baseAddress = bytes.baseAddress else {
-                return AVIF_RESULT_UNKNOWN_ERROR
-            }
-
-            return avifDecoderSetIOMemory(
-                decoder,
-                baseAddress.assumingMemoryBound(to: UInt8.self),
-                bytes.count
+        do {
+            let avifData = try AVIFEncoder.encode(
+                image: orientedImage,
+                quality: qualityNormalized,
+                speed: clampedSpeed
             )
-        }
-
-        guard result == AVIF_RESULT_OK else {
-            print("Failed to set decoder input")
+            return avifData
+        } catch {
+            print("Failed to encode AVIF: \(error.localizedDescription)")
             return nil
         }
-
-        // Parse AVIF structure first
-        let parseResult = avifDecoderParse(decoder)
-        guard parseResult == AVIF_RESULT_OK else {
-            print("Failed to parse AVIF structure: \(parseResult)")
-            return nil
-        }
-
-        // Decode first image
-        let decodeResult = avifDecoderNextImage(decoder)
-        guard decodeResult == AVIF_RESULT_OK else {
-            print("Failed to decode AVIF: \(decodeResult)")
-            return nil
-        }
-
-        // Convert to RGB
-        var rgbImage = avifRGBImage()
-        avifRGBImageSetDefaults(&rgbImage, decoder.pointee.image)
-        rgbImage.format = AVIF_RGB_FORMAT_RGBA
-        rgbImage.depth = 8
-
-        // In libavif 0.11+, avifRGBImageAllocatePixels returns void
-        avifRGBImageAllocatePixels(&rgbImage)
-        guard rgbImage.pixels != nil else {
-            print("Failed to allocate RGB pixels")
-            return nil
-        }
-        defer { avifRGBImageFreePixels(&rgbImage) }
-
-        let convertResult = avifImageYUVToRGB(decoder.pointee.image, &rgbImage)
-        guard convertResult == AVIF_RESULT_OK else {
-            print("Failed to convert YUV to RGB")
-            return nil
-        }
-
-        // Create UIImage from RGBA data
-        return rgbaToUIImage(
-            pixels: rgbImage.pixels,
-            width: Int(rgbImage.width),
-            height: Int(rgbImage.height),
-            rowBytes: Int(rgbImage.rowBytes)
-        )
     }
 
-    /// Convert UIImage to RGBA buffer, respecting orientation
-    /// This ensures images taken in portrait mode are correctly oriented
-    ///
-    /// Performance optimizations:
-    /// - Fast path: skips UIGraphics double-render when orientation is .up
-    /// - Uses noneSkipLast alpha for opaque images (avoids premultiplication overhead)
-    private func uiImageToRGBA(_ image: UIImage) -> (pixels: UnsafeMutablePointer<UInt8>?, width: Int, height: Int) {
-        let bytesPerPixel = 4
-        let bitsPerComponent = 8
-
-        // Determine alpha format based on whether source image has alpha
-        // Using noneSkipLast for opaque images avoids per-pixel premultiplication
-        let sourceHasAlpha: Bool = {
-            guard let cgImage = image.cgImage else { return false }
-            let info = cgImage.alphaInfo
-            return info != .none && info != .noneSkipFirst && info != .noneSkipLast
-        }()
-        let alphaInfo: CGImageAlphaInfo = sourceHasAlpha ? .premultipliedLast : .noneSkipLast
-
-        // Fast path: if orientation is already .up, draw CGImage directly
-        // This skips the costly UIGraphicsBeginImageContextWithOptions double-render
-        if image.imageOrientation == .up, let cgImage = image.cgImage {
-            let width = cgImage.width
-            let height = cgImage.height
-            let bytesPerRow = width * bytesPerPixel
-
-            guard let data = malloc(height * bytesPerRow) else {
-                return (nil, width, height)
-            }
-            let pixels = data.assumingMemoryBound(to: UInt8.self)
-
-            guard let context = CGContext(
-                data: pixels,
-                width: width,
-                height: height,
-                bitsPerComponent: bitsPerComponent,
-                bytesPerRow: bytesPerRow,
-                space: CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: alphaInfo.rawValue
-            ) else {
-                free(data)
-                return (nil, width, height)
-            }
-
-            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
-            return (pixels, width, height)
-        }
-
-        // Slow path: orientation needs correction, use UIGraphics to normalize
-        let width = Int(image.size.width * image.scale)
-        let height = Int(image.size.height * image.scale)
-        let bytesPerRow = width * bytesPerPixel
-
-        guard let data = malloc(height * bytesPerRow) else {
-            return (nil, width, height)
-        }
-
-        let pixels = data.assumingMemoryBound(to: UInt8.self)
-
-        guard let context = CGContext(
-            data: pixels,
-            width: width,
-            height: height,
-            bitsPerComponent: bitsPerComponent,
-            bytesPerRow: bytesPerRow,
-            space: CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: alphaInfo.rawValue
-        ) else {
-            free(data)
-            return (nil, width, height)
-        }
-
-        // Draw via UIGraphics to apply orientation transforms
-        UIGraphicsBeginImageContextWithOptions(image.size, false, image.scale)
-        image.draw(in: CGRect(origin: .zero, size: image.size))
-        let orientedImage = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-
-        if let cgImage = orientedImage?.cgImage {
-            context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
-        } else {
-            free(data)
-            return (nil, width, height)
-        }
-
-        return (pixels, width, height)
-    }
-
-    private func rgbaToUIImage(
-        pixels: UnsafeMutablePointer<UInt8>?,
-        width: Int,
-        height: Int,
-        rowBytes: Int
-    ) -> UIImage? {
-        guard let pixels = pixels else { return nil }
-
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
-
-        guard let context = CGContext(
-            data: pixels,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: rowBytes,
-            space: colorSpace,
-            bitmapInfo: bitmapInfo.rawValue
-        ) else {
-            return nil
-        }
-
-        guard let cgImage = context.makeImage() else {
-            return nil
-        }
-
-        return UIImage(cgImage: cgImage)
+    private func decodeWithAvifSwift(_ avifData: Data) -> UIImage? {
+        return AVIFDecoder.decode(avifData)
     }
 
     #endif
@@ -406,7 +148,7 @@ import libavif
     // MARK: - Placeholder Implementation
 
     private func encodePlaceholder(_ image: UIImage, quality: Int) -> Data? {
-        print("⚠️ Using JPEG fallback - libavif not available")
+        print("⚠️ Using JPEG fallback - avif.swift not available")
         // Create properly oriented image before encoding
         let orientedImage = normalizeOrientation(image)
         return orientedImage.jpegData(compressionQuality: CGFloat(quality) / 100.0)
@@ -429,7 +171,7 @@ import libavif
     }
 
     private func decodePlaceholder(_ data: Data) -> UIImage? {
-        print("⚠️ Using standard image decoding - libavif not available")
+        print("⚠️ Using standard image decoding - avif.swift not available")
         return UIImage(data: data)
     }
 

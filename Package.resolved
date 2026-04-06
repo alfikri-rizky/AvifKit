@@ -1,0 +1,32 @@
+{
+  "pins" : [
+    {
+      "identity" : "libaom-xcode",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/SDWebImage/libaom-Xcode.git",
+      "state" : {
+        "revision" : "482cafbebbc5f32378b82339b7580761fab4fd23",
+        "version" : "2.0.2"
+      }
+    },
+    {
+      "identity" : "libavif-xcode",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/SDWebImage/libavif-Xcode.git",
+      "state" : {
+        "revision" : "a158cb024166f8c599f88f8c91458c59922bcb0f",
+        "version" : "0.11.1"
+      }
+    },
+    {
+      "identity" : "libvmaf-xcode",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/SDWebImage/libvmaf-Xcode.git",
+      "state" : {
+        "revision" : "41db5dc11d05c02d1aca7de0b572a068f528c37c",
+        "version" : "2.3.1"
+      }
+    }
+  ],
+  "version" : 2
+}
