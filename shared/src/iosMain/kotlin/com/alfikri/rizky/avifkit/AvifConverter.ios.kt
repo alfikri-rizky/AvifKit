@@ -430,7 +430,7 @@ actual class AvifConverter {
             val handler = AvifKitIos.getHandler()
 
             if (handler == null || !handler.isAvailable()) {
-                NSLog("⚠️ libavif not available, using JPEG fallback")
+                NSLog("⚠️ avif.swift not available, using JPEG fallback")
                 val jpegData = UIImageJPEGRepresentation(image, options.quality / 100.0)
                     ?: throw AvifError.EncodingFailed("Failed to encode image")
                 return jpegData
@@ -465,7 +465,7 @@ actual class AvifConverter {
             val handler = AvifKitIos.getHandler()
 
             if (handler == null || !handler.isAvailable()) {
-                NSLog("⚠️ libavif not available, using standard image decoding fallback")
+                NSLog("⚠️ avif.swift not available, using standard image decoding fallback")
                 return UIImage.imageWithData(avifData)
                     ?: throw AvifError.DecodingFailed("Failed to decode AVIF data")
             }

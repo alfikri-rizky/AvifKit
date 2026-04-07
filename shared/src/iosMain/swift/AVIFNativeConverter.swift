@@ -1,9 +1,6 @@
 import Foundation
 import UIKit
-
-#if canImport(avif)
 import avif
-#endif
 
 /// Native AVIF converter for iOS
 /// Provides encoding and decoding functionality using avif.swift
@@ -11,22 +8,14 @@ import avif
 
     // MARK: - Configuration
 
-    /// Check if avif.swift is available
+    /// avif.swift is always available since it's a required dependency
     @objc public static var isAvifAvailable: Bool {
-        #if canImport(avif)
         return true
-        #else
-        return false
-        #endif
     }
 
     /// Get avif.swift version
     @objc public static var avifVersion: String {
-        #if canImport(avif)
         return "avif.swift 2.x"
-        #else
-        return "avif.swift not available"
-        #endif
     }
 
     // MARK: - Encoding
@@ -42,11 +31,7 @@ import avif
         quality: Int,
         speed: Int
     ) -> Data? {
-        #if canImport(avif)
         return encodeWithAvifSwift(image, quality: quality, speed: speed)
-        #else
-        return encodePlaceholder(image, quality: quality)
-        #endif
     }
 
     /// Encode with detailed options
@@ -73,11 +58,7 @@ import avif
     /// - Parameter avifData: AVIF encoded data
     /// - Returns: Decoded image or nil on failure
     @objc public func decodeAvif(_ avifData: Data) -> UIImage? {
-        #if canImport(avif)
         return decodeWithAvifSwift(avifData)
-        #else
-        return decodePlaceholder(avifData)
-        #endif
     }
 
     // MARK: - Utilities
@@ -107,8 +88,6 @@ import avif
     }
 
     // MARK: - Private Implementation (avif.swift)
-
-    #if canImport(avif)
 
     private func encodeWithAvifSwift(
         _ image: UIImage,
@@ -143,16 +122,7 @@ import avif
         return AVIFDecoder.decode(avifData)
     }
 
-    #endif
-
-    // MARK: - Placeholder Implementation
-
-    private func encodePlaceholder(_ image: UIImage, quality: Int) -> Data? {
-        print("⚠️ Using JPEG fallback - avif.swift not available")
-        // Create properly oriented image before encoding
-        let orientedImage = normalizeOrientation(image)
-        return orientedImage.jpegData(compressionQuality: CGFloat(quality) / 100.0)
-    }
+    // MARK: - Helpers
 
     /// Normalize UIImage orientation by redrawing it
     /// This applies orientation transforms to the pixel data
@@ -169,13 +139,6 @@ import avif
 
         return normalizedImage ?? image
     }
-
-    private func decodePlaceholder(_ data: Data) -> UIImage? {
-        print("⚠️ Using standard image decoding - avif.swift not available")
-        return UIImage(data: data)
-    }
-
-    // MARK: - Helpers
 
     private func resizeImage(_ image: UIImage, maxDimension: Int) -> UIImage {
         let size = image.size
