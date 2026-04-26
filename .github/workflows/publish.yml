@@ -41,6 +41,18 @@ jobs:
           chmod +x scripts/setup-android-libavif.sh
           ./scripts/setup-android-libavif.sh
 
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            # Extract version from release tag (e.g., v0.2.3 → 0.2.3)
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Publishing version: $VERSION"
+
       - name: Create gradle.properties for CI
         run: |
           cat > gradle.properties << 'EOF'
@@ -55,7 +67,7 @@ jobs:
 
           # Library Information - CRITICAL for Maven Central namespace
           GROUP=io.github.alfikri-rizky
-          VERSION_NAME=${{ github.event.inputs.version }}
+          VERSION_NAME=${{ steps.version.outputs.VERSION }}
           POM_ARTIFACT_ID=avifkit
 
           # Maven Central Publishing (New Portal API)
