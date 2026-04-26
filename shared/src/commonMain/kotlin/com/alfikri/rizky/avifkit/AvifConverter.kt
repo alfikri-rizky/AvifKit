@@ -1,5 +1,7 @@
 package com.alfikri.rizky.avifkit
 
+import kotlin.Throws
+
 /**
  * Main AVIF converter interface for converting images to and from AVIF format
  */
@@ -12,6 +14,7 @@ expect class AvifConverter() {
      * @param options Custom encoding options (overrides priority if provided)
      * @return Platform-specific Bitmap (Android: android.graphics.Bitmap, iOS: UIImage)
      */
+    @Throws(Exception::class)
     suspend fun convertToBitmap(
         input: ImageInput,
         priority: Priority = Priority.BALANCED,
@@ -26,6 +29,7 @@ expect class AvifConverter() {
      * @param options Custom encoding options (overrides priority if provided)
      * @return Path to the saved file
      */
+    @Throws(Exception::class)
     suspend fun convertToFile(
         input: ImageInput,
         outputPath: String,
@@ -41,6 +45,7 @@ expect class AvifConverter() {
      * @param options Custom encoding options (overrides priority if provided)
      * @return PlatformFile pointing to the saved file
      */
+    @Throws(Exception::class)
     suspend fun convertToFile(
         input: ImageInput,
         output: PlatformFile,
@@ -55,6 +60,7 @@ expect class AvifConverter() {
      * @param options Custom encoding options (overrides priority if provided)
      * @return AVIF encoded data as ByteArray
      */
+    @Throws(Exception::class)
     suspend fun encodeAvif(
         input: ImageInput,
         priority: Priority = Priority.BALANCED,
@@ -66,6 +72,7 @@ expect class AvifConverter() {
      * @param input AVIF data as ByteArray or file path
      * @return Platform-specific Bitmap
      */
+    @Throws(Exception::class)
     suspend fun decodeAvif(
         input: ImageInput
     ): PlatformBitmap
@@ -88,5 +95,6 @@ expect class AvifConverter() {
      * @param input Image data to inspect
      * @return ImageInfo containing dimensions and format
      */
+    @Throws(Exception::class)
     suspend fun getImageInfo(input: ImageInput): ImageInfo
 }

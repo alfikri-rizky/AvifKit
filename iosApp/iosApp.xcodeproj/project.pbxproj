@@ -7,13 +7,15 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		690159642F41946F0002C25D /* libavif in Frameworks */ = {isa = PBXBuildFile; productRef = 690159632F41946F0002C25D /* libavif */; };
+		690159642F41946F0002C25D /* avif in Frameworks */ = {isa = PBXBuildFile; productRef = 690159632F41946F0002C25D /* avif */; };
 		699A705C2EF7EDED006150C7 /* AVIFNativeConverter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 699A70592EF7EDED006150C7 /* AVIFNativeConverter.swift */; };
+		699A705D2EF7EDED006150C7 /* AvifKitAutoRegister.m in Sources */ = {isa = PBXBuildFile; fileRef = 699A705E2EF7EDED006150C7 /* AvifKitAutoRegister.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		699A70592EF7EDED006150C7 /* AVIFNativeConverter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AVIFNativeConverter.swift; sourceTree = "<group>"; };
 		699A705A2EF7EDED006150C7 /* iosApp-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "iosApp-Bridging-Header.h"; sourceTree = "<group>"; };
+		699A705E2EF7EDED006150C7 /* AvifKitAutoRegister.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = AvifKitAutoRegister.m; sourceTree = "<group>"; };
 		BE285A95943DF454383C8D6E /* AvifKit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AvifKit.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -48,7 +50,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				690159642F41946F0002C25D /* libavif in Frameworks */,
+				690159642F41946F0002C25D /* avif in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -67,6 +69,7 @@
 			isa = PBXGroup;
 			children = (
 				699A70592EF7EDED006150C7 /* AVIFNativeConverter.swift */,
+				699A705E2EF7EDED006150C7 /* AvifKitAutoRegister.m */,
 				699A705A2EF7EDED006150C7 /* iosApp-Bridging-Header.h */,
 			);
 			path = Native;
@@ -103,7 +106,7 @@
 			);
 			name = iosApp;
 			packageProductDependencies = (
-				690159632F41946F0002C25D /* libavif */,
+				690159632F41946F0002C25D /* avif */,
 			);
 			productName = iosApp;
 			productReference = BE285A95943DF454383C8D6E /* AvifKit.app */;
@@ -184,6 +187,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				699A705C2EF7EDED006150C7 /* AVIFNativeConverter.swift in Sources */,
+				699A705D2EF7EDED006150C7 /* AvifKitAutoRegister.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -393,9 +397,9 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		690159622F41946F0002C25D /* XCRemoteSwiftPackageReference "libavif-Xcode" */ = {
+		690159622F41946F0002C25D /* XCRemoteSwiftPackageReference "avif.swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/SDWebImage/libavif-Xcode.git";
+			repositoryURL = "https://github.com/awxkee/avif.swift.git";
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 1.0.0;
@@ -404,10 +408,10 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		690159632F41946F0002C25D /* libavif */ = {
+		690159632F41946F0002C25D /* avif */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = 690159622F41946F0002C25D /* XCRemoteSwiftPackageReference "libavif-Xcode" */;
-			productName = libavif;
+			package = 690159622F41946F0002C25D /* XCRemoteSwiftPackageReference "avif.swift" */;
+			productName = avif;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

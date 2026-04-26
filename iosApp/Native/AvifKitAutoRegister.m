@@ -1,0 +1,1 @@
+../../shared/src/iosMain/swift/AvifKitAutoRegister.m

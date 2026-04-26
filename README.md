@@ -50,7 +50,9 @@ AvifKit is a production-ready Kotlin Multiplatform library for AVIF image encodi
 - ✅ **Multi-threaded Processing** - Parallel encoding/decoding with auto-tiling across all CPU cores
 - ✅ **Format Detection** - Automatic image format identification
 - ✅ **Orientation Support** - EXIF orientation handling on Android, UIImage orientation on iOS
-- ✅ **Graceful Fallback** - JPEG encoding when native library unavailable
+- ✅ **Auto-Registration (iOS)** - Native handler registers automatically via `__attribute__((constructor))` — no manual setup needed
+- ✅ **Swift Error Handling** - `@Throws` annotations propagate errors as `NSError` to Swift's `do/catch`
+- ✅ **Explicit Error Reporting** - Clear `AvifError` exceptions when dependencies are missing (no silent fallbacks)
 - ✅ **Memory Safety** - OutOfMemory error handling
 
 #### Advanced Features
@@ -62,17 +64,11 @@ AvifKit is a production-ready Kotlin Multiplatform library for AVIF image encodi
 
 ### Architecture
 
-AvifKit uses a **two-tier architecture** with automatic fallback:
+AvifKit uses **native AVIF libraries** on both platforms with explicit error reporting:
 
-1. **Native Mode** (Default):
-   - Uses libavif for true AVIF encoding/decoding
-   - Automatically included when you add the library dependency
-   - Production-quality AVIF output with full feature support
-
-2. **Fallback Mode** (Automatic):
-   - Activates automatically if native library fails to load
-   - Uses JPEG encoding with equivalent quality settings
-   - Ensures your app never crashes due to missing dependencies
+- **Android:** libavif via JNI — pre-built native binaries included in the AAR
+- **iOS:** [avif.swift](https://github.com/awxkee/avif.swift) — aom encoder + dav1d decoder via SPM
+- **Error Handling:** If native dependencies are missing, clear `AvifError` exceptions are thrown (no silent fallbacks)
 
 ### Usage
 
@@ -200,7 +196,7 @@ Add the dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.alfikri-rizky:avifkit:0.2.1")
+    implementation("io.github.alfikri-rizky:avifkit:0.2.3")
 }
 ```
 
@@ -211,27 +207,28 @@ dependencies {
 **In Xcode:**
 1. File → Add Packages...
 2. Enter repository URL: `https://github.com/alfikri-rizky/AvifKit`
-3. Select version: `0.2.1` or higher
+3. Select version: `0.2.3` or higher
 4. **Important:** After adding the package, **clean build folder** (Cmd+Shift+K) before first build
 
 **Or add to your `Package.swift`:**
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.2.1")
+    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.2.3")
 ]
 ```
 
 **Setup Notes:**
 - ✅ SPM automatically downloads the pre-built XCFramework from GitHub Releases
 - ✅ Resolves avif.swift dependency (pre-built aom encoder + dav1d decoder — no source compilation)
+- ✅ Auto-registers native handler — no manual setup code needed
 - ✅ Integrates seamlessly with your Xcode project
 - ⚠️ **First-time setup:** Dependencies may take a few minutes to download on first resolve
 - ⚠️ **Important:** Always do a clean build (Product → Clean Build Folder) after adding the package
 
 **Troubleshooting:**
 
-If you see "⚠️ Using JPEG fallback — avif.swift not available":
+If you see `AvifError.EncodingFailed: Native AVIF handler not available`:
 
 1. **Ensure sufficient disk space** (at least 1GB free for SPM dependencies)
 2. **Clean all caches:**
@@ -256,14 +253,14 @@ If you see "⚠️ Using JPEG fallback — avif.swift not available":
    print("AVIF available:", AVIFNativeConverter.isAvifAvailable)  // Should be true
    ```
 
-**Download from GitHub Releases:** [v0.2.1](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.2.1)
+**Download from GitHub Releases:** [v0.2.3](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.2.3)
 
 #### iOS (CocoaPods) - Not Recommended ⚠️
 
 CocoaPods support is technically available but **not recommended** due to validation issues:
 
 ```ruby
-pod 'AvifKit', '~> 0.2.1'
+pod 'AvifKit', '~> 0.2.3'
 ```
 
 **Important Notes:**
@@ -273,7 +270,7 @@ pod 'AvifKit', '~> 0.2.1'
 
 **Recommended alternatives:**
 1. **Swift Package Manager** (fully supported, recommended)
-2. **Direct XCFramework** from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.2.1)
+2. **Direct XCFramework** from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.2.3)
 
 ---
 
@@ -284,7 +281,7 @@ pod 'AvifKit', '~> 0.2.1'
 - **Pre-built libavif binaries** included for all ABIs
 - **EXIF orientation support** (preserves portrait/landscape orientation)
 - **Multi-threaded encoding/decoding** with auto-tiling (uses all CPU cores)
-- **Automatic fallback** to JPEG if native library fails to load
+- **Explicit errors** when native library is missing (no silent JPEG fallback)
 
 **Technical Details:**
 - NDK with CMake build system
@@ -297,7 +294,9 @@ pod 'AvifKit', '~> 0.2.1'
 - **Powered by [avif.swift](https://github.com/awxkee/avif.swift)** — high-level `AVIFEncoder`/`AVIFDecoder` API
 - **aom encoder + dav1d decoder** — pre-built XCFramework dependencies, no source compilation needed
 - **UIImage orientation handling** (properly encodes portrait photos)
-- **Automatic fallback** to JPEG when avif.swift unavailable
+- **Auto-registration** via `__attribute__((constructor))` — consumers don't need manual setup
+- **`@Throws` annotations** — errors propagate as NSError to Swift's do/catch
+- **Explicit errors** when avif.swift is missing (no silent JPEG fallback)
 
 **Technical Details:**
 - iOS 13.0+ deployment target
@@ -315,7 +314,7 @@ pod 'AvifKit', '~> 0.2.1'
 | **iOS Native** | ✅ Complete | `shared/src/iosMain/swift/` | Swift + libavif |
 | **Adaptive Compression** | ✅ Complete | Both platforms | SMART & STRICT strategies |
 | **Orientation Support** | ✅ Complete | Both platforms | EXIF (Android), UIImage (iOS) |
-| **Fallback Mode** | ✅ Complete | Both platforms | JPEG when libavif unavailable |
+| **Fallback Mode** | ❌ Removed | Both platforms | Replaced with explicit `AvifError` exceptions |
 | **Distribution** | ✅ Complete | `Package.swift` | SPM support (CocoaPods coming soon) |
 | **Build Configuration** | ✅ Complete | `shared/build.gradle.kts` | Ready for publishing |
 
@@ -326,10 +325,10 @@ pod 'AvifKit', '~> 0.2.1'
    - This is standard for any AVIF library and necessary for native performance
    - Fallback mode available if size is critical
 
-2. **Decoding on iOS (Fallback Mode):**
-   - Without libavif: uses standard `UIImage(data:)` decoding
-   - Cannot decode actual AVIF files in fallback mode
-   - With libavif (default): full AVIF decoding works
+2. **No Fallback Mode (v0.2.3+):**
+   - Library no longer silently falls back to JPEG
+   - Missing dependencies throw clear `AvifError` exceptions
+   - Ensures consumers are aware of configuration issues
 
 3. **Platform API Differences:**
    - Android uses `android.graphics.Bitmap`
@@ -360,9 +359,9 @@ AVIFNativeConverter.isAvifAvailable // true if libavif linked
 
 The library automatically uses fallback when native library is unavailable:
 
-- **Encoding:** JPEG with equivalent quality settings
-- **Decoding:** Standard image decoder (JPEG, PNG, etc.)
-- **Logs:** Check for "Using JPEG fallback" or "libavif not available" messages
+- **Encoding/Decoding:** Throws `AvifError.EncodingFailed` or `AvifError.DecodingFailed` with actionable error messages
+- **Swift (iOS):** Errors propagate as `NSError` via `@Throws` — caught by Swift's `do/catch`
+- **Android:** Errors thrown as standard Kotlin exceptions
 
 ---
 
@@ -420,6 +419,16 @@ pod trunk push AvifKit.podspec
 ---
 
 ### Changelog
+
+#### v0.2.3
+- **iOS:** Auto-registration via `__attribute__((constructor))` — consumers no longer need manual `AvifKitSetup.registerNativeHandler()` calls
+- **iOS/Android:** Added `@Throws(Exception::class)` to all public methods — errors now propagate as `NSError` to Swift's `do/catch` instead of crashing
+- **iOS/Android:** Removed silent JPEG fallback — missing native dependencies now throw explicit `AvifError.EncodingFailed` / `AvifError.DecodingFailed` with actionable messages
+- **iOS:** Single source of truth for `AVIFNativeConverter.swift` — demo app uses symlinks to `shared/src/iosMain/swift/`
+- **iOS:** Updated demo app SPM dependency from `libavif-Xcode` to `avif.swift`
+
+#### v0.2.2
+- **iOS:** Fixed distribution — removed `#if canImport` conditionals that caused silent JPEG fallback in production
 
 #### v0.2.1
 - **iOS:** Replaced `libavif-Xcode` (raw C API) with [`avif.swift`](https://github.com/awxkee/avif.swift) — high-level Swift AVIF encoder/decoder

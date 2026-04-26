@@ -428,12 +428,17 @@ actual class AvifConverter {
     private fun encodeImageToAvif(image: UIImage, options: EncodingOptions): NSData {
         try {
             val handler = AvifKitIos.getHandler()
+                ?: throw AvifError.EncodingFailed(
+                    "Native AVIF handler not available. " +
+                    "Ensure the AvifKit Swift target is linked in your project. " +
+                    "If using SPM, add the 'AvifKit' product (not just 'Shared') as a dependency."
+                )
 
-            if (handler == null || !handler.isAvailable()) {
-                NSLog("⚠️ avif.swift not available, using JPEG fallback")
-                val jpegData = UIImageJPEGRepresentation(image, options.quality / 100.0)
-                    ?: throw AvifError.EncodingFailed("Failed to encode image")
-                return jpegData
+            if (!handler.isAvailable()) {
+                throw AvifError.EncodingFailed(
+                    "Native AVIF encoder is not available. " +
+                    "The avif.swift dependency may not be properly linked."
+                )
             }
 
             @Suppress("UNCHECKED_CAST")
@@ -463,11 +468,17 @@ actual class AvifConverter {
     private fun decodeAvifToImage(avifData: NSData): UIImage {
         try {
             val handler = AvifKitIos.getHandler()
+                ?: throw AvifError.DecodingFailed(
+                    "Native AVIF handler not available. " +
+                    "Ensure the AvifKit Swift target is linked in your project. " +
+                    "If using SPM, add the 'AvifKit' product (not just 'Shared') as a dependency."
+                )
 
-            if (handler == null || !handler.isAvailable()) {
-                NSLog("⚠️ avif.swift not available, using standard image decoding fallback")
-                return UIImage.imageWithData(avifData)
-                    ?: throw AvifError.DecodingFailed("Failed to decode AVIF data")
+            if (!handler.isAvailable()) {
+                throw AvifError.DecodingFailed(
+                    "Native AVIF decoder is not available. " +
+                    "The avif.swift dependency may not be properly linked."
+                )
             }
 
             val decodedImage = handler.decodeAvif(avifData)

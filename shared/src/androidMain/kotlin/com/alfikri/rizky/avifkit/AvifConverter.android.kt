@@ -457,11 +457,10 @@ actual class AvifConverter {
             } ?: bitmap
 
             if (!nativeLibraryLoaded) {
-                // Fallback: encode as JPEG if native library not loaded
-                Log.w(TAG, "Native library not loaded, using JPEG fallback")
-                val stream = java.io.ByteArrayOutputStream()
-                resizedBitmap.compress(Bitmap.CompressFormat.JPEG, options.quality, stream)
-                return stream.toByteArray()
+                throw AvifError.EncodingFailed(
+                    "Native AVIF library not loaded. " +
+                    "Ensure the 'avif-android-wrapper' native library is included in the AAR."
+                )
             }
 
             // Convert bitmap to byte array
@@ -498,10 +497,10 @@ actual class AvifConverter {
     private fun decodeAvifToBitmap(avifData: ByteArray): Bitmap {
         try {
             if (!nativeLibraryLoaded) {
-                // Fallback: try to decode as standard image format
-                Log.w(TAG, "Native library not loaded, using standard image decoding")
-                return BitmapFactory.decodeByteArray(avifData, 0, avifData.size)
-                    ?: throw AvifError.DecodingFailed("Failed to decode image data")
+                throw AvifError.DecodingFailed(
+                    "Native AVIF library not loaded. " +
+                    "Ensure the 'avif-android-wrapper' native library is included in the AAR."
+                )
             }
 
             // Decode using native method (works with or without libavif)
