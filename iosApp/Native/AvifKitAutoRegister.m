@@ -1,1 +1,1 @@
-../../shared/src/iosMain/swift/AvifKitAutoRegister.m
+../../shared/src/iosMain/objc/AvifKitAutoRegister.m

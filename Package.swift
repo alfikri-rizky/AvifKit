@@ -10,7 +10,7 @@ let package = Package(
     products: [
         .library(
             name: "AvifKit",
-            targets: ["AvifKit", "Shared"]
+            targets: ["AvifKit", "AvifKitObjC", "Shared"]
         )
     ],
     dependencies: [
@@ -29,6 +29,13 @@ let package = Package(
             ],
             path: "shared/src/iosMain/swift",
             publicHeadersPath: nil
+        ),
+
+        // Objective-C auto-registration (SPM forbids mixing Swift and ObjC in the same target folder)
+        .target(
+            name: "AvifKitObjC",
+            path: "shared/src/iosMain/objc",
+            publicHeadersPath: "include"
         ),
 
         // Kotlin Multiplatform XCFramework
