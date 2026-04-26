@@ -42,7 +42,7 @@ let package = Package(
         // For published releases: use remote URL from GitHub Release
         .binaryTarget(
             name: "Shared",
-            url: "https://github.com/alfikri-rizky/AvifKit/releases/download/v0.2.3/Shared.xcframework.zip",
+            url: "https://github.com/alfikri-rizky/AvifKit/releases/download/v0.2.4/Shared.xcframework.zip",
             checksum: "351221acac7e7961efc3125e43f8a1a82947cdf69e66b4f35920ef134b976f14"
         ),
 
