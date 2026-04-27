@@ -7,8 +7,6 @@ import kotlin.Throws
  */
 expect class AvifConverter() {
 
-    fun initAvif()
-
     /**
      * Convert any supported image format to AVIF and return as Bitmap
      * @param input Can be ByteArray, Bitmap, or file path

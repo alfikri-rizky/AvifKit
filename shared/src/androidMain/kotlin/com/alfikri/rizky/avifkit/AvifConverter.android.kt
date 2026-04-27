@@ -155,6 +155,7 @@ actual class AvifConverter {
                 is ImageInput.FromFile -> kotlinx.coroutines.runBlocking {
                     input.file.readBytes().take(12).toByteArray()
                 }
+
                 is ImageInput.FromBitmap -> return false
             }
             isAvifFormat(data)
@@ -270,7 +271,10 @@ actual class AvifConverter {
             val result = convertStandard(input, testOptions)
             attempts++
 
-            Log.d(TAG, "SMART attempt $attempts: quality=$testQuality, size=${result.size}, target=$targetSize")
+            Log.d(
+                TAG,
+                "SMART attempt $attempts: quality=$testQuality, size=${result.size}, target=$targetSize"
+            )
 
             if (result.size <= targetSize) {
                 // Meets target - save this result and try higher quality
@@ -459,7 +463,7 @@ actual class AvifConverter {
             if (!nativeLibraryLoaded) {
                 throw AvifError.EncodingFailed(
                     "Native AVIF library not loaded. " +
-                    "Ensure the 'avif-android-wrapper' native library is included in the AAR."
+                            "Ensure the 'avif-android-wrapper' native library is included in the AAR."
                 )
             }
 
@@ -499,7 +503,7 @@ actual class AvifConverter {
             if (!nativeLibraryLoaded) {
                 throw AvifError.DecodingFailed(
                     "Native AVIF library not loaded. " +
-                    "Ensure the 'avif-android-wrapper' native library is included in the AAR."
+                            "Ensure the 'avif-android-wrapper' native library is included in the AAR."
                 )
             }
 
@@ -666,26 +670,33 @@ actual class AvifConverter {
             ExifInterface.ORIENTATION_ROTATE_90 -> {
                 matrix.postRotate(90f)
             }
+
             ExifInterface.ORIENTATION_ROTATE_180 -> {
                 matrix.postRotate(180f)
             }
+
             ExifInterface.ORIENTATION_ROTATE_270 -> {
                 matrix.postRotate(270f)
             }
+
             ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> {
                 matrix.postScale(-1f, 1f)
             }
+
             ExifInterface.ORIENTATION_FLIP_VERTICAL -> {
                 matrix.postScale(1f, -1f)
             }
+
             ExifInterface.ORIENTATION_TRANSPOSE -> {
                 matrix.postRotate(90f)
                 matrix.postScale(-1f, 1f)
             }
+
             ExifInterface.ORIENTATION_TRANSVERSE -> {
                 matrix.postRotate(270f)
                 matrix.postScale(-1f, 1f)
             }
+
             ExifInterface.ORIENTATION_NORMAL,
             ExifInterface.ORIENTATION_UNDEFINED -> {
                 // No rotation needed
@@ -712,9 +723,5 @@ actual class AvifConverter {
             Log.e(TAG, "Failed to rotate bitmap", e)
             bitmap
         }
-    }
-
-    actual fun initAvif() {
-        // Empty
     }
 }

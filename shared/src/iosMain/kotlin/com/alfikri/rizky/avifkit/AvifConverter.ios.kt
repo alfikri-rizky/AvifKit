@@ -13,8 +13,6 @@ import io.github.vinceglb.filekit.*
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 actual class AvifConverter {
 
-
-
     actual suspend fun convertToBitmap(
         input: ImageInput,
         priority: Priority,
@@ -103,19 +101,22 @@ actual class AvifConverter {
         }
     }
 
-    actual suspend fun decodeAvif(input: ImageInput): PlatformBitmap = withContext(Dispatchers.Default) {
-        val data = when (input) {
-            is ImageInput.FromBytes -> input.data.toNSData()
-            is ImageInput.FromPath -> {
-                val url = NSURL.fileURLWithPath(input.path)
-                NSData.dataWithContentsOfURL(url) ?: throw AvifError.FileError("File not found: ${input.path}")
-            }
-            is ImageInput.FromFile -> input.file.readBytes().toNSData()
-            is ImageInput.FromBitmap -> throw AvifError.InvalidInput
-        }
+    actual suspend fun decodeAvif(input: ImageInput): PlatformBitmap =
+        withContext(Dispatchers.Default) {
+            val data = when (input) {
+                is ImageInput.FromBytes -> input.data.toNSData()
+                is ImageInput.FromPath -> {
+                    val url = NSURL.fileURLWithPath(input.path)
+                    NSData.dataWithContentsOfURL(url)
+                        ?: throw AvifError.FileError("File not found: ${input.path}")
+                }
 
-        decodeAvifToImage(data)
-    }
+                is ImageInput.FromFile -> input.file.readBytes().toNSData()
+                is ImageInput.FromBitmap -> throw AvifError.InvalidInput
+            }
+
+            decodeAvifToImage(data)
+        }
 
     actual fun isAvifSupported(): Boolean {
         return AvifKitIos.getOrDiscoverHandler()?.isAvailable() == true
@@ -130,9 +131,11 @@ actual class AvifConverter {
                     val nsData = NSData.dataWithContentsOfURL(url)
                     nsData?.toByteArray()?.take(12)?.toByteArray() ?: return false
                 }
+
                 is ImageInput.FromFile -> kotlinx.coroutines.runBlocking {
                     input.file.readBytes().take(12).toByteArray()
                 }
+
                 is ImageInput.FromBitmap -> return false
             }
             isAvifFormat(data)
@@ -141,77 +144,82 @@ actual class AvifConverter {
         }
     }
 
-    actual suspend fun getImageInfo(input: ImageInput): ImageInfo = withContext(Dispatchers.Default) {
-        when (input) {
-            is ImageInput.FromBytes -> {
-                val nsData = input.data.toNSData()
-                val image = UIImage.imageWithData(nsData)
-                    ?: throw AvifError.InvalidInput
+    actual suspend fun getImageInfo(input: ImageInput): ImageInfo =
+        withContext(Dispatchers.Default) {
+            when (input) {
+                is ImageInput.FromBytes -> {
+                    val nsData = input.data.toNSData()
+                    val image = UIImage.imageWithData(nsData)
+                        ?: throw AvifError.InvalidInput
 
-                val width = image.size.useContents { this.width }
-                val height = image.size.useContents { this.height }
+                    val width = image.size.useContents { this.width }
+                    val height = image.size.useContents { this.height }
 
-                ImageInfo(
-                    width = (width * image.scale).toInt(),
-                    height = (height * image.scale).toInt(),
-                    format = detectFormat(input.data),
-                    hasAlpha = imageHasAlpha(image),
-                    fileSize = input.data.size.toLong()
-                )
-            }
-            is ImageInput.FromPath -> {
-                val url = NSURL.fileURLWithPath(input.path)
-                val attributes = NSFileManager.defaultManager.attributesOfItemAtPath(input.path, null)
-                val fileSize = (attributes?.get(NSFileSize) as? NSNumber)?.longValue ?: 0L
+                    ImageInfo(
+                        width = (width * image.scale).toInt(),
+                        height = (height * image.scale).toInt(),
+                        format = detectFormat(input.data),
+                        hasAlpha = imageHasAlpha(image),
+                        fileSize = input.data.size.toLong()
+                    )
+                }
 
-                val nsData = NSData.dataWithContentsOfURL(url)
-                    ?: throw AvifError.FileError("Failed to read file: ${input.path}")
+                is ImageInput.FromPath -> {
+                    val url = NSURL.fileURLWithPath(input.path)
+                    val attributes =
+                        NSFileManager.defaultManager.attributesOfItemAtPath(input.path, null)
+                    val fileSize = (attributes?.get(NSFileSize) as? NSNumber)?.longValue ?: 0L
 
-                val image = UIImage.imageWithData(nsData)
-                    ?: throw AvifError.InvalidInput
+                    val nsData = NSData.dataWithContentsOfURL(url)
+                        ?: throw AvifError.FileError("Failed to read file: ${input.path}")
 
-                val width = image.size.useContents { this.width }
-                val height = image.size.useContents { this.height }
+                    val image = UIImage.imageWithData(nsData)
+                        ?: throw AvifError.InvalidInput
 
-                ImageInfo(
-                    width = (width * image.scale).toInt(),
-                    height = (height * image.scale).toInt(),
-                    format = detectFormatFromPath(input.path),
-                    hasAlpha = imageHasAlpha(image),
-                    fileSize = fileSize
-                )
-            }
-            is ImageInput.FromFile -> {
-                val data = input.file.readBytes()
-                val nsData = data.toNSData()
-                val image = UIImage.imageWithData(nsData)
-                    ?: throw AvifError.InvalidInput
+                    val width = image.size.useContents { this.width }
+                    val height = image.size.useContents { this.height }
 
-                val width = image.size.useContents { this.width }
-                val height = image.size.useContents { this.height }
+                    ImageInfo(
+                        width = (width * image.scale).toInt(),
+                        height = (height * image.scale).toInt(),
+                        format = detectFormatFromPath(input.path),
+                        hasAlpha = imageHasAlpha(image),
+                        fileSize = fileSize
+                    )
+                }
 
-                ImageInfo(
-                    width = (width * image.scale).toInt(),
-                    height = (height * image.scale).toInt(),
-                    format = detectFormat(data),
-                    hasAlpha = imageHasAlpha(image),
-                    fileSize = input.file.size()
-                )
-            }
-            is ImageInput.FromBitmap -> {
-                val image = input.bitmap
-                val width = image.size.useContents { this.width }
-                val height = image.size.useContents { this.height }
+                is ImageInput.FromFile -> {
+                    val data = input.file.readBytes()
+                    val nsData = data.toNSData()
+                    val image = UIImage.imageWithData(nsData)
+                        ?: throw AvifError.InvalidInput
 
-                ImageInfo(
-                    width = (width * image.scale).toInt(),
-                    height = (height * image.scale).toInt(),
-                    format = ImageFormat.UNKNOWN,
-                    hasAlpha = imageHasAlpha(image)
-                )
+                    val width = image.size.useContents { this.width }
+                    val height = image.size.useContents { this.height }
+
+                    ImageInfo(
+                        width = (width * image.scale).toInt(),
+                        height = (height * image.scale).toInt(),
+                        format = detectFormat(data),
+                        hasAlpha = imageHasAlpha(image),
+                        fileSize = input.file.size()
+                    )
+                }
+
+                is ImageInput.FromBitmap -> {
+                    val image = input.bitmap
+                    val width = image.size.useContents { this.width }
+                    val height = image.size.useContents { this.height }
+
+                    ImageInfo(
+                        width = (width * image.scale).toInt(),
+                        height = (height * image.scale).toInt(),
+                        format = ImageFormat.UNKNOWN,
+                        hasAlpha = imageHasAlpha(image)
+                    )
+                }
             }
         }
-    }
 
     // Private helper methods
 
@@ -397,9 +405,11 @@ actual class AvifConverter {
                     encodeImageToAvif(uiImage, options)
                 }
             }
+
             is ImageInput.FromBitmap -> {
                 encodeImageToAvif(input.bitmap, options)
             }
+
             is ImageInput.FromPath -> {
                 val url = NSURL.fileURLWithPath(input.path)
                 val data = NSData.dataWithContentsOfURL(url)
@@ -413,6 +423,7 @@ actual class AvifConverter {
                     encodeImageToAvif(uiImage, options)
                 }
             }
+
             is ImageInput.FromFile -> {
                 val byteData = input.file.readBytes()
                 val nsData = byteData.toNSData()
@@ -432,14 +443,14 @@ actual class AvifConverter {
             val handler = AvifKitIos.getOrDiscoverHandler()
                 ?: throw AvifError.EncodingFailed(
                     "Native AVIF handler not available. " +
-                    "Ensure the AvifKit Swift target is linked in your project. " +
-                    "If using SPM, add the 'AvifKit' product (not just 'Shared') as a dependency."
+                            "Ensure the AvifKit Swift target is linked in your project. " +
+                            "If using SPM, add the 'AvifKit' product (not just 'Shared') as a dependency."
                 )
 
             if (!handler.isAvailable()) {
                 throw AvifError.EncodingFailed(
                     "Native AVIF encoder is not available. " +
-                    "The avif.swift dependency may not be properly linked."
+                            "The avif.swift dependency may not be properly linked."
                 )
             }
 
@@ -472,14 +483,14 @@ actual class AvifConverter {
             val handler = AvifKitIos.getOrDiscoverHandler()
                 ?: throw AvifError.DecodingFailed(
                     "Native AVIF handler not available. " +
-                    "Ensure the AvifKit Swift target is linked in your project. " +
-                    "If using SPM, add the 'AvifKit' product (not just 'Shared') as a dependency."
+                            "Ensure the AvifKit Swift target is linked in your project. " +
+                            "If using SPM, add the 'AvifKit' product (not just 'Shared') as a dependency."
                 )
 
             if (!handler.isAvailable()) {
                 throw AvifError.DecodingFailed(
                     "Native AVIF decoder is not available. " +
-                    "The avif.swift dependency may not be properly linked."
+                            "The avif.swift dependency may not be properly linked."
                 )
             }
 
@@ -593,9 +604,5 @@ actual class AvifConverter {
                 memcpy(pinned.addressOf(0), this@toByteArray.bytes, this@toByteArray.length)
             }
         }
-    }
-
-    actual fun initAvif() {
-        avifKitIos.registerHandler(IosAvifNativeHandler())
     }
 }

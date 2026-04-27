@@ -10,6 +10,8 @@ A Kotlin Multiplatform library for converting images to AVIF format, supporting 
 
 - 🖼️ **AVIF Encoding** - Convert images to modern AVIF format
 - 📱 **Cross-Platform** - Works on Android and iOS
+- 🛡️ **Explicit Error Handling** - Clear `AvifError` exceptions with Kotlin-to-Swift error propagation (`@Throws`)
+- 🤖 **Zero-Setup iOS** - Auto-registers native handler via lazy runtime discovery
 - 🎯 **Compression Strategies**
   - **SMART**: Binary search for highest quality within target size (6-8 attempts)
   - **STRICT**: Exhaustive search for smallest possible size (up to 10 attempts)
@@ -38,7 +40,7 @@ Add to your **shared module's** `build.gradle.kts`:
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("io.github.alfikri-rizky:avifkit:0.1.1")
+            implementation("io.github.alfikri-rizky:avifkit:0.2.6")
         }
     }
 }
@@ -52,7 +54,7 @@ kotlin {
 
 ```kotlin
 dependencies {
-    implementation("io.github.alfikri-rizky:avifkit:0.1.1")
+    implementation("io.github.alfikri-rizky:avifkit:0.2.6")
 }
 ```
 
@@ -65,12 +67,12 @@ dependencies {
 In Xcode:
 1. File → Add Packages...
 2. Enter: `https://github.com/alfikri-rizky/AvifKit`
-3. Version: `0.1.1` or later
+3. Version: `0.2.6` or later
 
 Or in `Package.swift`:
 ```swift
 dependencies: [
-    .package(url: "https://github.com/alfikri-rizky/AvifKit.git", from: "0.1.1")
+    .package(url: "https://github.com/alfikri-rizky/AvifKit.git", from: "0.2.6")
 ]
 ```
 
@@ -80,7 +82,7 @@ dependencies: [
 
 Add to your `Podfile`:
 ```ruby
-pod 'AvifKit', '~> 0.1.1'
+pod 'AvifKit', '~> 0.2.6'
 ```
 
 Then run:
@@ -301,7 +303,8 @@ Task {
 - **iOS**: 13.0+
 - **Xcode**: 15.0+
 - **Swift**: 5.9+
-- **libavif**: Automatically resolved via SPM/CocoaPods
+- **libavif**: Automatically resolved via SPM (`avif.swift`)
+- **Setup**: Zero manual setup required; native handler uses lazy auto-discovery
 
 ## 📝 No Manual Setup Required!
 
