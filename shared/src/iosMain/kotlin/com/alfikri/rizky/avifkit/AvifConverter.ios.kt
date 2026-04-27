@@ -13,6 +13,8 @@ import io.github.vinceglb.filekit.*
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 actual class AvifConverter {
 
+
+
     actual suspend fun convertToBitmap(
         input: ImageInput,
         priority: Priority,
@@ -116,7 +118,7 @@ actual class AvifConverter {
     }
 
     actual fun isAvifSupported(): Boolean {
-        return AvifKitIos.isNativeAvifAvailable()
+        return AvifKitIos.getOrDiscoverHandler()?.isAvailable() == true
     }
 
     actual fun isAvifFile(input: ImageInput): Boolean {
@@ -427,7 +429,7 @@ actual class AvifConverter {
 
     private fun encodeImageToAvif(image: UIImage, options: EncodingOptions): NSData {
         try {
-            val handler = AvifKitIos.getHandler()
+            val handler = AvifKitIos.getOrDiscoverHandler()
                 ?: throw AvifError.EncodingFailed(
                     "Native AVIF handler not available. " +
                     "Ensure the AvifKit Swift target is linked in your project. " +
@@ -467,7 +469,7 @@ actual class AvifConverter {
 
     private fun decodeAvifToImage(avifData: NSData): UIImage {
         try {
-            val handler = AvifKitIos.getHandler()
+            val handler = AvifKitIos.getOrDiscoverHandler()
                 ?: throw AvifError.DecodingFailed(
                     "Native AVIF handler not available. " +
                     "Ensure the AvifKit Swift target is linked in your project. " +
@@ -591,5 +593,9 @@ actual class AvifConverter {
                 memcpy(pinned.addressOf(0), this@toByteArray.bytes, this@toByteArray.length)
             }
         }
+    }
+
+    actual fun initAvif() {
+        avifKitIos.registerHandler(IosAvifNativeHandler())
     }
 }

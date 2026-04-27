@@ -713,4 +713,8 @@ actual class AvifConverter {
             bitmap
         }
     }
+
+    actual fun initAvif() {
+        // Empty
+    }
 }
