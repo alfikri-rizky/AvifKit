@@ -1,9 +1,12 @@
 package com.alfikri.rizky.avifkit
 
+import kotlinx.cinterop.BetaInteropApi
+import kotlinx.cinterop.ExperimentalForeignApi
 import platform.Foundation.NSData
 import platform.Foundation.NSDictionary
 import platform.Foundation.NSClassFromString
 import platform.Foundation.NSSelectorFromString
+import platform.objc.sel_registerName
 import platform.UIKit.UIImage
 
 /**
@@ -61,18 +64,22 @@ object AvifKitIos {
      *   - "AvifKit.AvifKitSetup"  (module-prefixed, used by Xcode 15+)
      *   - "AvifKitSetup"          (non-prefixed, used by older Xcode)
      */
+    @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
     fun getOrDiscoverHandler(): IosAvifNativeHandler? {
         // Fast path: already registered
         handler?.let { return it }
 
         // Slow path: try to auto-discover via ObjC runtime
+        // NSClassFromString returns ObjCClass? which is an NSObject meta-class
         val cls = NSClassFromString("AvifKit.AvifKitSetup")
             ?: NSClassFromString("AvifKitSetup")
 
         if (cls != null) {
             val sel = NSSelectorFromString("registerNativeHandler")
-            if (cls.respondsToSelector(sel)) {
-                cls.performSelector(sel)
+            @Suppress("UNCHECKED_CAST")
+            val metaObj = cls as platform.darwin.NSObject
+            if (metaObj.respondsToSelector(sel)) {
+                metaObj.performSelector(sel)
             }
         }
 
