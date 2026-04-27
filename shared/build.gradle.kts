@@ -43,7 +43,6 @@ kotlin {
 
             // The Swift AVIFNativeConverter will be linked by Xcode at app build time
             // See: iosApp/iosApp/Native/AVIFNativeConverter.swift
-            linkerOpts
         }
     }
     
