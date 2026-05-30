@@ -1,10 +1,9 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
-import com.vanniktech.maven.publish.SonatypeHost
 import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
-    alias(libs.plugins.androidLibrary)
+    alias(libs.plugins.androidKotlinMultiplatformLibrary)
     alias(libs.plugins.mavenPublish)
 }
 
@@ -12,11 +11,19 @@ group = "io.github.alfikri-rizky"
 version = "0.2.6"
 
 kotlin {
-    androidTarget {
-        publishLibraryVariants("release")  // Only publish release, not debug
+    // Android target via the AGP 9 Kotlin Multiplatform library plugin
+    // (com.android.kotlin.multiplatform.library). This replaces androidTarget() plus the
+    // top-level android {} block used before AGP 9. It produces a single (release) AAR.
+    // NOTE: this plugin cannot build CMake/NDK code, so the native libavif build lives in
+    // the separate :shared-native module, consumed below from androidMain.
+    android {
+        namespace = "com.alfikri.rizky.avifkit.shared"
+        compileSdk = libs.versions.android.compileSdk.get().toInt()
+        minSdk = libs.versions.android.minSdk.get().toInt()
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_11)
         }
+        withHostTest {}
     }
 
     // Create XCFramework for iOS distribution (CocoaPods, SPM, direct usage)
@@ -61,48 +68,11 @@ kotlin {
         androidMain.dependencies {
             implementation(libs.kotlinx.coroutines.android)
             implementation(libs.androidx.exifinterface)
-        }
-    }
-}
-
-android {
-    namespace = "com.alfikri.rizky.avifkit.shared"
-    compileSdk = libs.versions.android.compileSdk.get().toInt()
-    // Pin NDK r28+ so native .so files are 16 KB page-aligned by default (Android 15+ requirement).
-    // r28 makes 16 KB alignment the toolchain default; older NDKs need explicit linker flags.
-    ndkVersion = libs.versions.android.ndk.get()
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
-    defaultConfig {
-        minSdk = libs.versions.android.minSdk.get().toInt()
-
-        // NDK configuration for native AVIF support
-        // The native library is built conditionally:
-        // - With libavif: true AVIF encoding/decoding
-        // - Without libavif: JPEG fallback mode
-        ndk {
-            abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
-        }
-
-        externalNativeBuild {
-            cmake {
-                cppFlags += "-std=c++17"
-                arguments += listOf(
-                    "-DANDROID_STL=c++_shared",
-                    "-DANDROID_PLATFORM=android-21"
-                )
-            }
-        }
-    }
-
-    // CMake configuration for JNI wrapper
-    // Conditionally builds with or without libavif (see CMakeLists.txt)
-    externalNativeBuild {
-        cmake {
-            path = file("src/androidMain/cpp/CMakeLists.txt")
-            version = "3.22.1"
+            // Native libavif/AOM JNI wrapper (.so). Runtime-only: the Kotlin side declares
+            // `external fun`s and calls System.loadLibrary("avif-android-wrapper") — there is no
+            // compile-time API from this module. Published transitively as avifkit-native so
+            // consumers of io.github.alfikri-rizky:avifkit receive the .so automatically.
+            implementation(projects.sharedNative)
         }
     }
 }
@@ -113,7 +83,7 @@ android {
 // For CI/CD, these are set in .github/workflows/publish.yml
 
 mavenPublishing {
-    publishToMavenCentral(SonatypeHost.CENTRAL_PORTAL)
+    publishToMavenCentral()
     signAllPublications()
 
     pom {

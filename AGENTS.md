@@ -12,25 +12,37 @@ Kotlin Multiplatform (KMP) library for AVIF image encoding/decoding. Targets And
 
 ```
 AvifKit/
-├── shared/                 # KMP library (THE PRODUCT - published artifact)
+├── shared/                 # KMP library (THE PRODUCT - published as :avifkit)
+│   │                       #   AGP 9 plugin: com.android.kotlin.multiplatform.library
 │   ├── src/commonMain/     # Cross-platform Kotlin API
-│   ├── src/androidMain/    # Android impl (JNI wrapper)
-│   │   └── cpp/            # Native C++ with libavif
+│   ├── src/androidMain/    # Android impl: Kotlin JNI bindings (external funs) + loadLibrary
 │   └── src/iosMain/        # iOS impl (Swift bridge)
 │       └── swift/          # AVIFNativeConverter.swift
-├── composeApp/             # Android demo app (NOT published)
+├── shared-native/          # Android-only native build (published as :avifkit-native)
+│   └── src/main/cpp/       #   Native C++ libavif/AOM + JNI wrapper, built via CMake/NDK.
+│                           #   The KMP library plugin can't build CMake, so this is a plain
+│                           #   com.android.library; :shared depends on it from androidMain and
+│                           #   re-exports it transitively, so the .so reaches avifkit consumers.
+├── composeApp/             # Android demo app — plain com.android.application (NOT published)
 ├── iosApp/                 # iOS demo app (NOT published)
 ├── scripts/                # Build automation
 ├── .github/workflows/      # CI/CD (Maven Central + iOS release)
 └── Package.swift           # SPM distribution manifest
 ```
 
+> **AGP 9 note:** AGP 9 forbids the Kotlin Multiplatform plugin in the same module as
+> `com.android.library`/`com.android.application`, and the replacement KMP-library plugin
+> can't build native code. Hence the native build was split into `:shared-native` and the
+> Android demo (`:composeApp`) is a plain application module rather than a KMP module.
+> Requires Gradle 9.4.1+ and JDK 17+.
+
 ## WHERE TO LOOK
 
 | Task | Location | Notes |
 |------|----------|-------|
 | Add API methods | `shared/src/commonMain/.../AvifConverter.kt` | Expect class - add actual in platform dirs |
-| Android native | `shared/src/androidMain/cpp/avif_jni_wrapper.cpp` | JNI implementation |
+| Android native (C++) | `shared-native/src/main/cpp/avif_jni_wrapper.cpp` | JNI impl, built by `:shared-native` (com.android.library + CMake) |
+| Android JNI bindings (Kotlin) | `shared/src/androidMain/.../AvifConverter.android.kt` | `external fun`s + `System.loadLibrary` |
 | iOS native | `shared/src/iosMain/swift/AVIFNativeConverter.swift` | Swift bridge |
 | Change version | `shared/build.gradle.kts` line 12 | Also update Package.swift checksum |
 | Add dependency | `gradle/libs.versions.toml` | Version catalog |
@@ -91,11 +103,11 @@ set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,max-page-size
 # Build library
 ./gradlew :shared:build
 
-# Run tests
-./gradlew :shared:test
+# Run tests (KMP aggregate: Android host + iOS simulator)
+./gradlew :shared:allTests
 
-# Publish to Maven Central
-./gradlew :shared:publishToMavenCentral
+# Publish to Maven Central (library + its native companion; both share the version)
+./gradlew :shared-native:publishToMavenCentral :shared:publishToMavenCentral
 
 # Build iOS XCFramework
 ./gradlew :shared:assembleSharedReleaseXCFramework
@@ -118,7 +130,7 @@ set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-z,max-page-size
 ## NOTES
 
 - **Demo apps** (`composeApp`, `iosApp`) use local `projects.shared`, not published artifact
-- **libavif** is bundled in AAR (Android) and resolved via SPM dependency (iOS)
+- **libavif** (Android): built by `:shared-native` into its own AAR (`avifkit-native`), which `:shared` pulls transitively so consumers of `avifkit` get the `.so` automatically. iOS: resolved via SPM dependency.
 - **Compression strategies**: SMART = highest quality within limit, STRICT = smallest possible
 - **EXIF orientation**: Handled automatically on both platforms
 - **Memory safety**: OutOfMemory errors are caught and wrapped in AvifError

@@ -1,20 +1,21 @@
-This is a Kotlin Multiplatform project targeting Android, iOS.
+This is a Kotlin Multiplatform project targeting Android and iOS, built with **Android Gradle
+Plugin 9.2** (requires Gradle 9.4.1+ and JDK 17+).
 
-* [/composeApp](composeApp/src) is for code that will be shared across your Compose Multiplatform applications.
-  It contains several subfolders:
-  - [commonMain](composeApp/src/commonMain/kotlin) is for code that’s common for all targets.
-  - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
-    For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
-    the [iosMain](./composeApp/src/iosMain/kotlin) folder would be the right place for such calls.
-    Similarly, if you want to edit the Desktop (JVM) specific part, the [jvmMain](./composeApp/src/jvmMain/kotlin)
-    folder is the appropriate location.
+* [/shared](shared/src) — the AvifKit library itself. The cross-platform API lives in
+  [commonMain](shared/src/commonMain/kotlin); platform code is in `androidMain` (Kotlin JNI
+  bindings) and `iosMain` (Swift bridge). Published to Maven Central as
+  `io.github.alfikri-rizky:avifkit`. Uses the AGP 9 KMP library plugin
+  (`com.android.kotlin.multiplatform.library`).
 
-* [/iosApp](iosApp/iosApp) contains iOS applications. Even if you’re sharing your UI with Compose Multiplatform,
-  you need this entry point for your iOS app. This is also where you should add SwiftUI code for your project.
+* [/shared-native](shared-native/src) — the Android native build (libavif/AOM + JNI wrapper),
+  compiled with CMake/NDK. It's a plain `com.android.library` because the KMP library plugin
+  can't build native code. Published as the companion artifact `avifkit-native`, which `:shared`
+  pulls in transitively — so consumers only ever depend on `avifkit`.
 
-* [/shared](shared/src) is for the code that will be shared between all targets in the project.
-  The most important subfolder is [commonMain](shared/src/commonMain/kotlin). If preferred, you
-  can add code to the platform-specific folders here too.
+* [/composeApp](composeApp/src) — the Android demo app, a plain `com.android.application` module
+  with Compose Multiplatform UI. Not published.
+
+* [/iosApp](iosApp/iosApp) — the iOS demo app (SwiftUI entry point). Not published.
 
 ### Build and Run Android Application
 
@@ -277,7 +278,7 @@ pod 'AvifKit', '~> 0.2.3'
 ### Platform Implementation Details
 
 #### Android
-- **Native C++ implementation** via JNI (`shared/src/androidMain/cpp/`)
+- **Native C++ implementation** via JNI (`shared-native/src/main/cpp/`, the `:shared-native` module)
 - **Pre-built libavif binaries** included for all ABIs
 - **EXIF orientation support** (preserves portrait/landscape orientation)
 - **Multi-threaded encoding/decoding** with auto-tiling (uses all CPU cores)
@@ -310,7 +311,7 @@ pod 'AvifKit', '~> 0.2.3'
 | Component | Status | Location | Notes |
 |-----------|--------|----------|-------|
 | **Core Library** | ✅ Complete | `shared/src/commonMain/` | Cross-platform API |
-| **Android Native** | ✅ Complete | `shared/src/androidMain/cpp/` | JNI + libavif |
+| **Android Native** | ✅ Complete | `shared-native/src/main/cpp/` | JNI + libavif (`:shared-native` module) |
 | **iOS Native** | ✅ Complete | `shared/src/iosMain/swift/` | Swift + libavif |
 | **Adaptive Compression** | ✅ Complete | Both platforms | SMART & STRICT strategies |
 | **Orientation Support** | ✅ Complete | Both platforms | EXIF (Android), UIImage (iOS) |
@@ -392,14 +393,14 @@ cd AvifKit
 
 The library uses a comprehensive publishing setup:
 
-**To Maven Central:**
+**To Maven Central** (publishes the library and its native companion — both required):
 ```bash
-./gradlew :shared:publishAllPublicationsToSonatypeRepository
+./gradlew :shared-native:publishToMavenCentral :shared:publishToMavenCentral
 ```
 
 **To local Maven (for testing):**
 ```bash
-./gradlew :shared:publishToMavenLocal
+./gradlew :shared-native:publishToMavenLocal :shared:publishToMavenLocal
 ```
 
 **To CocoaPods:**
