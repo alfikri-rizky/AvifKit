@@ -68,6 +68,9 @@ kotlin {
 android {
     namespace = "com.alfikri.rizky.avifkit.shared"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
+    // Pin NDK r28+ so native .so files are 16 KB page-aligned by default (Android 15+ requirement).
+    // r28 makes 16 KB alignment the toolchain default; older NDKs need explicit linker flags.
+    ndkVersion = libs.versions.android.ndk.get()
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11

@@ -34,6 +34,12 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Install NDK r28
+        run: |
+          # Must match android-ndk in gradle/libs.versions.toml (16 KB page alignment).
+          SDKMANAGER="${ANDROID_HOME:-$ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" "ndk;28.2.13676358"
+
       - name: Setup Android libavif
         run: |
           # Remove orphaned gitlink directory so setup script does a fresh clone

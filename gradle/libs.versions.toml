@@ -3,6 +3,8 @@ agp = "8.11.2"
 android-compileSdk = "36"
 android-minSdk = "24"
 android-targetSdk = "36"
+# NDK r28c — compiles 16 KB-aligned shared libraries by default (Android 15+ / Google Play requirement)
+android-ndk = "28.2.13676358"
 androidx-activity = "1.11.0"
 androidx-appcompat = "1.7.1"
 androidx-core = "1.17.0"

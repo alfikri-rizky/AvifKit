@@ -94,6 +94,9 @@ if(HAS_LIBAVIF)
 endif()
 
 # Android 15+ compatibility: Apply 16 KB page alignment to the target
+# NDK r28+ (pinned via ndkVersion in build.gradle.kts) emits 16 KB-aligned
+# LOAD segments by default, so this flag is now a safety net that keeps
+# alignment correct if the build is ever run with an older NDK (r27 or lower).
 # This MUST be done after target_link_libraries()
 if(ANDROID)
     target_link_options(avif-android-wrapper PRIVATE
