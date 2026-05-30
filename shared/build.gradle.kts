@@ -49,18 +49,18 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             // Coroutines for async operations
-            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.0")
+            implementation(libs.kotlinx.coroutines.core)
             // FileKit for cross-platform file handling
-            api("io.github.vinceglb:filekit-core:0.12.0")
+            api(libs.filekit.core)
             // kotlinx-io for FileKit's I/O operations
-            implementation("org.jetbrains.kotlinx:kotlinx-io-core:0.8.2")
+            implementation(libs.kotlinx.io.core)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
         }
         androidMain.dependencies {
-            implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.0")
-            implementation("androidx.exifinterface:exifinterface:1.3.7")
+            implementation(libs.kotlinx.coroutines.android)
+            implementation(libs.androidx.exifinterface)
         }
     }
 }
