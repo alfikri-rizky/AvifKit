@@ -113,7 +113,7 @@ actual class AvifConverter {
           }
 
           is ImageInput.FromFile -> input.file.readBytes().toNSData()
-          is ImageInput.FromBitmap -> throw AvifError.InvalidInput()
+          is ImageInput.FromBitmap -> throw AvifError.InvalidInput
         }
 
       decodeAvifToImage(data)
@@ -150,7 +150,7 @@ actual class AvifConverter {
       when (input) {
         is ImageInput.FromBytes -> {
           val nsData = input.data.toNSData()
-          val image = UIImage.imageWithData(nsData) ?: throw AvifError.InvalidInput()
+          val image = UIImage.imageWithData(nsData) ?: throw AvifError.InvalidInput
 
           val width = image.size.useContents { this.width }
           val height = image.size.useContents { this.height }
@@ -173,7 +173,7 @@ actual class AvifConverter {
             NSData.dataWithContentsOfURL(url)
               ?: throw AvifError.FileError("Failed to read file: ${input.path}")
 
-          val image = UIImage.imageWithData(nsData) ?: throw AvifError.InvalidInput()
+          val image = UIImage.imageWithData(nsData) ?: throw AvifError.InvalidInput
 
           val width = image.size.useContents { this.width }
           val height = image.size.useContents { this.height }
@@ -190,7 +190,7 @@ actual class AvifConverter {
         is ImageInput.FromFile -> {
           val data = input.file.readBytes()
           val nsData = data.toNSData()
-          val image = UIImage.imageWithData(nsData) ?: throw AvifError.InvalidInput()
+          val image = UIImage.imageWithData(nsData) ?: throw AvifError.InvalidInput
 
           val width = image.size.useContents { this.width }
           val height = image.size.useContents { this.height }
@@ -398,7 +398,7 @@ actual class AvifConverter {
           if (isAvifFormat(input.data)) {
             nsData
           } else {
-            val uiImage = UIImage.imageWithData(nsData) ?: throw AvifError.InvalidInput()
+            val uiImage = UIImage.imageWithData(nsData) ?: throw AvifError.InvalidInput
             encodeImageToAvif(uiImage, options)
           }
         }
@@ -409,12 +409,12 @@ actual class AvifConverter {
 
         is ImageInput.FromPath -> {
           val url = NSURL.fileURLWithPath(input.path)
-          val data = NSData.dataWithContentsOfURL(url) ?: throw AvifError.InvalidInput()
+          val data = NSData.dataWithContentsOfURL(url) ?: throw AvifError.InvalidInput
 
           if (input.path.endsWith(".avif", ignoreCase = true)) {
             data
           } else {
-            val uiImage = UIImage.imageWithData(data) ?: throw AvifError.InvalidInput()
+            val uiImage = UIImage.imageWithData(data) ?: throw AvifError.InvalidInput
             encodeImageToAvif(uiImage, options)
           }
         }
@@ -425,7 +425,7 @@ actual class AvifConverter {
           if (isAvifFormat(byteData)) {
             nsData
           } else {
-            val uiImage = UIImage.imageWithData(nsData) ?: throw AvifError.InvalidInput()
+            val uiImage = UIImage.imageWithData(nsData) ?: throw AvifError.InvalidInput
             encodeImageToAvif(uiImage, options)
           }
         }
@@ -470,7 +470,7 @@ actual class AvifConverter {
       NSLog("❌ Unexpected error during encoding: ${e.message}")
       // Check if it's a memory-related error
       if (e.message?.contains("memory", ignoreCase = true) == true) {
-        throw AvifError.OutOfMemory()
+        throw AvifError.OutOfMemory
       }
       throw AvifError.EncodingFailed("Encoding failed: ${e.message}")
     }
@@ -505,7 +505,7 @@ actual class AvifConverter {
       NSLog("❌ Unexpected error during decoding: ${e.message}")
       // Check if it's a memory-related error
       if (e.message?.contains("memory", ignoreCase = true) == true) {
-        throw AvifError.OutOfMemory()
+        throw AvifError.OutOfMemory
       }
       throw AvifError.DecodingFailed("Decoding failed: ${e.message}")
     }

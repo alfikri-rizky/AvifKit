@@ -143,7 +143,7 @@ actual class AvifConverter {
           is ImageInput.FromBytes -> input.data
           is ImageInput.FromPath -> File(input.path).readBytes()
           is ImageInput.FromFile -> input.file.readBytes()
-          is ImageInput.FromBitmap -> throw AvifError.InvalidInput()
+          is ImageInput.FromBitmap -> throw AvifError.InvalidInput
         }
 
       decodeAvifToBitmap(data)
@@ -493,7 +493,7 @@ actual class AvifConverter {
       ) ?: throw AvifError.EncodingFailed("Native encoding failed")
     } catch (e: OutOfMemoryError) {
       Log.e(TAG, "OutOfMemoryError during AVIF encoding", e)
-      throw AvifError.OutOfMemory()
+      throw AvifError.OutOfMemory
     } catch (e: AvifError) {
       // Re-throw AvifError as-is
       throw e
@@ -525,7 +525,7 @@ actual class AvifConverter {
           result
         } catch (e: OutOfMemoryError) {
           Log.e(TAG, "OutOfMemoryError during native decode", e)
-          throw AvifError.OutOfMemory()
+          throw AvifError.OutOfMemory
         } catch (e: AvifError) {
           throw e
         } catch (e: Exception) {
@@ -541,7 +541,7 @@ actual class AvifConverter {
       )
     } catch (e: OutOfMemoryError) {
       Log.e(TAG, "OutOfMemoryError during AVIF decoding", e)
-      throw AvifError.OutOfMemory()
+      throw AvifError.OutOfMemory
     } catch (e: AvifError) {
       // Re-throw AvifError as-is
       throw e
