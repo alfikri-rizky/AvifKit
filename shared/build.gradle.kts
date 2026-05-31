@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "io.github.alfikri-rizky"
-version = "0.2.6"
+version = "0.2.7"
 
 kotlin {
     // Android target via the AGP 9 Kotlin Multiplatform library plugin

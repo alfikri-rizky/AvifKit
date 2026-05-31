@@ -197,7 +197,7 @@ Add the dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.alfikri-rizky:avifkit:0.2.3")
+    implementation("io.github.alfikri-rizky:avifkit:0.2.7")
 }
 ```
 
@@ -208,14 +208,14 @@ dependencies {
 **In Xcode:**
 1. File → Add Packages...
 2. Enter repository URL: `https://github.com/alfikri-rizky/AvifKit`
-3. Select version: `0.2.3` or higher
+3. Select version: `0.2.7` or higher
 4. **Important:** After adding the package, **clean build folder** (Cmd+Shift+K) before first build
 
 **Or add to your `Package.swift`:**
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.2.3")
+    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.2.7")
 ]
 ```
 
@@ -254,14 +254,14 @@ If you see `AvifError.EncodingFailed: Native AVIF handler not available`:
    print("AVIF available:", AVIFNativeConverter.isAvifAvailable)  // Should be true
    ```
 
-**Download from GitHub Releases:** [v0.2.3](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.2.3)
+**Download from GitHub Releases:** [v0.2.7](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.2.7)
 
 #### iOS (CocoaPods) - Not Recommended ⚠️
 
 CocoaPods support is technically available but **not recommended** due to validation issues:
 
 ```ruby
-pod 'AvifKit', '~> 0.2.3'
+pod 'AvifKit', '~> 0.2.7'
 ```
 
 **Important Notes:**
@@ -420,6 +420,21 @@ pod trunk push AvifKit.podspec
 ---
 
 ### Changelog
+
+#### v0.2.7
+- **iOS Critical Fix:** Fixed handler never registering — changed `AvifKitIos.shared` → `AvifKitIos.companion` in `AVIFNativeConverter.swift`. Kotlin `object` singletons are exposed to Swift/ObjC as `.companion`, not `.shared`. This bug caused 100% iOS AVIF encoding/decoding failure in v0.2.6.
+
+#### v0.2.6
+- **iOS:** Added `@OptIn` annotations for experimental Kotlin/Native APIs
+- **iOS:** Fixed ObjC interop casts in lazy handler discovery
+- **iOS:** Lazy ObjC runtime discovery of native handler as fallback (in addition to `__attribute__((constructor))` auto-registration)
+
+#### v0.2.5
+- **iOS:** Lazy auto-discovery of native handler via ObjC runtime (fallback path)
+- **SPM:** Fixed Swift Package Manager integration issues
+
+#### v0.2.4
+- **SPM:** Separate `AvifKitObjC` target to satisfy SPM mixed-language constraint (Swift + ObjC cannot be in the same target folder)
 
 #### v0.2.3
 - **iOS:** Auto-registration via `__attribute__((constructor))` — consumers no longer need manual `AvifKitSetup.registerNativeHandler()` calls
