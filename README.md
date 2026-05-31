@@ -197,7 +197,7 @@ Add the dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.alfikri-rizky:avifkit:0.2.7")
+    implementation("io.github.alfikri-rizky:avifkit:0.2.8")
 }
 ```
 
@@ -208,14 +208,14 @@ dependencies {
 **In Xcode:**
 1. File → Add Packages...
 2. Enter repository URL: `https://github.com/alfikri-rizky/AvifKit`
-3. Select version: `0.2.7` or higher
+3. Select version: `0.2.8` or higher
 4. **Important:** After adding the package, **clean build folder** (Cmd+Shift+K) before first build
 
 **Or add to your `Package.swift`:**
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.2.7")
+    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.2.8")
 ]
 ```
 
@@ -254,19 +254,19 @@ If you see `AvifError.EncodingFailed: Native AVIF handler not available`:
    print("AVIF available:", AVIFNativeConverter.isAvifAvailable)  // Should be true
    ```
 
-**Download from GitHub Releases:** [v0.2.7](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.2.7)
+**Download from GitHub Releases:** [v0.2.8](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.2.8)
 
 #### iOS (CocoaPods) - Not Recommended ⚠️
 
 CocoaPods support is technically available but **not recommended** due to validation issues:
 
 ```ruby
-pod 'AvifKit', '~> 0.2.7'
+pod 'AvifKit', '~> 0.2.8'
 ```
 
 **Important Notes:**
 - CocoaPods validation may fail due to transitive dependency configuration issues
-- **However, actual usage works fine** when users install via `pod install` since app deployment targets (iOS 13.0+) override pod settings
+- **However, actual usage works fine** when users install via `pod install` since app deployment targets (iOS 15.0+) override pod settings
 - Our code and XCFramework are fully compatible
 
 **Recommended alternatives:**
@@ -300,7 +300,7 @@ pod 'AvifKit', '~> 0.2.7'
 - **Explicit errors** when avif.swift is missing (no silent JPEG fallback)
 
 **Technical Details:**
-- iOS 13.0+ deployment target
+- iOS 15.0+ deployment target
 - Swift 5.0+
 - avif.swift 2.1.x (aom for encoding, dav1d for fast decoding)
 - Pre-built XCFramework dependencies — no C library compilation required
@@ -420,6 +420,10 @@ pod trunk push AvifKit.podspec
 ---
 
 ### Changelog
+
+#### v0.2.8
+- **iOS:** Raised minimum deployment target from iOS 13.0 → iOS 15.0 (and macOS 10.15 → 12.0) consistently across `Package.swift`, `AvifKit.podspec`, and the XCFramework linker (`build.gradle.kts`).
+- **Build:** Downgraded `filekit-core` 0.14.1 → 0.12.0 and `kotlinx-io-core` 0.9.0 → 0.8.2 for Kotlin 2.2.x KLIB ABI compatibility (rolled forward from v0.2.7).
 
 #### v0.2.7
 - **iOS Critical Fix:** Fixed handler never registering — changed `AvifKitIos.shared` → `AvifKitIos.companion` in `AVIFNativeConverter.swift`. Kotlin `object` singletons are exposed to Swift/ObjC as `.companion`, not `.shared`. This bug caused 100% iOS AVIF encoding/decoding failure in v0.2.6.

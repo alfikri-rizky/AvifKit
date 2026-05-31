@@ -1,6 +1,6 @@
 Pod::Spec.new do |spec|
   spec.name         = "AvifKit"
-  spec.version      = "0.2.2"
+  spec.version      = "0.2.8"
   spec.summary      = "Kotlin Multiplatform AVIF converter library for iOS and Android"
   spec.description  = <<-DESC
     AvifKit is a comprehensive Kotlin Multiplatform library for converting images
@@ -19,7 +19,7 @@ Pod::Spec.new do |spec|
   spec.license      = { :type => "MIT", :file => "LICENSE" }
   spec.author       = { "Rizky Alfikri" => "rizkyalfikri@gmail.com" }
 
-  spec.ios.deployment_target = "13.0"
+  spec.ios.deployment_target = "15.0"
   spec.swift_version = "5.0"
 
   # Main source repository (for Swift bridge code)
@@ -55,13 +55,13 @@ Pod::Spec.new do |spec|
     'OTHER_LDFLAGS' => '-framework UIKit -framework Foundation',
     'VALID_ARCHS' => 'arm64 x86_64',
     'HEADER_SEARCH_PATHS' => '$(inherited)',
-    'IPHONEOS_DEPLOYMENT_TARGET' => '13.0'
+    'IPHONEOS_DEPLOYMENT_TARGET' => '15.0'
   }
 
   # User target xcconfig
   spec.user_target_xcconfig = {
     'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386',
-    'IPHONEOS_DEPLOYMENT_TARGET' => '13.0'
+    'IPHONEOS_DEPLOYMENT_TARGET' => '15.0'
   }
 
   # Documentation

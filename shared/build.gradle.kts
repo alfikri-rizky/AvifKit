@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "io.github.alfikri-rizky"
-version = "0.2.7"
+version = "0.2.8"
 
 kotlin {
     // Android target via the AGP 9 Kotlin Multiplatform library plugin
@@ -39,11 +39,11 @@ kotlin {
             baseName = xcframeworkName
             isStatic = true
 
-            // Set iOS deployment target to 13.0 to avoid libarclite issues
-            // libarclite was removed from Xcode 14+ (only needed for iOS < 9.0)
-            // This matches our podspec requirement: spec.ios.deployment_target = "13.0"
+            // Set iOS deployment target to 15.0
+            // This matches our podspec requirement: spec.ios.deployment_target = "15.0"
+            // and Package.swift platforms: .iOS(.v15)
             linkerOpts.add("-ios_version_min")
-            linkerOpts.add("13.0")
+            linkerOpts.add("15.0")
 
             // Add to XCFramework
             xcf.add(this)

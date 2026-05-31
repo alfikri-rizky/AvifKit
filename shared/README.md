@@ -300,7 +300,7 @@ Task {
 - **Native Libraries**: Included automatically in AAR
 
 ### iOS
-- **iOS**: 13.0+
+- **iOS**: 15.0+
 - **Xcode**: 15.0+
 - **Swift**: 5.9+
 - **libavif**: Automatically resolved via SPM (`avif.swift`)

@@ -73,7 +73,7 @@ AvifKit/
 | **Bump version** | `shared/build.gradle.kts` line 12 + `Package.swift` checksum | Also update podspec if needed |
 | **Add dependency** | `gradle/libs.versions.toml` | Version catalog |
 | **CI/CD** | `.github/workflows/` | publish.yml (Maven Central) + publish-ios.yml (XCFramework) |
-| **Change iOS deployment** | `shared/build.gradle.kts` (linkerOpts) + `Package.swift` + `AvifKit.podspec` | Hardcoded 13.0 in multiple places |
+| **Change iOS deployment** | `shared/build.gradle.kts` (linkerOpts) + `Package.swift` + `AvifKit.podspec` | Hardcoded 15.0 in multiple places |
 | **Tests** | `shared/src/commonTest/` | Currently minimal |
 
 ---
@@ -212,7 +212,7 @@ The ObjC `__attribute__((constructor))` in `AvifKitAutoRegister.m` runs auto-dis
 - Kotlin official style (`kotlin.code.style=official`)
 - Java 11 JVM target
 - C++17 standard for native code
-- Swift 5.0+, iOS 13.0+
+- Swift 5.0+, iOS 15.0+
 
 ### PlatformFile (FileKit)
 - Cross-platform file abstraction via `io.github.vinceglb:filekit-core:0.12.0`
