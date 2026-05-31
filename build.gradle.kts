@@ -7,4 +7,9 @@ plugins {
     alias(libs.plugins.composeMultiplatform) apply false
     alias(libs.plugins.composeCompiler) apply false
     alias(libs.plugins.kotlinMultiplatform) apply false
+    // Declared at root with `apply false` so :shared and :shared-native share a
+    // single classloader for the plugin. Without this, each subproject loads
+    // its own copy of MavenCentralBuildService and Gradle 9 refuses to assign
+    // a service instance across classloader boundaries during publish.
+    alias(libs.plugins.mavenPublish) apply false
 }
