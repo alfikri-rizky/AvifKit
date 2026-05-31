@@ -197,7 +197,7 @@ Add the dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.alfikri-rizky:avifkit:0.2.9")
+    implementation("io.github.alfikri-rizky:avifkit:0.2.10")
 }
 ```
 
@@ -208,14 +208,14 @@ dependencies {
 **In Xcode:**
 1. File → Add Packages...
 2. Enter repository URL: `https://github.com/alfikri-rizky/AvifKit`
-3. Select version: `0.2.9` or higher
+3. Select version: `0.2.10` or higher
 4. **Important:** After adding the package, **clean build folder** (Cmd+Shift+K) before first build
 
 **Or add to your `Package.swift`:**
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.2.9")
+    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.2.10")
 ]
 ```
 
@@ -254,14 +254,14 @@ If you see `AvifError.EncodingFailed: Native AVIF handler not available`:
    print("AVIF available:", AVIFNativeConverter.isAvifAvailable)  // Should be true
    ```
 
-**Download from GitHub Releases:** [v0.2.9](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.2.9)
+**Download from GitHub Releases:** [v0.2.10](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.2.10)
 
 #### iOS (CocoaPods) - Not Recommended ⚠️
 
 CocoaPods support is technically available but **not recommended** due to validation issues:
 
 ```ruby
-pod 'AvifKit', '~> 0.2.9'
+pod 'AvifKit', '~> 0.2.10'
 ```
 
 **Important Notes:**
@@ -420,6 +420,10 @@ pod trunk push AvifKit.podspec
 ---
 
 ### Changelog
+
+#### v0.2.10
+- **iOS Critical Fix (actual):** Switched the Kotlin `Shared` iOS framework from static (`isStatic = true`) to dynamic (`isStatic = false`). v0.2.9's `Package.swift` cleanup was the right direction but not sufficient — SPM still produced two link edges to the static `Shared.xcframework` (one through the `AvifKit` Swift target, one through the binary product itself), leaving two copies of the Kotlin runtime in the consumer binary and two `AvifKitIos` singletons. A dynamic framework is dyld-loaded once per process, so every link edge resolves to the same image and the same singleton.
+- **Consumer impact:** keep `import AvifKit` (added in v0.2.9). No code changes required.
 
 #### v0.2.9
 - **iOS Critical Fix:** Fixed iOS AVIF encoding/decoding actually failing in production with `AvifError.EncodingFailed: Native AVIF handler not available`, even after v0.2.7's claimed fix. Root cause was the static `Shared.xcframework` being linked into the consumer binary along two paths (once as a direct product target, once via the `AvifKit` Swift target's dependency), which produced two copies of the Kotlin runtime — and therefore two separate `AvifKitIos` singletons. The Swift bridge registered into one; consumer call sites read from the other; the read always returned `null`.

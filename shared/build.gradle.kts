@@ -10,7 +10,7 @@ plugins {
 
 group = "io.github.alfikri-rizky"
 
-version = "0.2.9"
+version = "0.2.10"
 
 ktfmt { googleStyle() }
 
@@ -40,7 +40,13 @@ kotlin {
     .forEach { iosTarget ->
       iosTarget.binaries.framework {
         baseName = xcframeworkName
-        isStatic = true
+        // Dynamic framework so the Kotlin runtime + global singletons (e.g.
+        // AvifKitIos) exist as a single dyld image at runtime, regardless of
+        // how many SPM/Xcode link edges reach Shared.xcframework. With static
+        // linking, multiple link edges produced duplicate AvifKitIos instances
+        // and the Swift bridge's registerHandler() was invisible to consumer
+        // call sites in AvifConverter — see v0.2.9 changelog.
+        isStatic = false
 
         // Set iOS deployment target to 15.0
         // This matches our podspec requirement: spec.ios.deployment_target = "15.0"

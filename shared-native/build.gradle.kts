@@ -12,7 +12,7 @@ plugins {
 }
 
 group = "io.github.alfikri-rizky"
-version = "0.2.9"
+version = "0.2.10"
 
 android {
     namespace = "com.alfikri.rizky.avifkit.nativelib"
