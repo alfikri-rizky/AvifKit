@@ -10,7 +10,7 @@ set -e  # Exit on error
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-CPP_DIR="$PROJECT_ROOT/shared/src/androidMain/cpp"
+CPP_DIR="$PROJECT_ROOT/shared-native/src/main/cpp"
 LIBAVIF_DIR="$CPP_DIR/libavif"
 
 # Pinned versions for reproducible builds

@@ -25,7 +25,7 @@ jobs:
           distribution: 'temurin'
 
       - name: Setup Gradle
-        uses: gradle/gradle-build-action@v2
+        uses: gradle/actions/setup-gradle@v4
 
       - name: Create gradle.properties for CI
         run: |
@@ -43,7 +43,7 @@ jobs:
       - name: Setup Android libavif
         run: |
           # Remove orphaned gitlink directory so setup script does a fresh clone
-          rm -rf shared/src/androidMain/cpp/libavif
+          rm -rf shared-native/src/main/cpp/libavif
           chmod +x scripts/setup-android-libavif.sh
           ./scripts/setup-android-libavif.sh
 

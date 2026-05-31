@@ -24,20 +24,26 @@ jobs:
           distribution: 'temurin'
 
       - name: Setup Gradle
-        uses: gradle/gradle-build-action@v2
+        uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: false
 
       - name: Validate Gradle wrapper
-        uses: gradle/wrapper-validation-action@v1
+        uses: gradle/actions/wrapper-validation@v4
 
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Install NDK r28
+        run: |
+          # Must match android-ndk in gradle/libs.versions.toml (16 KB page alignment).
+          SDKMANAGER="${ANDROID_HOME:-$ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" "ndk;28.2.13676358"
+
       - name: Setup Android libavif
         run: |
           # Remove orphaned gitlink directory so setup script does a fresh clone
-          rm -rf shared/src/androidMain/cpp/libavif
+          rm -rf shared-native/src/main/cpp/libavif
           chmod +x scripts/setup-android-libavif.sh
           ./scripts/setup-android-libavif.sh
 
@@ -83,11 +89,15 @@ jobs:
         run: ./gradlew :shared:build --no-daemon --stacktrace
 
       - name: Run tests
-        run: ./gradlew :shared:test --no-daemon --stacktrace
+        # KMP aggregate test task (Android host + iOS simulator). The old :shared:test
+        # task does not exist under the AGP 9 KMP library plugin.
+        run: ./gradlew :shared:allTests --no-daemon --stacktrace
 
       - name: Publish to Maven Central
         run: |
-          ./gradlew :shared:publishToMavenCentral \
+          # Native companion artifact (avifkit-native) first, then the main library (avifkit),
+          # whose Android variant references it transitively.
+          ./gradlew :shared-native:publishToMavenCentral :shared:publishToMavenCentral \
             --no-daemon \
             --stacktrace \
             --no-configuration-cache
@@ -97,7 +107,7 @@ jobs:
         run: |
           echo "### ✅ Published to Maven Central!" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Artifact:** \`io.github.alfikri-rizky:avifkit\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Artifacts:** \`io.github.alfikri-rizky:avifkit\` + \`io.github.alfikri-rizky:avifkit-native\` (native companion)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "📝 **Next steps:**" >> $GITHUB_STEP_SUMMARY
           echo "1. Go to https://central.sonatype.com/" >> $GITHUB_STEP_SUMMARY
