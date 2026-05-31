@@ -48,11 +48,16 @@ kotlin {
         // call sites in AvifConverter — see v0.2.9 changelog.
         isStatic = false
 
-        // Set iOS deployment target to 15.0
-        // This matches our podspec requirement: spec.ios.deployment_target = "15.0"
-        // and Package.swift platforms: .iOS(.v15)
-        linkerOpts.add("-ios_version_min")
-        linkerOpts.add("15.0")
+        // iOS deployment target is set by the Kotlin/Native compiler per
+        // target (iosArm64 / iosX64 / iosSimulatorArm64). For dynamic
+        // frameworks we deliberately do NOT pass `-ios_version_min` here,
+        // because for simulator targets the linker requires
+        // `-ios_simulator_version_min` instead and rejects the device flag
+        // with `ld: incompatible platforms: iOS-simulator - iOS`. Leaving
+        // the version selection to Kotlin/Native produces the correct
+        // platform-specific flag automatically. Our podspec and
+        // Package.swift independently pin the consumer-facing minimum to
+        // iOS 15.0 / macOS 12.0.
 
         // Add to XCFramework
         xcf.add(this)
