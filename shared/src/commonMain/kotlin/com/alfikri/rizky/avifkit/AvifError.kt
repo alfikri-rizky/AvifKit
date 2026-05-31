@@ -1,29 +1,30 @@
 package com.alfikri.rizky.avifkit
 
-/**
- * Sealed class representing AVIF conversion errors
- */
+/** Sealed class representing AVIF conversion errors */
 sealed class AvifError : Exception() {
-    data object UnsupportedFormat : AvifError() {
-        override val message: String = "Unsupported image format"
-        private fun readResolve(): Any = UnsupportedFormat
-    }
+  data class UnsupportedFormat : AvifError() {
+    override val message: String = "Unsupported image format"
 
-    data class EncodingFailed(override val message: String) : AvifError()
+    private fun readResolve(): Any = UnsupportedFormat()
+  }
 
-    data class DecodingFailed(override val message: String) : AvifError()
+  data class EncodingFailed(override val message: String) : AvifError()
 
-    data object OutOfMemory : AvifError() {
-        override val message: String = "Out of memory during AVIF processing"
-        private fun readResolve(): Any = OutOfMemory
-    }
+  data class DecodingFailed(override val message: String) : AvifError()
 
-    data object InvalidInput : AvifError() {
-        override val message: String = "Invalid input data"
-        private fun readResolve(): Any = InvalidInput
-    }
+  data class OutOfMemory : AvifError() {
+    override val message: String = "Out of memory during AVIF processing"
 
-    data class FileError(override val message: String) : AvifError()
+    private fun readResolve(): Any = OutOfMemory()
+  }
 
-    data class Unknown(override val message: String) : AvifError()
+  data class InvalidInput : AvifError() {
+    override val message: String = "Invalid input data"
+
+    private fun readResolve(): Any = InvalidInput()
+  }
+
+  data class FileError(override val message: String) : AvifError()
+
+  data class Unknown(override val message: String) : AvifError()
 }

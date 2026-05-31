@@ -1,11 +1,11 @@
 package com.alfikri.rizky.avifkit
 
-import io.github.vinceglb.filekit.*
+import io.github.vinceglb.filekit.PlatformFile
 import java.io.File
 
 actual object PlatformFileFactory {
-    actual fun fromPath(path: String): PlatformFile {
-        // On Android, FileKit's PlatformFile accepts a java.io.File
-        return PlatformFile(File(path))
-    }
+  actual fun fromPath(path: String): PlatformFile {
+    // On Android, FileKit's PlatformFile accepts a java.io.File
+    return PlatformFile(File(path))
+  }
 }
