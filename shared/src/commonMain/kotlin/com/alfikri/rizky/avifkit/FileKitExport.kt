@@ -2,10 +2,10 @@ package com.alfikri.rizky.avifkit
 
 // Re-export FileKit PlatformFile
 // Re-export all FileKit extension functions and properties
+import io.github.vinceglb.filekit.PlatformFile as FileKitPlatformFile
 import io.github.vinceglb.filekit.name
 import io.github.vinceglb.filekit.path
 import io.github.vinceglb.filekit.size
-import io.github.vinceglb.filekit.PlatformFile as FileKitPlatformFile
 
 /**
  * Type alias to expose FileKit's PlatformFile from the shared module This allows other modules to
