@@ -10,7 +10,7 @@ plugins {
 
 group = "io.github.alfikri-rizky"
 
-version = "0.2.8"
+version = "0.2.9"
 
 ktfmt { googleStyle() }
 

@@ -10,7 +10,15 @@ let package = Package(
     products: [
         .library(
             name: "AvifKit",
-            targets: ["AvifKit", "AvifKitObjC", "Shared"]
+            // Do NOT list "Shared" here. The AvifKit Swift target depends on
+            // Shared (below) and re-exports its symbols via `@_exported import
+            // Shared` in AvifKitExports.swift. Listing Shared as a sibling of
+            // a target that already depends on it causes SPM to link the static
+            // Shared.xcframework along two paths, producing two copies of the
+            // Kotlin runtime in the consumer binary. Static-K/N globals (incl.
+            // the AvifKitIos singleton) then split into two instances and the
+            // Swift bridge's registration is invisible to consumer call sites.
+            targets: ["AvifKit", "AvifKitObjC"]
         )
     ],
     dependencies: [

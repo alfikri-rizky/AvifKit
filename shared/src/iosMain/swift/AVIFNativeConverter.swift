@@ -204,7 +204,6 @@ import Shared
 
     @objc public static func registerNativeHandler() {
         let handler = AvifKitNativeHandler()
-        // Kotlin object is exposed as .companion, not .shared
-        AvifKitIos.companion.registerHandler(handler: handler)
+        AvifKitIos.shared.registerHandler(handler: handler)
     }
 }

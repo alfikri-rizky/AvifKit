@@ -197,7 +197,7 @@ Add the dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.alfikri-rizky:avifkit:0.2.8")
+    implementation("io.github.alfikri-rizky:avifkit:0.2.9")
 }
 ```
 
@@ -208,14 +208,14 @@ dependencies {
 **In Xcode:**
 1. File → Add Packages...
 2. Enter repository URL: `https://github.com/alfikri-rizky/AvifKit`
-3. Select version: `0.2.8` or higher
+3. Select version: `0.2.9` or higher
 4. **Important:** After adding the package, **clean build folder** (Cmd+Shift+K) before first build
 
 **Or add to your `Package.swift`:**
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.2.8")
+    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.2.9")
 ]
 ```
 
@@ -254,14 +254,14 @@ If you see `AvifError.EncodingFailed: Native AVIF handler not available`:
    print("AVIF available:", AVIFNativeConverter.isAvifAvailable)  // Should be true
    ```
 
-**Download from GitHub Releases:** [v0.2.8](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.2.8)
+**Download from GitHub Releases:** [v0.2.9](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.2.9)
 
 #### iOS (CocoaPods) - Not Recommended ⚠️
 
 CocoaPods support is technically available but **not recommended** due to validation issues:
 
 ```ruby
-pod 'AvifKit', '~> 0.2.8'
+pod 'AvifKit', '~> 0.2.9'
 ```
 
 **Important Notes:**
@@ -420,6 +420,14 @@ pod trunk push AvifKit.podspec
 ---
 
 ### Changelog
+
+#### v0.2.9
+- **iOS Critical Fix:** Fixed iOS AVIF encoding/decoding actually failing in production with `AvifError.EncodingFailed: Native AVIF handler not available`, even after v0.2.7's claimed fix. Root cause was the static `Shared.xcframework` being linked into the consumer binary along two paths (once as a direct product target, once via the `AvifKit` Swift target's dependency), which produced two copies of the Kotlin runtime — and therefore two separate `AvifKitIos` singletons. The Swift bridge registered into one; consumer call sites read from the other; the read always returned `null`.
+- **iOS Fix details:**
+  - Removed `"Shared"` from the `AvifKit` library product in `Package.swift`. `Shared` is still a `.binaryTarget` and is still reachable, but only through `AvifKit`'s dependency closure — eliminating the duplicate link path.
+  - Added `@_exported import Shared` in a new `AvifKitExports.swift` so consumers see all Kotlin types (`AvifConverter`, `EncodingOptions`, `ImageInput`, `AvifError`, `Priority`, `KotlinByteArray`, …) by writing `import AvifKit` only.
+  - Reverted the v0.2.7 `.shared` → `.companion` change in `AVIFNativeConverter.swift`. The original v0.2.7 diagnosis was wrong: top-level Kotlin `object`s are exposed to Swift as `.shared` (confirmed in the generated framework header). `.companion` is only valid for a `companion object` declared inside a class.
+- **⚠️ Breaking change for iOS consumers:** replace `import Shared` with `import AvifKit` in your Swift sources. No other call-site changes are required — every Kotlin type previously available under `Shared` is now re-exported through `AvifKit`.
 
 #### v0.2.8
 - **iOS:** Raised minimum deployment target from iOS 13.0 → iOS 15.0 (and macOS 10.15 → 12.0) consistently across `Package.swift`, `AvifKit.podspec`, and the XCFramework linker (`build.gradle.kts`).
