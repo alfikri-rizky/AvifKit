@@ -35,8 +35,8 @@ let package = Package(
             name: "Shared",
             // URL + checksum are updated automatically by the iOS publish workflow on
             // tag push (these point at the previous release until then).
-            url: "https://github.com/alfikri-rizky/AvifKit/releases/download/v0.3.0/Shared.xcframework.zip",
-            checksum: "8bbe1ad3e785b4254cb0e3a1343c389b727c24a7cc8f5de49cfa1c1e955063dc"
+            url: "https://github.com/alfikri-rizky/AvifKit/releases/download/v0.3.1/Shared.xcframework.zip",
+            checksum: "22b3d65f5296604f5bd8d13d75e4160c0697768989ac75e2979e22f356ca279a"
         )
 
         // For local development and SNAPSHOT builds: use local path
