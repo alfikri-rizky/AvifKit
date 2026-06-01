@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AvifKit is a production-ready Kotlin Multiplatform library (v0.2.6) for AVIF image encoding/decoding on Android and iOS. Published to Maven Central (`io.github.alfikri-rizky:avifkit`) and distributed via Swift Package Manager.
+AvifKit is a production-ready Kotlin Multiplatform library (v0.3.0) for AVIF image encoding/decoding on Android and iOS. Published to Maven Central (`io.github.alfikri-rizky:avifkit`) and distributed via Swift Package Manager.
 
-**Key architectural decision:** Two-tier native implementation:
-- **Android**: libavif via JNI wrapper (C++), using AOM codec
-- **iOS**: avif.swift via Swift bridge, using aom encoder + dav1d decoder
+**Key architectural decision:** Both platforms call the **same libavif (v1.2.1) + AOM** codec directly from Kotlin — symmetric, with one Kotlin runtime and one code path:
+- **Android**: libavif via JNI wrapper (C++), built in the `:shared-native` module, shipped as `avifkit-native` `.so`.
+- **iOS**: libavif via **Kotlin/Native cinterop** (`shared/src/nativeInterop/cinterop/libavif.def`). Codec static libs (`libavif.a` + `libaom.a`) are built by `scripts/build-ios-libavif.sh` and linked into the `Shared` framework. No Swift bridge, no avif.swift, no handler registration (see `docs/IOS_CINTEROP_SOLUTION.md`).
 
 Both platforms use pre-built native binaries (no source compilation by consumers).
 
@@ -87,27 +87,28 @@ AvifKit follows strict KMP expect/actual conventions:
 | `shared/src/commonMain/kotlin/com/alfikri/rizky/avifkit/AvifConverter.kt` | Public API (expect class) |
 | `shared/src/commonMain/kotlin/com/alfikri/rizky/avifkit/Models.kt` | EncodingOptions, Priority, ImageInput, etc. |
 | `shared/src/commonMain/kotlin/com/alfikri/rizky/avifkit/AvifError.kt` | Sealed error hierarchy |
-| `shared/src/androidMain/kotlin/com/alfikri/rizky/avifkit/AvifConverter.android.kt` | Android actual (~727 lines) |
-| `shared/src/androidMain/cpp/avif_jni_wrapper.cpp` | JNI wrapper for libavif |
-| `shared/src/androidMain/cpp/CMakeLists.txt` | Conditional build (HAVE_LIBAVIF=0|1) |
-| `shared/src/iosMain/kotlin/com/alfikri/rizky/avifkit/AvifConverter.ios.kt` | iOS actual (~608 lines) |
-| `shared/src/iosMain/swift/AVIFNativeConverter.swift` | Swift wrapper for avif.swift (~209 lines) |
-| `shared/src/iosMain/objc/AvifKitAutoRegister.m` | `__attribute__((constructor))` auto-registration |
+| `shared/src/androidMain/kotlin/com/alfikri/rizky/avifkit/AvifConverter.android.kt` | Android actual |
+| `shared-native/src/main/cpp/avif_jni_wrapper.cpp` | JNI wrapper for libavif (`:shared-native` module) |
+| `shared-native/src/main/cpp/CMakeLists.txt` | Conditional build (HAVE_LIBAVIF=0|1) |
+| `shared-native/src/main/cpp/libavif/` | libavif v1.2.1 source (+ `ext/aom`) from `setup-android-libavif.sh`; used by Android JNI build AND iOS cinterop |
+| `shared/src/iosMain/kotlin/com/alfikri/rizky/avifkit/AvifConverter.ios.kt` | iOS actual — calls libavif via cinterop |
+| `shared/src/nativeInterop/cinterop/libavif.def` | cinterop binding to libavif's C API |
+| `scripts/build-ios-libavif.sh` | Builds `libavif.a` + `libaom.a` for the 3 iOS targets |
 
 ### iOS Native Bridge
 
+iOS calls `libavif` directly via cinterop — the exact analog of the Android JNI path, with no Swift:
+
 ```
 Kotlin/Native (AvifConverter.ios.kt)
-  └─ AvifKitIos.getOrDiscoverHandler()
-       ├─ Fast path: already registered handler
-       └─ Slow path: ObjC runtime NSClassFromString("AvifKit.AvifKitSetup")
-            → calls registerNativeHandler()
-            → creates AvifKitNativeHandler (Swift)
-            → wraps AVIFNativeConverter (Swift)
-            → delegates to avif.swift library
+  └─ import libavif.*            (cinterop binding; libavif.def)
+       └─ avifEncoderCreate / avifImageRGBToYUV / avifEncoderWrite   (encode)
+       └─ avifDecoderReadMemory* / avifImageYUVToRGB                 (decode)
+            (* via avifDecoderSetIOMemory + avifDecoderParse + avifDecoderNextImage)
+  └─ UIImage <-> RGBA8888 via CoreGraphics (CGBitmapContext)         (no Swift)
 ```
 
-The `__attribute__((constructor))` in `AvifKitAutoRegister.m` runs auto-discovery at library load time. Kotlin side also does lazy ObjC runtime discovery as fallback.
+`libavif.a` + `libaom.a` are statically linked into `Shared.framework` via `linkerOpts` in `shared/build.gradle.kts`, so the codec is always present (`isAvifSupported()` returns `true` unconditionally). The cinterop is shared across iOS targets via `kotlin.mpp.enableCInteropCommonization=true`.
 
 ### Android Native (C++ / JNI)
 
@@ -159,19 +160,11 @@ Triggered by: Git tag `vX.Y.Z`
 
 ### NEVER Do These
 
-1. **Kotlin object accessed via `.shared` in Swift**: Kotlin `object AvifKitIos` is exposed to Swift/ObjC as `.companion`, NOT `.shared`.
-   ```swift
-   // ❌ WRONG - causes handler to never register
-   AvifKitIos.shared.registerHandler(handler: handler)
+1. **Re-introducing a Swift handler / `AvifKitIos` registry on iOS**: iOS calls libavif directly via cinterop (v0.3.0+). Do NOT add back a runtime-registered Swift handler — in a Compose Multiplatform consumer it splits into two `AvifKitIos` singletons (one in `ComposeApp.framework`, one in `Shared.xcframework`) and silently fails. See `docs/IOS_CINTEROP_SOLUTION.md`.
 
-   // ✅ CORRECT - Kotlin object singleton
-   AvifKitIos.companion.registerHandler(handler: handler)
-   ```
-   **This was a production bug in v0.2.6 that prevented iOS AVIF conversion from working.**
+2. **Building iOS without the codec static libs**: The iOS framework links `libavif.a` + `libaom.a` from `shared/src/nativeInterop/libs/ios/<target>/` via `linkerOpts`. These are build outputs (git-ignored); run `scripts/build-ios-libavif.sh` before any iOS link/assemble task, or linking fails with undefined `_avif*` symbols.
 
-2. **Global CMake linker flags**: Using `set(CMAKE_SHARED_LINKER_FLAGS "...")` for 16KB alignment breaks libavif/AOM. Always use `target_link_options(avif-android-wrapper PRIVATE ...)` (see CMakeLists.txt:98-103).
-
-3. **Speed ≥ 7 on iOS**: libaom's `AOM_USAGE_REALTIME` mode (speed ≥ 7) uses CBR rate control incompatible with quantizer-based still image encoding. Speed is clamped to max 6 in `AVIFNativeConverter.swift`.
+3. **Global CMake linker flags (Android)**: Using `set(CMAKE_SHARED_LINKER_FLAGS "...")` for 16KB alignment breaks libavif/AOM. Always use `target_link_options(avif-android-wrapper PRIVATE ...)` (see `shared-native/src/main/cpp/CMakeLists.txt:101-106`).
 
 4. **Break expect/actual contract**: Changing `expect class AvifConverter` signature without updating BOTH platform implementations causes compilation failure on one platform.
 
@@ -187,8 +180,8 @@ Triggered by: Git tag `vX.Y.Z`
 
 - XCFramework URL + checksum in `Package.swift` must match GitHub Release exactly
 - First-time SPM resolve requires clean build folder (Cmd+Shift+K in Xcode)
-- Swift classes register under two ObjC names: `"AvifKit.AvifKitSetup"` (module-prefixed) and `"AvifKitSetup"` (non-prefixed) — auto-reg tries both
-- ObjC auto-reg target is separate because SPM forbids mixing Swift and ObjC in same target folder
+- The SPM `AvifKit` product now vends the self-contained `Shared` XCFramework directly (no Swift wrapper, no avif.swift). Consumers `import Shared` and use `AvifConverter()`.
+- `AvifKitSetup.registerNativeHandler()` no longer exists — remove any such call from consumer `init()`.
 
 ### Android 15+ (16KB Page Alignment)
 
@@ -248,8 +241,7 @@ Cross-platform file abstraction via `io.github.vinceglb:filekit-core:0.12.0`:
 | kotlinx-coroutines-core | 1.8.0 | Async operations |
 | filekit-core | 0.12.0 | Cross-platform file handling |
 | androidx.exifinterface | 1.3.7 | EXIF orientation (Android) |
-| avif.swift | 2.1.x | AVIF encode/decode (iOS) |
-| libavif | v1.2.1+ | AVIF encode/decode (Android) |
+| libavif + AOM | v1.2.1 / aom v3.12.0 | AVIF encode/decode on BOTH platforms (JNI on Android, cinterop on iOS) |
 
 ## Testing
 

@@ -55,6 +55,9 @@ org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m
 # Kotlin
 kotlin.code.style=official
 kotlin.mpp.stability.nowarn=true
+# Share the libavif cinterop across the iosMain source set (instead of per
+# target) so AvifConverter.ios.kt can `import libavif.*` from iosMain.
+kotlin.mpp.enableCInteropCommonization=true
 
 # Android
 android.useAndroidX=true

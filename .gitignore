@@ -77,6 +77,10 @@ keystore.properties
 *.log
 ios_build.log
 
+# Vendored iOS codec static libs (built by scripts/build-ios-libavif.sh).
+# Build outputs, not source — CI publishes them as release assets.
+shared/src/nativeInterop/libs/
+
 docs
 scripts
 .claude

@@ -17,10 +17,13 @@ shared/src/
 │   ├── kotlin/.../            # Android actual implementations
 │   └── cpp/                   # JNI wrapper + libavif (see cpp/AGENTS.md)
 ├── iosMain/
-│   ├── kotlin/.../            # iOS actual implementations
-│   └── swift/                 # AVIFNativeConverter.swift
+│   └── kotlin/.../            # iOS actual implementations (call libavif via cinterop)
+├── nativeInterop/cinterop/    # libavif.def — Kotlin/Native binding to libavif's C API
 └── commonTest/                # Shared tests
 ```
+
+iOS calls libavif directly via cinterop (no Swift). Codec static libs are built by
+`scripts/build-ios-libavif.sh` into `src/nativeInterop/libs/ios/<target>/`.
 
 ## WHERE TO LOOK
 

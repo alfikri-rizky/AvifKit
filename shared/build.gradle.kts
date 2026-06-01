@@ -10,7 +10,7 @@ plugins {
 
 group = "io.github.alfikri-rizky"
 
-version = "0.2.10"
+version = "0.3.0"
 
 ktfmt { googleStyle() }
 
@@ -38,14 +38,34 @@ kotlin {
       iosSimulatorArm64(), // Apple Silicon simulators
     )
     .forEach { iosTarget ->
+      // Direct libavif C-API binding (the iOS analog of the Android JNI path).
+      // AvifConverter.ios.kt calls libavif via this cinterop instead of a Swift
+      // handler. Header search dir points at the same libavif v1.2.1 source
+      // vendored for Android. See shared/src/nativeInterop/cinterop/libavif.def.
+      iosTarget.compilations.getByName("main").cinterops.create("libavif") {
+        defFile(project.file("src/nativeInterop/cinterop/libavif.def"))
+        // Same libavif source the Android :shared-native build uses (populated by
+        // scripts/setup-android-libavif.sh).
+        includeDirs(rootProject.file("shared-native/src/main/cpp/libavif/include"))
+      }
+
+      // Link the per-target static codec libs produced by
+      // scripts/build-ios-libavif.sh (libavif.a + libaom.a) into EVERY iOS binary
+      // (framework + test executable), since AvifConverter.ios.kt references the
+      // libavif symbols directly via cinterop. These ship with the artifact the way
+      // the Android avifkit-native .so does, so the klib is self-contained — no
+      // avif.swift, no SPM AvifKit product.
+      val codecLibDir = project.file("src/nativeInterop/libs/ios/${iosTarget.name}")
+      iosTarget.binaries.all { linkerOpts("-L${codecLibDir.absolutePath}", "-lavif", "-laom") }
+
       iosTarget.binaries.framework {
         baseName = xcframeworkName
-        // Dynamic framework so the Kotlin runtime + global singletons (e.g.
-        // AvifKitIos) exist as a single dyld image at runtime, regardless of
-        // how many SPM/Xcode link edges reach Shared.xcframework. With static
-        // linking, multiple link edges produced duplicate AvifKitIos instances
-        // and the Swift bridge's registerHandler() was invisible to consumer
-        // call sites in AvifConverter — see v0.2.9 changelog.
+
+        // Dynamic framework so the Kotlin runtime exists as a single dyld image
+        // at runtime, regardless of how many SPM/Xcode link edges reach
+        // Shared.xcframework. (Historically this also kept the AvifKitIos
+        // singleton single; that registry is gone now that iOS calls libavif
+        // directly via cinterop — see docs/IOS_CINTEROP_SOLUTION.md.)
         isStatic = false
 
         // iOS deployment target is set by the Kotlin/Native compiler per
@@ -61,9 +81,6 @@ kotlin {
 
         // Add to XCFramework
         xcf.add(this)
-
-        // The Swift AVIFNativeConverter will be linked by Xcode at app build time
-        // See: iosApp/iosApp/Native/AVIFNativeConverter.swift
       }
     }
 

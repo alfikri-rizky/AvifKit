@@ -5,6 +5,7 @@ import io.github.vinceglb.filekit.*
 import kotlinx.cinterop.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import libavif.*
 import platform.CoreGraphics.*
 import platform.Foundation.*
 import platform.UIKit.*
@@ -120,7 +121,9 @@ actual class AvifConverter {
     }
 
   actual fun isAvifSupported(): Boolean {
-    return AvifKitIos.getOrDiscoverHandler()?.isAvailable() == true
+    // libavif (+ aom) is statically linked into the framework via cinterop, so
+    // the codec is always present — no runtime handler discovery needed.
+    return true
   }
 
   actual fun isAvifFile(input: ImageInput): Boolean {
@@ -432,43 +435,23 @@ actual class AvifConverter {
       }
     }
 
+  /**
+   * Encode a UIImage to AVIF by calling libavif directly via cinterop. This is the iOS analog of
+   * the Android JNI path (shared-native/.../avif_jni_wrapper.cpp): extract RGBA bytes from the
+   * image, convert RGB→YUV, then avifEncoderWrite. No Swift, no handler registration.
+   */
   private fun encodeImageToAvif(image: UIImage, options: EncodingOptions): NSData {
     try {
-      val handler =
-        AvifKitIos.getOrDiscoverHandler()
-          ?: throw AvifError.EncodingFailed(
-            "Native AVIF handler not available. " +
-              "Ensure the AvifKit Swift target is linked in your project. " +
-              "If using SPM, add the 'AvifKit' product (not just 'Shared') as a dependency."
-          )
-
-      if (!handler.isAvailable()) {
-        throw AvifError.EncodingFailed(
-          "Native AVIF encoder is not available. " +
-            "The avif.swift dependency may not be properly linked."
-        )
-      }
-
-      @Suppress("UNCHECKED_CAST")
-      val encodingOptions =
-        mapOf<Any?, Any?>(
-          "quality" to options.quality,
-          "speed" to options.speed,
-          "maxDimension" to (options.maxDimension ?: 0),
-        )
-          as NSDictionary
-
-      val avifData =
-        handler.encodeImageWithOptions(image, encodingOptions)
-          ?: throw AvifError.EncodingFailed("Native AVIF encoding failed")
-
-      return avifData
+      // Orientation-normalize + optional downscale, then pull RGBA8888 bytes via CoreGraphics.
+      val normalized = options.maxDimension?.let { resizeImage(image, it) } ?: image
+      val rgba = uiImageToRgba(normalized) ?: throw AvifError.InvalidInput
+      return encodeRgbaToAvif(rgba.pixels, rgba.width, rgba.height, options)
     } catch (e: AvifError) {
-      // Re-throw AvifError as-is
       throw e
+    } catch (e: OutOfMemoryError) {
+      throw AvifError.OutOfMemory
     } catch (e: Exception) {
       NSLog("❌ Unexpected error during encoding: ${e.message}")
-      // Check if it's a memory-related error
       if (e.message?.contains("memory", ignoreCase = true) == true) {
         throw AvifError.OutOfMemory
       }
@@ -476,34 +459,143 @@ actual class AvifConverter {
     }
   }
 
-  private fun decodeAvifToImage(avifData: NSData): UIImage {
-    try {
-      val handler =
-        AvifKitIos.getOrDiscoverHandler()
-          ?: throw AvifError.DecodingFailed(
-            "Native AVIF handler not available. " +
-              "Ensure the AvifKit Swift target is linked in your project. " +
-              "If using SPM, add the 'AvifKit' product (not just 'Shared') as a dependency."
-          )
-
-      if (!handler.isAvailable()) {
-        throw AvifError.DecodingFailed(
-          "Native AVIF decoder is not available. " +
-            "The avif.swift dependency may not be properly linked."
-        )
+  /**
+   * Run the RGBA byte buffer through libavif's encoder. Mirrors nativeEncode() in the JNI wrapper.
+   */
+  private fun encodeRgbaToAvif(
+    rgba: ByteArray,
+    width: Int,
+    height: Int,
+    options: EncodingOptions,
+  ): NSData = memScoped {
+    val pixelFormat =
+      when (options.subsample) {
+        ChromaSubsample.YUV444 -> AVIF_PIXEL_FORMAT_YUV444
+        ChromaSubsample.YUV422 -> AVIF_PIXEL_FORMAT_YUV422
+        ChromaSubsample.YUV420 -> AVIF_PIXEL_FORMAT_YUV420
       }
 
-      val decodedImage =
-        handler.decodeAvif(avifData)
-          ?: throw AvifError.DecodingFailed("Native AVIF decoding failed")
+    val avifImage =
+      avifImageCreate(width.toUInt(), height.toUInt(), 8u, pixelFormat)
+        ?: throw AvifError.EncodingFailed("libavif: failed to create image")
+    val encoder =
+      avifEncoderCreate()
+        ?: run {
+          avifImageDestroy(avifImage)
+          throw AvifError.EncodingFailed("libavif: failed to create encoder")
+        }
 
-      return decodedImage
+    try {
+      // Quality (0-100), alpha quality, and speed map straight onto the encoder, matching the
+      // Android wrapper. For lossless, libavif uses quality == AVIF_QUALITY_LOSSLESS (100).
+      encoder.pointed.quality = if (options.lossless) AVIF_QUALITY_LOSSLESS else options.quality
+      encoder.pointed.qualityAlpha = options.alphaQuality
+      encoder.pointed.speed = options.speed
+      encoder.pointed.maxThreads = 4
+      encoder.pointed.codecChoice = AVIF_CODEC_CHOICE_AUTO
+
+      val allocRes = avifImageAllocatePlanes(avifImage, AVIF_PLANES_YUV or AVIF_PLANES_A)
+      if (allocRes != AVIF_RESULT_OK) {
+        throw AvifError.EncodingFailed("libavif: ${avifResultToString(allocRes)?.toKString()}")
+      }
+
+      rgba.usePinned { pinned ->
+        val rgb = alloc<avifRGBImage>()
+        avifRGBImageSetDefaults(rgb.ptr, avifImage)
+        rgb.pixels = pinned.addressOf(0).reinterpret()
+        rgb.rowBytes = (width * 4).toUInt()
+        rgb.format = AVIF_RGB_FORMAT_RGBA
+        rgb.depth = 8u
+
+        val convertRes = avifImageRGBToYUV(avifImage, rgb.ptr)
+        if (convertRes != AVIF_RESULT_OK) {
+          throw AvifError.EncodingFailed("libavif: ${avifResultToString(convertRes)?.toKString()}")
+        }
+      }
+
+      val output = alloc<avifRWData>()
+      try {
+        val encodeRes = avifEncoderWrite(encoder, avifImage, output.ptr)
+        if (encodeRes != AVIF_RESULT_OK) {
+          throw AvifError.EncodingFailed("libavif: ${avifResultToString(encodeRes)?.toKString()}")
+        }
+        if (output.size == 0uL || output.data == null) {
+          throw AvifError.EncodingFailed("libavif: encoder produced empty output")
+        }
+        NSData.create(bytes = output.data, length = output.size)
+      } finally {
+        avifRWDataFree(output.ptr)
+      }
+    } finally {
+      avifImageDestroy(avifImage)
+      avifEncoderDestroy(encoder)
+    }
+  }
+
+  /**
+   * Decode AVIF bytes to a UIImage by calling libavif directly. Mirrors nativeDecode() in the JNI
+   * wrapper: decode → YUV→RGBA → build a CGImage/UIImage.
+   */
+  private fun decodeAvifToImage(avifData: NSData): UIImage {
+    try {
+      return memScoped {
+        val decoder =
+          avifDecoderCreate() ?: throw AvifError.DecodingFailed("libavif: failed to create decoder")
+        val rgb = alloc<avifRGBImage>()
+        var rgbAllocated = false
+        try {
+          decoder.pointed.maxThreads = 4
+          decoder.pointed.ignoreXMP = AVIF_TRUE
+          decoder.pointed.ignoreExif = AVIF_FALSE
+
+          val bytes = avifData.bytes?.reinterpret<UByteVar>()
+          val size = avifData.length
+          val ioRes = avifDecoderSetIOMemory(decoder, bytes, size)
+          if (ioRes != AVIF_RESULT_OK) {
+            throw AvifError.DecodingFailed("libavif: ${avifResultToString(ioRes)?.toKString()}")
+          }
+          val parseRes = avifDecoderParse(decoder)
+          if (parseRes != AVIF_RESULT_OK) {
+            throw AvifError.DecodingFailed("libavif: ${avifResultToString(parseRes)?.toKString()}")
+          }
+          val nextRes = avifDecoderNextImage(decoder)
+          if (nextRes != AVIF_RESULT_OK) {
+            throw AvifError.DecodingFailed("libavif: ${avifResultToString(nextRes)?.toKString()}")
+          }
+
+          val decodedImage =
+            decoder.pointed.image
+              ?: throw AvifError.DecodingFailed("libavif: decoder produced no image")
+
+          avifRGBImageSetDefaults(rgb.ptr, decodedImage)
+          rgb.format = AVIF_RGB_FORMAT_RGBA
+          rgb.depth = 8u
+          val rgbAllocRes = avifRGBImageAllocatePixels(rgb.ptr)
+          if (rgbAllocRes != AVIF_RESULT_OK) {
+            throw AvifError.DecodingFailed(
+              "libavif: ${avifResultToString(rgbAllocRes)?.toKString()}"
+            )
+          }
+          rgbAllocated = true
+
+          val yuvRes = avifImageYUVToRGB(decodedImage, rgb.ptr)
+          if (yuvRes != AVIF_RESULT_OK) {
+            throw AvifError.DecodingFailed("libavif: ${avifResultToString(yuvRes)?.toKString()}")
+          }
+
+          rgbaToUIImage(rgb.pixels!!, rgb.width.toInt(), rgb.height.toInt(), rgb.rowBytes.toInt())
+            ?: throw AvifError.DecodingFailed("libavif: failed to build UIImage from RGBA")
+        } finally {
+          if (rgbAllocated) avifRGBImageFreePixels(rgb.ptr)
+          avifDecoderDestroy(decoder)
+        }
+      }
     } catch (e: AvifError) {
-      // Re-throw AvifError as-is
       throw e
+    } catch (e: OutOfMemoryError) {
+      throw AvifError.OutOfMemory
     } catch (e: Exception) {
       NSLog("❌ Unexpected error during decoding: ${e.message}")
-      // Check if it's a memory-related error
       if (e.message?.contains("memory", ignoreCase = true) == true) {
         throw AvifError.OutOfMemory
       }
@@ -511,6 +603,96 @@ actual class AvifConverter {
     }
   }
 
+  /** RGBA8888 pixel buffer extracted from a UIImage (origin top-left, premultiplied alpha). */
+  private class RgbaBuffer(val pixels: ByteArray, val width: Int, val height: Int)
+
+  /**
+   * Draw a UIImage into an RGBA8888 CGBitmapContext and read back the bytes. Drawing through the
+   * context bakes in the image's `imageOrientation`, so this also handles EXIF orientation (the job
+   * the Swift `normalizeOrientation` used to do).
+   */
+  private fun uiImageToRgba(image: UIImage): RgbaBuffer? {
+    val cgImage = image.CGImage ?: return null
+    val width = CGImageGetWidth(cgImage).toInt()
+    val height = CGImageGetHeight(cgImage).toInt()
+    if (width <= 0 || height <= 0) return null
+
+    val bytesPerRow = width * 4
+    val pixels = ByteArray(bytesPerRow * height)
+    val colorSpace = CGColorSpaceCreateDeviceRGB()
+    try {
+      pixels.usePinned { pinned ->
+        val ctx =
+          CGBitmapContextCreate(
+            data = pinned.addressOf(0),
+            width = width.toULong(),
+            height = height.toULong(),
+            bitsPerComponent = 8u,
+            bytesPerRow = bytesPerRow.toULong(),
+            space = colorSpace,
+            bitmapInfo = CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value,
+          ) ?: return null
+        try {
+          // Draw via UIImage so imageOrientation is applied (origin flips handled by UIKit).
+          UIGraphicsPushContext(ctx)
+          memScoped {
+            val rect =
+              alloc<CGRect>().apply {
+                origin.x = 0.0
+                origin.y = 0.0
+                size.width = width.toDouble()
+                size.height = height.toDouble()
+              }
+            // CoreGraphics origin is bottom-left; flip so the drawn image is top-left like the
+            // RGBA buffer libavif expects.
+            CGContextTranslateCTM(ctx, 0.0, height.toDouble())
+            CGContextScaleCTM(ctx, 1.0, -1.0)
+            image.drawInRect(rect.readValue())
+          }
+          UIGraphicsPopContext()
+        } finally {
+          // context released by ARC bridge when ctx goes out of scope
+        }
+      }
+    } finally {
+      CGColorSpaceRelease(colorSpace)
+    }
+    return RgbaBuffer(pixels, width, height)
+  }
+
+  /** Build a UIImage from an RGBA8888 buffer produced by libavif's decoder. */
+  private fun rgbaToUIImage(
+    pixels: CPointer<UByteVar>,
+    width: Int,
+    height: Int,
+    rowBytes: Int,
+  ): UIImage? {
+    val colorSpace = CGColorSpaceCreateDeviceRGB()
+    try {
+      val ctx =
+        CGBitmapContextCreate(
+          data = pixels,
+          width = width.toULong(),
+          height = height.toULong(),
+          bitsPerComponent = 8u,
+          bytesPerRow = rowBytes.toULong(),
+          space = colorSpace,
+          bitmapInfo = CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value,
+        ) ?: return null
+      val cgImage = CGBitmapContextCreateImage(ctx) ?: return null
+      try {
+        return UIImage.imageWithCGImage(cgImage)
+      } finally {
+        CGImageRelease(cgImage)
+      }
+    } finally {
+      CGColorSpaceRelease(colorSpace)
+    }
+  }
+
+  /**
+   * Downscale a UIImage so its longest side is at most [maxDimension]; no-op if already smaller.
+   */
   private fun resizeImage(image: UIImage, maxDimension: Int): UIImage {
     val width = image.size.useContents { this.width }
     val height = image.size.useContents { this.height }
@@ -530,7 +712,7 @@ actual class AvifConverter {
           this.height = newHeight
         }
 
-      UIGraphicsBeginImageContextWithOptions(newSize.readValue(), false, 0.0)
+      UIGraphicsBeginImageContextWithOptions(newSize.readValue(), false, 1.0)
 
       val rect =
         alloc<CGRect>().apply {

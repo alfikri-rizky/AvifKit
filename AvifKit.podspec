@@ -1,11 +1,13 @@
 Pod::Spec.new do |spec|
   spec.name         = "AvifKit"
-  spec.version      = "0.2.10"
+  spec.version      = "0.3.0"
   spec.summary      = "Kotlin Multiplatform AVIF converter library for iOS and Android"
   spec.description  = <<-DESC
     AvifKit is a comprehensive Kotlin Multiplatform library for converting images
     to AVIF format. It provides a unified API across iOS and Android with
-    native performance using avif.swift (aom encoder + dav1d decoder).
+    native performance. The AVIF codec (libavif + aom) is linked directly into
+    the Kotlin/Native framework via cinterop, so the XCFramework is fully
+    self-contained — no Swift bridge or extra codec dependency required.
 
     Features:
     - AVIF encoding with adaptive compression
@@ -22,20 +24,14 @@ Pod::Spec.new do |spec|
   spec.ios.deployment_target = "15.0"
   spec.swift_version = "5.0"
 
-  # Main source repository (for Swift bridge code)
   spec.source       = {
     :git => "https://github.com/alfikri-rizky/AvifKit.git",
     :tag => "#{spec.version}"
   }
 
-  # Swift native AVIF converter (bridges to Kotlin)
-  spec.source_files  = "shared/src/iosMain/swift/**/*.swift"
-
-  # Exclude test files
-  spec.exclude_files = "shared/src/iosMain/swift/**/*Test.swift"
-
-  # Download pre-built Kotlin Multiplatform XCFramework from GitHub Release
-  # This XCFramework contains the shared Kotlin code compiled for all iOS architectures
+  # Download pre-built Kotlin Multiplatform XCFramework from GitHub Release.
+  # This XCFramework contains the shared Kotlin code (compiled for all iOS
+  # architectures) AND the statically linked AVIF codec — it is self-contained.
   spec.vendored_frameworks = "Shared.xcframework"
 
   # Prepare command downloads the XCFramework from GitHub Release
@@ -45,9 +41,6 @@ Pod::Spec.new do |spec|
     unzip -q Shared.xcframework.zip
     rm Shared.xcframework.zip
   CMD
-
-  # avif.swift provides the actual AVIF encoding/decoding functionality
-  spec.dependency "avif", "~> 2.1"
 
   # Framework configuration
   spec.pod_target_xcconfig = {

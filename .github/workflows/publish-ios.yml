@@ -38,6 +38,7 @@ jobs:
           org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m
           kotlin.code.style=official
           kotlin.mpp.stability.nowarn=true
+          kotlin.mpp.enableCInteropCommonization=true
           EOF
 
       - name: Setup Android libavif
@@ -46,6 +47,14 @@ jobs:
           rm -rf shared-native/src/main/cpp/libavif
           chmod +x scripts/setup-android-libavif.sh
           ./scripts/setup-android-libavif.sh
+
+      - name: Build iOS codec static libraries
+        run: |
+          # Builds libavif.a + libaom.a for iosArm64 / iosSimulatorArm64 / iosX64
+          # from the same libavif source set up above. These are linked into the
+          # Shared framework via cinterop linkerOpts (see shared/build.gradle.kts).
+          chmod +x scripts/build-ios-libavif.sh
+          ./scripts/build-ios-libavif.sh
 
       - name: Extract version from tag
         id: get_version

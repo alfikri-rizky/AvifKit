@@ -21,43 +21,25 @@ iosApp/
 │   └── Models/
 │       └── Models.swift
 └── Native/
-    └── AVIFNativeConverter.swift  # Bridge to libavif
+    └── iosApp-Bridging-Header.h   # Foundation/UIKit bridging (no AVIF code)
 ```
 
-## KOTLIN-SWIFT INTEROP
+## KOTLIN INTEROP
 
 ```swift
-import Shared  // KMP XCFramework
+import Shared  // KMP XCFramework — self-contained (includes libavif + aom)
 
-// Register native handler at app startup (required!)
-AvifKitSetup.registerNativeHandler()
-
-// Then use Kotlin classes
+// No registration step. Just use the Kotlin API directly.
 let converter = AvifConverter()
 ```
 
-## NATIVE HANDLER ARCHITECTURE
+## NATIVE ARCHITECTURE (v0.3.0+)
 
-Kotlin cannot call Swift classes directly. The bridge pattern:
-1. `IosAvifNativeHandler` (Kotlin protocol) defines encode/decode interface
-2. `AvifKitNativeHandler` (Swift) implements it using libavif
-3. `AvifKitSetup.registerNativeHandler()` connects them at startup
-4. `AvifConverter.ios.kt` calls through `AvifKitIos.getHandler()`
-
-**Two locations** - keep in sync:
-1. `iosApp/Native/AVIFNativeConverter.swift` - Demo app copy
-2. `shared/src/iosMain/swift/AVIFNativeConverter.swift` - Published library
-
-## LIBAVIF AVAILABILITY CHECK
-
-```swift
-#if canImport(libavif)
-import libavif
-// Use native AVIF encoding
-#else
-// JPEG fallback
-#endif
-```
+There is no Swift bridge or handler. `AvifConverter.ios.kt` calls `libavif` directly
+via Kotlin/Native cinterop (`shared/src/nativeInterop/cinterop/libavif.def`); the codec
+static libs are linked into `Shared.framework`. See `docs/IOS_CINTEROP_SOLUTION.md`.
+The demo app simply consumes the published (or locally embedded) `Shared` XCFramework —
+no `AVIFNativeConverter.swift`, no `registerNativeHandler()`.
 
 ## VIEWMODEL PATTERN
 
@@ -76,15 +58,14 @@ enum UiState {
 ## XCODE SETUP
 
 1. Open `iosApp/iosApp.xcodeproj`
-2. SPM resolves `Shared.xcframework` from GitHub Releases
-3. libavif resolved via SDWebImage/libavif-Xcode package
-4. Clean build (Cmd+Shift+K) required after package updates
+2. SPM resolves `Shared.xcframework` from GitHub Releases (self-contained: includes the codec)
+3. Clean build (Cmd+Shift+K) required after package updates
 
 ## TROUBLESHOOTING
 
 | Issue | Solution |
 |-------|----------|
-| "libavif not available" | Clean SPM cache + rebuild |
+| Undefined `_avif*` symbols at link | Run `scripts/build-ios-libavif.sh`; the codec static libs must exist before assembling `Shared` |
 | XCFramework not found | Check Package.swift checksum |
 | Simulator crashes | Use arm64 simulator, not x86_64 |
 | Build errors after update | File > Packages > Reset Package Caches |

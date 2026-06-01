@@ -44,7 +44,7 @@ AvifKit is a production-ready Kotlin Multiplatform library for AVIF image encodi
 ### Features
 
 #### Core Functionality
-- ✅ **AVIF Encoding & Decoding** - Full support via native AVIF libraries (avif.swift on iOS, libavif on Android)
+- ✅ **AVIF Encoding & Decoding** - Full support via libavif + AOM on both platforms (cinterop on iOS, JNI on Android)
 - ✅ **Android 15+ Compatible** - 16 KB page size alignment (Google Play requirement)
 - ✅ **Adaptive Compression** - Intelligent file size targeting with two strategies
 - ✅ **Priority Presets** - Quick configuration for common use cases
@@ -67,9 +67,9 @@ AvifKit is a production-ready Kotlin Multiplatform library for AVIF image encodi
 
 AvifKit uses **native AVIF libraries** on both platforms with explicit error reporting:
 
-- **Android:** libavif via JNI — pre-built native binaries included in the AAR
-- **iOS:** [avif.swift](https://github.com/awxkee/avif.swift) — aom encoder + dav1d decoder via SPM
-- **Error Handling:** If native dependencies are missing, clear `AvifError` exceptions are thrown (no silent fallbacks)
+- **Android:** libavif (v1.2.1) + AOM via JNI — pre-built native binaries included in the AAR
+- **iOS:** the same libavif + AOM, linked directly into the Kotlin/Native framework via cinterop — the `Shared` XCFramework is self-contained (no avif.swift, no Swift bridge, no registration step). See [docs/IOS_CINTEROP_SOLUTION.md](docs/IOS_CINTEROP_SOLUTION.md).
+- **Error Handling:** clear `AvifError` exceptions are thrown on failure (no silent fallbacks)
 
 ### Usage
 
@@ -197,7 +197,7 @@ Add the dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.alfikri-rizky:avifkit:0.2.10")
+    implementation("io.github.alfikri-rizky:avifkit:0.3.0")
 }
 ```
 
@@ -208,60 +208,49 @@ dependencies {
 **In Xcode:**
 1. File → Add Packages...
 2. Enter repository URL: `https://github.com/alfikri-rizky/AvifKit`
-3. Select version: `0.2.10` or higher
+3. Select version: `0.3.0` or higher
 4. **Important:** After adding the package, **clean build folder** (Cmd+Shift+K) before first build
 
 **Or add to your `Package.swift`:**
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.2.10")
+    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.3.0")
 ]
 ```
 
 **Setup Notes:**
-- ✅ SPM automatically downloads the pre-built XCFramework from GitHub Releases
-- ✅ Resolves avif.swift dependency (pre-built aom encoder + dav1d decoder — no source compilation)
-- ✅ Auto-registers native handler — no manual setup code needed
-- ✅ Integrates seamlessly with your Xcode project
-- ⚠️ **First-time setup:** Dependencies may take a few minutes to download on first resolve
+- ✅ SPM downloads a single, self-contained pre-built XCFramework from GitHub Releases (the AVIF codec is linked in via cinterop — no extra dependency, no source compilation)
+- ✅ No registration code needed — `import Shared` and use `AvifConverter()` directly
+- ⚠️ **First-time setup:** the XCFramework may take a moment to download on first resolve
 - ⚠️ **Important:** Always do a clean build (Product → Clean Build Folder) after adding the package
+
+**Usage:**
+
+```swift
+import Shared
+
+let converter = AvifConverter()
+print("AVIF available:", converter.isAvifSupported())  // true
+```
 
 **Troubleshooting:**
 
-If you see `AvifError.EncodingFailed: Native AVIF handler not available`:
-
-1. **Ensure sufficient disk space** (at least 1GB free for SPM dependencies)
-2. **Clean all caches:**
+1. **Clean caches** if resolution misbehaves:
    ```bash
-   # Clear SPM cache
-   rm -rf ~/Library/Caches/org.swift.swiftpm
-   rm -rf ~/Library/org.swift.swiftpm
-
-   # Clear Xcode derived data
+   rm -rf ~/Library/Caches/org.swift.swiftpm ~/Library/org.swift.swiftpm
    rm -rf ~/Library/Developer/Xcode/DerivedData
    ```
-3. **In Xcode:**
-   - File → Packages → Reset Package Caches
-   - File → Packages → Update to Latest Package Versions
-   - Product → Clean Build Folder (Cmd+Shift+K)
-   - Product → Build (Cmd+B)
+2. **In Xcode:** File → Packages → Reset Package Caches; Product → Clean Build Folder (Cmd+Shift+K); Build.
 
-4. **Verify AVIF is available:**
-   ```swift
-   import AvifKit
-
-   print("AVIF available:", AVIFNativeConverter.isAvifAvailable)  // Should be true
-   ```
-
-**Download from GitHub Releases:** [v0.2.10](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.2.10)
+**Download from GitHub Releases:** [v0.3.0](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.3.0)
 
 #### iOS (CocoaPods) - Not Recommended ⚠️
 
 CocoaPods support is technically available but **not recommended** due to validation issues:
 
 ```ruby
-pod 'AvifKit', '~> 0.2.10'
+pod 'AvifKit', '~> 0.3.0'
 ```
 
 **Important Notes:**
@@ -291,20 +280,18 @@ pod 'AvifKit', '~> 0.2.10'
 - Symbol stripping for smaller binary size
 
 #### iOS
-- **Native Swift implementation** (`AVIFNativeConverter.swift`)
-- **Powered by [avif.swift](https://github.com/awxkee/avif.swift)** — high-level `AVIFEncoder`/`AVIFDecoder` API
-- **aom encoder + dav1d decoder** — pre-built XCFramework dependencies, no source compilation needed
-- **UIImage orientation handling** (properly encodes portrait photos)
-- **Auto-registration** via `__attribute__((constructor))` — consumers don't need manual setup
+- **Direct libavif binding** via Kotlin/Native cinterop (`AvifConverter.ios.kt` → `libavif`) — the same C API as Android, no Swift bridge
+- **libavif v1.2.1 + AOM** statically linked into `Shared.framework` (self-contained XCFramework)
+- **UIImage ⇄ RGBA via CoreGraphics** — orientation handled by drawing through a bitmap context
+- **No registration step** — the codec is always present (`isAvifSupported()` returns `true`)
 - **`@Throws` annotations** — errors propagate as NSError to Swift's do/catch
-- **Explicit errors** when avif.swift is missing (no silent JPEG fallback)
+- **Explicit errors** on failure (no silent JPEG fallback)
 
 **Technical Details:**
 - iOS 15.0+ deployment target
-- Swift 5.0+
-- avif.swift 2.1.x (aom for encoding, dav1d for fast decoding)
-- Pre-built XCFramework dependencies — no C library compilation required
-- XCFramework support for multiple architectures
+- libavif v1.2.1 + aom v3.12.0 (encode + decode)
+- Codec static libs built by `scripts/build-ios-libavif.sh`; linked via cinterop `linkerOpts`
+- XCFramework support for iosArm64 / iosSimulatorArm64 / iosX64
 
 ### Implementation Status
 
@@ -347,13 +334,7 @@ Check if native AVIF is available:
 
 ```kotlin
 val converter = AvifConverter()
-val isSupported = converter.isAvifSupported()
-
-// Android: check library version
-val version = converter.getLibraryVersion() // Shows libavif version or "Placeholder"
-
-// iOS: check in AVIFNativeConverter.swift
-AVIFNativeConverter.isAvifAvailable // true if libavif linked
+val isSupported = converter.isAvifSupported() // true on both platforms (codec statically linked)
 ```
 
 ### Testing Fallback Behavior
@@ -420,6 +401,15 @@ pod trunk push AvifKit.podspec
 ---
 
 ### Changelog
+
+#### v0.3.0
+- **iOS architecture rewrite — direct libavif via cinterop.** iOS now calls libavif (v1.2.1) + AOM directly from Kotlin/Native through cinterop, exactly like the Android JNI path. This permanently fixes the Compose Multiplatform failure where the Swift-registered handler landed in a different `AvifKitIos` singleton than the consumer read from (full analysis in [docs/IOS_CINTEROP_SOLUTION.md](docs/IOS_CINTEROP_SOLUTION.md)). One framework, one Kotlin runtime, one code path.
+- **Self-contained XCFramework:** the AVIF codec static libs are linked into `Shared.framework`; no avif.swift dependency, no Swift bridge, no auto-registration.
+- **⚠️ Breaking for iOS consumers:**
+  - Removed the Swift `AvifKit` product internals (`AVIFNativeConverter`, `AvifKitSetup`, `AvifKitAutoRegister`) and the Kotlin `AvifKitIos` / `IosAvifNativeHandler` registry.
+  - Remove any `AvifKitSetup.registerNativeHandler()` call from your app's `init()`.
+  - Swift consumers use `import Shared` and `AvifConverter()` directly. (The SPM `AvifKit` product now simply re-vends the self-contained `Shared` XCFramework.)
+- **Non-breaking for KMP/Android consumers:** add the one Gradle dependency and go — iOS now matches Android.
 
 #### v0.2.10
 - **iOS Critical Fix (actual):** Switched the Kotlin `Shared` iOS framework from static (`isStatic = true`) to dynamic (`isStatic = false`). v0.2.9's `Package.swift` cleanup was the right direction but not sufficient — SPM still produced two link edges to the static `Shared.xcframework` (one through the `AvifKit` Swift target, one through the binary product itself), leaving two copies of the Kotlin runtime in the consumer binary and two `AvifKitIos` singletons. A dynamic framework is dyld-loaded once per process, so every link edge resolves to the same image and the same singleton.
