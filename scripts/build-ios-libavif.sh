@@ -64,12 +64,13 @@ fi
 # Pick a generator: prefer Ninja, fall back to Unix Makefiles.
 if command -v ninja >/dev/null 2>&1; then
   GENERATOR="Ninja"
-  BUILD_FLAGS=()
 else
   GENERATOR="Unix Makefiles"
-  BUILD_FLAGS=(-j"$(sysctl -n hw.ncpu)")
 fi
-echo "generator: $GENERATOR"
+# Parallelism via CMake's portable --parallel (works for both generators, and
+# avoids empty-array expansion under `set -u`).
+JOBS="$(sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+echo "generator: $GENERATOR (parallel: $JOBS)"
 echo ""
 
 # --- Map Kotlin/Native target name -> (SDK, arch) ----------------------------
@@ -138,7 +139,7 @@ build_target() {
     -DENABLE_EXAMPLES=OFF \
     -DENABLE_NASM=OFF
 
-  cmake --build "$build_dir" --config Release --target avif "${BUILD_FLAGS[@]}"
+  cmake --build "$build_dir" --config Release --target avif --parallel "$JOBS"
 
   # Collect the produced static libs. With BUILD_SHARED_LIBS=OFF libavif names
   # its static archive libavif_internal.a (the avifEncoder*/avifDecoder*/
