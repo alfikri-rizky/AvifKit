@@ -1,6 +1,6 @@
 Pod::Spec.new do |spec|
   spec.name         = "AvifKit"
-  spec.version      = "0.3.0"
+  spec.version      = "0.3.1"
   spec.summary      = "Kotlin Multiplatform AVIF converter library for iOS and Android"
   spec.description  = <<-DESC
     AvifKit is a comprehensive Kotlin Multiplatform library for converting images

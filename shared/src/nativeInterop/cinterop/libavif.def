@@ -5,10 +5,12 @@
 # JNI path in shared-native/src/main/cpp/avif_jni_wrapper.cpp.
 #
 # Headers come from the same libavif v1.2.1 source vendored for Android. The
-# header search dir (includeDirs) and the per-target static-lib link flags
-# (-L<dir> -lavif -laom) are supplied from shared/build.gradle.kts so they can
-# vary per iOS target (device vs. simulator vs. x64); they are intentionally NOT
-# hard-coded here.
+# header search dir (includeDirs) and the per-target static codec libs are
+# supplied from shared/build.gradle.kts so they can vary per iOS target (device
+# vs. simulator vs. x64). The libs are EMBEDDED into the cinterop klib there via
+# `extraOpts("-staticLibrary", ...)` so they travel to Gradle/Maven consumers —
+# they are intentionally NOT hard-coded here (a single .def can't express
+# per-target paths).
 headers = avif/avif.h
 headerFilter = avif/**
 package = libavif

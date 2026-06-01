@@ -1,6 +1,6 @@
 # iOS Architecture Fix — Self-Contained Kotlin/Native klib via cinterop
 
-**Status:** ✅ Implemented in v0.3.0 (2026-06-01)
+**Status:** ✅ Implemented in v0.3.0; Maven-channel packaging fixed in v0.3.1 (2026-06-01)
 **Author analysis date:** 2026-05-31
 **Affects:** All Compose Multiplatform consumers that add `io.github.alfikri-rizky:avifkit` in `commonMain`
 **Supersedes:** The Swift-handler registration model (`AvifKitIos` / `AvifKitSetup.registerNativeHandler()` / `AvifKitAutoRegister.m`), now **removed**.
@@ -8,10 +8,25 @@
 > **Implementation note (v0.3.0):** `AvifConverter.ios.kt` now calls `libavif`
 > directly via the `libavif` cinterop (`shared/src/nativeInterop/cinterop/libavif.def`).
 > The codec static libs are built by `scripts/build-ios-libavif.sh` into
-> `shared/src/nativeInterop/libs/ios/<target>/` and linked via `linkerOpts` in
-> `shared/build.gradle.kts`. The Swift/ObjC handler files and the SPM `AvifKit`/
-> `AvifKitObjC` targets have been deleted; the SPM `AvifKit` product now vends the
-> self-contained `Shared` XCFramework directly.
+> `shared/src/nativeInterop/libs/ios/<target>/`. The Swift/ObjC handler files and
+> the SPM `AvifKit`/`AvifKitObjC` targets have been deleted; the SPM `AvifKit`
+> product now vends the self-contained `Shared` XCFramework directly.
+>
+> **Packaging fix (v0.3.1):** v0.3.0 linked the codec libs only via the binaries'
+> `linkerOpts`, which apply at *our* link time but are **not** recorded in the
+> published klib — so pure-Gradle KMP consumers still failed with
+> `Undefined symbol: _avifEncoderCreate` (the codec never reached them). The libs
+> are now **embedded into the cinterop klib** via
+> `extraOpts("-staticLibrary", "libavif.a", "-staticLibrary", "libaom.a", "-libraryPath", <per-target dir>)`
+> in `shared/build.gradle.kts`. Kotlin/Native copies them into the klib's
+> `default/targets/<target>/included/` dir and auto-links them into any downstream
+> binary, so a Gradle/Maven consumer links cleanly with no SPM. This is the iOS
+> analog of how `avifkit-native` ships the Android `.so` transitively. (Report:
+> `docs/AVIFKIT_FEEDBACK.md`.)
+>
+> **One channel per project:** a consumer must use *either* the Gradle dependency
+> (KMP, now self-linking) *or* the SPM `Shared` framework (Swift-only) — never both,
+> or two separate `Shared` modules link with disjoint symbol namespaces.
 
 ---
 

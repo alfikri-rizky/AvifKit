@@ -10,7 +10,7 @@ plugins {
 
 group = "io.github.alfikri-rizky"
 
-version = "0.3.0"
+version = "0.3.1"
 
 ktfmt { googleStyle() }
 
@@ -42,21 +42,31 @@ kotlin {
       // AvifConverter.ios.kt calls libavif via this cinterop instead of a Swift
       // handler. Header search dir points at the same libavif v1.2.1 source
       // vendored for Android. See shared/src/nativeInterop/cinterop/libavif.def.
+      //
+      // The per-target static codec libs (libavif.a + libaom.a, produced by
+      // scripts/build-ios-libavif.sh) are EMBEDDED INTO the cinterop klib via
+      // `-staticLibrary` ("embed static library to the result"). This is the key
+      // to a self-contained Maven/Gradle artifact: the codec travels inside the
+      // published klib, so a pure-Gradle KMP consumer links cleanly with no SPM
+      // and no manual Xcode setup — the iOS analog of how avifkit-native ships
+      // the Android .so transitively. (Putting the libs only in binaries'
+      // linkerOpts, as v0.3.0 did, left them out of the klib and broke Maven
+      // consumers — see docs/AVIFKIT_FEEDBACK.md.)
+      val codecLibDir = project.file("src/nativeInterop/libs/ios/${iosTarget.name}")
       iosTarget.compilations.getByName("main").cinterops.create("libavif") {
         defFile(project.file("src/nativeInterop/cinterop/libavif.def"))
         // Same libavif source the Android :shared-native build uses (populated by
         // scripts/setup-android-libavif.sh).
         includeDirs(rootProject.file("shared-native/src/main/cpp/libavif/include"))
+        extraOpts(
+          "-staticLibrary",
+          "libavif.a",
+          "-staticLibrary",
+          "libaom.a",
+          "-libraryPath",
+          codecLibDir.absolutePath,
+        )
       }
-
-      // Link the per-target static codec libs produced by
-      // scripts/build-ios-libavif.sh (libavif.a + libaom.a) into EVERY iOS binary
-      // (framework + test executable), since AvifConverter.ios.kt references the
-      // libavif symbols directly via cinterop. These ship with the artifact the way
-      // the Android avifkit-native .so does, so the klib is self-contained — no
-      // avif.swift, no SPM AvifKit product.
-      val codecLibDir = project.file("src/nativeInterop/libs/ios/${iosTarget.name}")
-      iosTarget.binaries.all { linkerOpts("-L${codecLibDir.absolutePath}", "-lavif", "-laom") }
 
       iosTarget.binaries.framework {
         baseName = xcframeworkName

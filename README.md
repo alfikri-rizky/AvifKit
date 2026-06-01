@@ -191,13 +191,25 @@ EncodingOptions(
 
 AvifKit is published as a Kotlin Multiplatform library with seamless integration for both Android and iOS platforms.
 
+> **Pick ONE iOS channel — do not mix.**
+> - **KMP / Compose Multiplatform apps → Gradle only.** Add the `commonMain`
+>   Gradle dependency below. The iOS AVIF codec (libavif + AOM) is embedded in the
+>   Kotlin/Native artifact, so iOS links with no SPM package and no extra setup —
+>   exactly like Android. This is the recommended path for shared KMP code.
+> - **Pure SwiftUI / iOS-only apps → SPM** (`import Shared`; see iOS section).
+> - **Never add both Gradle *and* SPM in the same project.** That links two
+>   separate copies of the `Shared` module into two different frameworks with
+>   disjoint symbol namespaces, which fails with `Undefined symbol: _avif*` at
+>   link time. If your app uses the shared KMP module via Gradle, remove the SPM
+>   `AvifKit` package reference from the iOS app target.
+
 #### Android (Gradle)
 
 Add the dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.alfikri-rizky:avifkit:0.3.0")
+    implementation("io.github.alfikri-rizky:avifkit:0.3.1")
 }
 ```
 
@@ -208,14 +220,14 @@ dependencies {
 **In Xcode:**
 1. File → Add Packages...
 2. Enter repository URL: `https://github.com/alfikri-rizky/AvifKit`
-3. Select version: `0.3.0` or higher
+3. Select version: `0.3.1` or higher
 4. **Important:** After adding the package, **clean build folder** (Cmd+Shift+K) before first build
 
 **Or add to your `Package.swift`:**
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.3.0")
+    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.3.1")
 ]
 ```
 
@@ -243,14 +255,14 @@ print("AVIF available:", converter.isAvifSupported())  // true
    ```
 2. **In Xcode:** File → Packages → Reset Package Caches; Product → Clean Build Folder (Cmd+Shift+K); Build.
 
-**Download from GitHub Releases:** [v0.3.0](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.3.0)
+**Download from GitHub Releases:** [v0.3.1](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.3.1)
 
 #### iOS (CocoaPods) - Not Recommended ⚠️
 
 CocoaPods support is technically available but **not recommended** due to validation issues:
 
 ```ruby
-pod 'AvifKit', '~> 0.3.0'
+pod 'AvifKit', '~> 0.3.1'
 ```
 
 **Important Notes:**
@@ -401,6 +413,17 @@ pod trunk push AvifKit.podspec
 ---
 
 ### Changelog
+
+#### v0.3.1
+- **iOS Maven-channel fix:** the v0.3.0 Kotlin/Native artifact shipped the cinterop
+  bindings but **not** the native codec, so pure-Gradle KMP consumers failed to
+  link with `Undefined symbol: _avifEncoderCreate` (the codec flags lived in our
+  build, not in the published klib). The static codec libs (`libavif.a` + `libaom.a`)
+  are now **embedded into the cinterop klib** via `-staticLibrary`, so a Gradle/Maven
+  consumer links cleanly with only the `commonMain` dependency — no SPM, no manual
+  Xcode setup. See `docs/AVIFKIT_FEEDBACK.md`.
+- **Docs:** clarified that the Gradle and SPM channels are mutually exclusive per
+  project (mixing them links two `Shared` modules → undefined symbols).
 
 #### v0.3.0
 - **iOS architecture rewrite — direct libavif via cinterop.** iOS now calls libavif (v1.2.1) + AOM directly from Kotlin/Native through cinterop, exactly like the Android JNI path. This permanently fixes the Compose Multiplatform failure where the Swift-registered handler landed in a different `AvifKitIos` singleton than the consumer read from (full analysis in [docs/IOS_CINTEROP_SOLUTION.md](docs/IOS_CINTEROP_SOLUTION.md)). One framework, one Kotlin runtime, one code path.
