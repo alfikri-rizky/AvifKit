@@ -109,7 +109,10 @@ kotlin {
       // kotlinx-io for FileKit's I/O operations
       implementation(libs.kotlinx.io.core)
     }
-    commonTest.dependencies { implementation(libs.kotlin.test) }
+    commonTest.dependencies {
+      implementation(libs.kotlin.test)
+      implementation(libs.kotlinx.coroutines.test)
+    }
     androidMain.dependencies {
       implementation(libs.kotlinx.coroutines.android)
       implementation(libs.androidx.exifinterface)

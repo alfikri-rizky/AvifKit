@@ -3,6 +3,7 @@ package com.alfikri.rizky.avifkit
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlinx.cinterop.*
 import kotlinx.coroutines.runBlocking
@@ -198,6 +199,78 @@ class AvifConverterIosRoundTripTest {
       )
 
     assertTrue(result.contentEquals(avif), "fitting AVIF input must be returned byte-identical")
+  }
+
+  /**
+   * M6 regression: an opaque source must NOT get an alpha channel in the output, while a
+   * transparent source must. Verified via libavif's parse-time alphaPresent flag.
+   */
+  @Test
+  fun opaqueEncode_omitsAlphaChannel_transparentKeepsIt() = runBlocking {
+    val converter = AvifConverter()
+
+    val opaque =
+      converter.encodeAvif(
+        ImageInput.from(
+          makeImageFromPremultipliedRgba(solidRgba(0x30, 0x60, 0x90, 0xFF), width, height)
+        ),
+        options = EncodingOptions(quality = 90, speed = 10),
+      )
+    assertFalse(rawAvifAlphaPresent(opaque), "opaque source must not encode an alpha channel")
+
+    val transparent =
+      converter.encodeAvif(
+        ImageInput.from(
+          makeImageFromPremultipliedRgba(solidRgba(0x18, 0x30, 0x48, 0x80), width, height)
+        ),
+        options = EncodingOptions(quality = 90, speed = 10, alphaQuality = 90),
+      )
+    assertTrue(rawAvifAlphaPresent(transparent), "transparent source must encode an alpha channel")
+  }
+
+  /**
+   * M2 regression: getImageInfo on AVIF bytes must report real dimensions and alpha via libavif
+   * (the old path decoded through UIImage, which returns nil for AVIF on iOS 15).
+   */
+  @Test
+  fun getImageInfo_onAvif_reportsDimensionsAndAlpha() = runBlocking {
+    val converter = AvifConverter()
+    val avif = encodeRawStraightAvif(solidRgba(0x40, 0x80, 0xC0, 0x80), width, height)
+
+    val info = converter.getImageInfo(ImageInput.from(avif))
+    assertEquals(width, info.width)
+    assertEquals(height, info.height)
+    assertEquals(ImageFormat.AVIF, info.format)
+    assertTrue(info.hasAlpha, "alpha-bearing AVIF must report hasAlpha")
+  }
+
+  /**
+   * M8 regression: resize is driven by pixel dimensions and clamps to >= 1px. A 200x100 source
+   * capped at 50 must come out with its longest side at 50.
+   */
+  @Test
+  fun maxDimension_downscalesByPixels() = runBlocking {
+    val w = 200
+    val h = 100
+    val px = ByteArray(w * h * 4)
+    for (i in 0 until w * h) {
+      px[i * 4] = 0x40
+      px[i * 4 + 1] = 0x80.toByte()
+      px[i * 4 + 2] = 0xC0.toByte()
+      px[i * 4 + 3] = 0xFF.toByte()
+    }
+    val image = makeImageFromPremultipliedRgba(px, w, h)
+
+    val avif =
+      AvifConverter()
+        .encodeAvif(
+          ImageInput.from(image),
+          options = EncodingOptions(maxDimension = 50, speed = 10),
+        )
+
+    val info = AvifConverter().getImageInfo(ImageInput.from(avif))
+    assertEquals(50, info.width, "longest side should be scaled to the 50px cap")
+    assertEquals(25, info.height)
   }
 
   @Test
@@ -404,6 +477,23 @@ class AvifConverterIosRoundTripTest {
       }
     } finally {
       if (rgbAllocated) avifRGBImageFreePixels(rgb.ptr)
+      avifDecoderDestroy(decoder)
+    }
+  }
+
+  /** Whether an AVIF file carries an alpha channel, via libavif's parse-time alphaPresent flag. */
+  private fun rawAvifAlphaPresent(avif: ByteArray): Boolean = memScoped {
+    val decoder = avifDecoderCreate() ?: error("avifDecoderCreate failed")
+    try {
+      avif.usePinned { pinned ->
+        val res =
+          avifDecoderSetIOMemory(decoder, pinned.addressOf(0).reinterpret(), avif.size.toULong())
+        check(res == AVIF_RESULT_OK) { "setIOMemory: ${avifResultToString(res)?.toKString()}" }
+        val parseRes = avifDecoderParse(decoder)
+        check(parseRes == AVIF_RESULT_OK) { "parse: ${avifResultToString(parseRes)?.toKString()}" }
+        decoder.pointed.alphaPresent != AVIF_FALSE
+      }
+    } finally {
       avifDecoderDestroy(decoder)
     }
   }

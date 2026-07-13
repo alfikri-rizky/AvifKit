@@ -30,10 +30,11 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeEncode(
     jint alphaQuality,
     jint speed,
     jint subsample,
-    jboolean lossless) {
+    jboolean lossless,
+    jboolean hasAlpha) {
 
-    LOGI("nativeEncode: %dx%d, quality=%d, alphaQuality=%d, speed=%d, subsample=%d, lossless=%d",
-         width, height, quality, alphaQuality, speed, subsample, (int)lossless);
+    LOGI("nativeEncode: %dx%d, quality=%d, alphaQuality=%d, speed=%d, subsample=%d, lossless=%d, hasAlpha=%d",
+         width, height, quality, alphaQuality, speed, subsample, (int)lossless, (int)hasAlpha);
 
     // Get pixel data from Java
     jbyte* pixelData = env->GetByteArrayElements(pixels, nullptr);
@@ -106,8 +107,11 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeEncode(
         image->matrixCoefficients = AVIF_MATRIX_COEFFICIENTS_IDENTITY;
     }
 
-    // Allocate image planes
-    avifResult allocResult = avifImageAllocatePlanes(image, AVIF_PLANES_YUV | AVIF_PLANES_A);
+    // Allocate image planes. Opaque sources skip the alpha plane entirely (M6): no wasted
+    // all-0xFF alpha OBU, smaller files, and no phantom alpha reported on decode.
+    avifPlanesFlags planes = hasAlpha ? (avifPlanesFlags)(AVIF_PLANES_YUV | AVIF_PLANES_A)
+                                      : (avifPlanesFlags)AVIF_PLANES_YUV;
+    avifResult allocResult = avifImageAllocatePlanes(image, planes);
     if (allocResult != AVIF_RESULT_OK) {
         avifImageDestroy(image);
         avifEncoderDestroy(encoder);
@@ -123,6 +127,9 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeEncode(
     rgb.rowBytes = width * 4;  // RGBA = 4 bytes per pixel
     rgb.format = AVIF_RGB_FORMAT_RGBA;
     rgb.depth = 8;
+    // For opaque images, tell libavif to treat the RGBA buffer as opaque (ignore the A byte),
+    // so RGB->YUV neither reads nor emits alpha.
+    rgb.ignoreAlpha = hasAlpha ? AVIF_FALSE : AVIF_TRUE;
 
     // Convert RGBA to YUV
     avifResult convertResult = avifImageRGBToYUV(image, &rgb);
@@ -229,12 +236,15 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeDecode(
         return nullptr;
     }
 
-    // Log first few bytes of AVIF data for debugging
-    LOGI("AVIF data first 16 bytes: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
-         (unsigned char)data[0], (unsigned char)data[1], (unsigned char)data[2], (unsigned char)data[3],
-         (unsigned char)data[4], (unsigned char)data[5], (unsigned char)data[6], (unsigned char)data[7],
-         (unsigned char)data[8], (unsigned char)data[9], (unsigned char)data[10], (unsigned char)data[11],
-         (unsigned char)data[12], (unsigned char)data[13], (unsigned char)data[14], (unsigned char)data[15]);
+    // Log first few bytes of AVIF data for debugging. Guard the length: without it, a <16-byte
+    // input causes an out-of-bounds heap read here (M7).
+    if (dataLength >= 16) {
+        LOGI("AVIF data first 16 bytes: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
+             (unsigned char)data[0], (unsigned char)data[1], (unsigned char)data[2], (unsigned char)data[3],
+             (unsigned char)data[4], (unsigned char)data[5], (unsigned char)data[6], (unsigned char)data[7],
+             (unsigned char)data[8], (unsigned char)data[9], (unsigned char)data[10], (unsigned char)data[11],
+             (unsigned char)data[12], (unsigned char)data[13], (unsigned char)data[14], (unsigned char)data[15]);
+    }
 
     // Create decoder
     avifDecoder* decoder = avifDecoderCreate();
@@ -333,17 +343,31 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeDecode(
     // Convert to Android Bitmap format (ARGB_8888)
     int width = rgb.width;
     int height = rgb.height;
-    std::vector<int32_t> pixels(width * height);
+
+    // Guard the pixel-buffer allocation: a large image can need ~1 GB, and an uncaught
+    // std::bad_alloc escaping this JNI frame calls std::terminate (app abort) instead of a
+    // catchable AvifError (M7).
+    std::vector<int32_t> pixels;
+    try {
+        pixels.resize(static_cast<size_t>(width) * static_cast<size_t>(height));
+    } catch (const std::bad_alloc&) {
+        avifRGBImageFreePixels(&rgb);
+        avifDecoderDestroy(decoder);
+        env->ReleaseByteArrayElements(avifData, data, JNI_ABORT);
+        LOGE("Out of memory allocating %dx%d pixel buffer", width, height);
+        return nullptr;
+    }
 
     uint8_t* src = rgb.pixels;
     for (int i = 0; i < width * height; i++) {
-        uint8_t r = src[i * 4 + 0];
-        uint8_t g = src[i * 4 + 1];
-        uint8_t b = src[i * 4 + 2];
-        uint8_t a = src[i * 4 + 3];
+        uint32_t r = src[i * 4 + 0];
+        uint32_t g = src[i * 4 + 1];
+        uint32_t b = src[i * 4 + 2];
+        uint32_t a = src[i * 4 + 3];
 
-        // Pack as ARGB (Android Bitmap format)
-        pixels[i] = (a << 24) | (r << 16) | (g << 8) | b;
+        // Pack as ARGB (Android Bitmap format). Compute in uint32_t: (a << 24) on an
+        // int-promoted uint8_t is signed-overflow UB when a >= 128 (M7).
+        pixels[i] = static_cast<int32_t>((a << 24) | (r << 16) | (g << 8) | b);
     }
 
     // Clean up
@@ -413,6 +437,54 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeDecode(
 
     env->ReleaseByteArrayElements(avifData, data, JNI_ABORT);
 
+    return nullptr;
+#endif
+}
+
+/**
+ * Parse-only AVIF metadata: returns an int[]{ width, height, hasAlpha(0|1), depth } or null.
+ * avifDecoderParse() populates dimensions and the alphaPresent flag WITHOUT decoding pixels, so
+ * this is cheap and works regardless of the platform's own AVIF support (used by getImageInfo).
+ */
+JNIEXPORT jintArray JNICALL
+Java_com_alfikri_rizky_avifkit_AvifConverter_nativeGetAvifInfo(
+    JNIEnv* env,
+    jobject /* this */,
+    jbyteArray avifData) {
+
+#if HAVE_LIBAVIF
+    if (!avifData) return nullptr;
+    jsize dataLength = env->GetArrayLength(avifData);
+    jbyte* data = env->GetByteArrayElements(avifData, nullptr);
+    if (!data) return nullptr;
+
+    avifDecoder* decoder = avifDecoderCreate();
+    if (!decoder) {
+        env->ReleaseByteArrayElements(avifData, data, JNI_ABORT);
+        return nullptr;
+    }
+
+    jintArray result = nullptr;
+    if (avifDecoderSetIOMemory(decoder, reinterpret_cast<const uint8_t*>(data), dataLength) == AVIF_RESULT_OK &&
+        avifDecoderParse(decoder) == AVIF_RESULT_OK) {
+        const avifImage* image = decoder->image;
+        // alphaPresent is valid after parse (image->alphaPlane isn't allocated until decode).
+        jint info[4] = {
+            static_cast<jint>(image->width),
+            static_cast<jint>(image->height),
+            decoder->alphaPresent ? 1 : 0,
+            static_cast<jint>(image->depth),
+        };
+        result = env->NewIntArray(4);
+        if (result) {
+            env->SetIntArrayRegion(result, 0, 4, info);
+        }
+    }
+
+    avifDecoderDestroy(decoder);
+    env->ReleaseByteArrayElements(avifData, data, JNI_ABORT);
+    return result;
+#else
     return nullptr;
 #endif
 }

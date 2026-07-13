@@ -153,61 +153,21 @@ actual class AvifConverter {
   actual suspend fun getImageInfo(input: ImageInput): ImageInfo =
     withContext(Dispatchers.Default) {
       when (input) {
-        is ImageInput.FromBytes -> {
-          val nsData = input.data.toNSData()
-          val image = UIImage.imageWithData(nsData) ?: throw AvifError.InvalidInput
-
-          val width = image.size.useContents { this.width }
-          val height = image.size.useContents { this.height }
-
-          ImageInfo(
-            width = (width * image.scale).toInt(),
-            height = (height * image.scale).toInt(),
-            format = detectFormat(input.data),
-            hasAlpha = imageHasAlpha(image),
-            fileSize = input.data.size.toLong(),
-          )
-        }
+        is ImageInput.FromBytes ->
+          imageInfoFromNSData(input.data.toNSData(), input.data.size.toLong())
 
         is ImageInput.FromPath -> {
           val url = NSURL.fileURLWithPath(input.path)
           val attributes = NSFileManager.defaultManager.attributesOfItemAtPath(input.path, null)
           val fileSize = (attributes?.get(NSFileSize) as? NSNumber)?.longValue ?: 0L
-
           val nsData =
             NSData.dataWithContentsOfURL(url)
               ?: throw AvifError.FileError("Failed to read file: ${input.path}")
-
-          val image = UIImage.imageWithData(nsData) ?: throw AvifError.InvalidInput
-
-          val width = image.size.useContents { this.width }
-          val height = image.size.useContents { this.height }
-
-          ImageInfo(
-            width = (width * image.scale).toInt(),
-            height = (height * image.scale).toInt(),
-            format = detectFormatFromPath(input.path),
-            hasAlpha = imageHasAlpha(image),
-            fileSize = fileSize,
-          )
+          imageInfoFromNSData(nsData, fileSize)
         }
 
-        is ImageInput.FromFile -> {
-          val data = input.file.readBytes()
-          val nsData = data.toNSData()
-          val image = UIImage.imageWithData(nsData) ?: throw AvifError.InvalidInput
-
-          val width = image.size.useContents { this.width }
-          val height = image.size.useContents { this.height }
-
-          ImageInfo(
-            width = (width * image.scale).toInt(),
-            height = (height * image.scale).toInt(),
-            format = detectFormat(data),
-            hasAlpha = imageHasAlpha(image),
-            fileSize = input.file.size(),
-          )
-        }
+        is ImageInput.FromFile ->
+          imageInfoFromNSData(input.file.readBytes().toNSData(), input.file.size())
 
         is ImageInput.FromBitmap -> {
           val image = input.bitmap
@@ -224,6 +184,50 @@ actual class AvifConverter {
       }
     }
 
+  private fun imageInfoFromNSData(nsData: NSData, fileSize: Long?): ImageInfo {
+    val header = nsData.headerBytes()
+    // AVIF: inspect via libavif (parse only). UIImage.imageWithData can't decode AVIF on iOS 15
+    // (UIKit AVIF support is iOS 16+), so the old path threw for files the library can decode.
+    if (AvifFormat.isAvif(header)) {
+      avifInfoFromData(nsData, fileSize)?.let {
+        return it
+      }
+    }
+    val image = UIImage.imageWithData(nsData) ?: throw AvifError.InvalidInput
+    val width = image.size.useContents { this.width }
+    val height = image.size.useContents { this.height }
+    return ImageInfo(
+      width = (width * image.scale).toInt(),
+      height = (height * image.scale).toInt(),
+      format = detectFormat(header),
+      hasAlpha = imageHasAlpha(image),
+      fileSize = fileSize,
+    )
+  }
+
+  /** Parse-only AVIF metadata via libavif (width/height/alpha), or null if it isn't parseable. */
+  private fun avifInfoFromData(data: NSData, fileSize: Long?): ImageInfo? = memScoped {
+    val decoder = avifDecoderCreate() ?: return@memScoped null
+    try {
+      val bytes = data.bytes?.reinterpret<UByteVar>()
+      if (avifDecoderSetIOMemory(decoder, bytes, data.length) != AVIF_RESULT_OK) {
+        return@memScoped null
+      }
+      if (avifDecoderParse(decoder) != AVIF_RESULT_OK) return@memScoped null
+      val image = decoder.pointed.image ?: return@memScoped null
+      ImageInfo(
+        width = image.pointed.width.toInt(),
+        height = image.pointed.height.toInt(),
+        format = ImageFormat.AVIF,
+        // alphaPresent is valid after parse (image->alphaPlane isn't allocated until decode).
+        hasAlpha = decoder.pointed.alphaPresent != AVIF_FALSE,
+        fileSize = fileSize,
+      )
+    } finally {
+      avifDecoderDestroy(decoder)
+    }
+  }
+
   // Private helper methods
 
   private suspend fun convertWithAdaptiveCompression(
@@ -232,22 +236,26 @@ actual class AvifConverter {
   ): NSData {
     val targetSize = options.maxSize!!
 
-    // Already-AVIF input: return it untouched only when it fits the target. Otherwise
-    // decode and run the adaptive loop on the pixels — convertStandard's passthrough
-    // would hand back the same oversized bytes on every attempt.
-    var effectiveInput = input
+    // Already-AVIF input: return it untouched only when it fits the target. Otherwise decode it
+    // (once) and re-encode — the passthrough would hand back the same oversized bytes forever.
     val avifBytes = readInputAvifBytes(input)
-    if (avifBytes != null) {
-      val nsData = avifBytes.toNSData()
-      if (avifBytes.size <= targetSize) return nsData
-      effectiveInput = ImageInput.FromBitmap(decodeAvifToImage(nsData))
-    }
+    val source: UIImage =
+      if (avifBytes != null) {
+        val nsData = avifBytes.toNSData()
+        if (avifBytes.size <= targetSize) return nsData
+        decodeAvifToImage(nsData)
+      } else {
+        // Decode the source ONCE; the loop only re-encodes it (M5 — previously each attempt
+        // re-read and re-decoded the input).
+        decodeSourceToImage(input)
+      }
 
-    return when (options.compressionStrategy) {
-      CompressionStrategy.SMART -> convertWithSmartCompression(effectiveInput, options, targetSize)
-      CompressionStrategy.STRICT ->
-        convertWithStrictCompression(effectiveInput, options, targetSize)
-    }
+    return AdaptiveCompression.compress(
+      options = options,
+      targetSize = targetSize,
+      encode = { opts -> encodeImageToAvif(source, opts) },
+      sizeOf = { it.length.toLong() },
+    )
   }
 
   /** The input's raw bytes when they already contain AVIF data, else null. */
@@ -265,204 +273,49 @@ actual class AvifConverter {
     return if (AvifFormat.isAvif(bytes)) bytes else null
   }
 
-  /**
-   * SMART compression: Find the highest quality image that still meets the target size Uses binary
-   * search for optimal quality setting
-   */
-  private suspend fun convertWithSmartCompression(
-    input: ImageInput,
-    options: EncodingOptions,
-    targetSize: Long,
-  ): NSData {
-    NSLog("AvifConverter: Using SMART compression strategy for target size: $targetSize bytes")
-
-    var bestResult: NSData? = null
-    var bestQuality = 0
-
-    // Binary search for optimal quality (40-100 range)
-    var minQuality = 40
-    var maxQuality = 100
-    var attempts = 0
-    val maxAttempts = 8 // Binary search typically needs log2(60) ≈ 6-8 attempts
-
-    while (minQuality <= maxQuality && attempts < maxAttempts) {
-      val testQuality = (minQuality + maxQuality) / 2
-      val testOptions = options.copy(quality = testQuality, maxSize = null)
-
-      val result = convertStandard(input, testOptions)
-      val resultSize = result.length.toLong()
-      attempts++
-
-      NSLog(
-        "AvifConverter: SMART attempt $attempts: quality=$testQuality, size=$resultSize, target=$targetSize"
-      )
-
-      if (resultSize <= targetSize) {
-        // Meets target - save this result and try higher quality
-        bestResult = result
-        bestQuality = testQuality
-        minQuality = testQuality + 1
-        NSLog("AvifConverter:   ✓ Meets target, trying higher quality")
-      } else {
-        // Too large - try lower quality
-        maxQuality = testQuality - 1
-        NSLog("AvifConverter:   ✗ Too large, trying lower quality")
-      }
-    }
-
-    // If we found a result that meets target, return it
-    if (bestResult != null) {
-      NSLog(
-        "AvifConverter: SMART compression succeeded: quality=$bestQuality, size=${bestResult.length}"
-      )
-      return bestResult
-    }
-
-    // If binary search failed, fall back to aggressive compression
-    NSLog("AvifConverter: SMART compression failed to meet target, using fallback")
-    return convertStandard(input, getFallbackOptions())
-  }
-
-  /**
-   * STRICT compression: Find the smallest possible image by trying all compression options
-   * Continues even after meeting target to maximize compression
-   */
-  private suspend fun convertWithStrictCompression(
-    input: ImageInput,
-    options: EncodingOptions,
-    targetSize: Long,
-  ): NSData {
-    NSLog("AvifConverter: Using STRICT compression strategy for target size: $targetSize bytes")
-
-    var currentOptions = options.copy(maxSize = null)
-    var attempt = 0
-    val maxAttempts = 10
-    var bestResult: NSData? = null
-    var targetMet = false
-
-    while (attempt < maxAttempts) {
-      val result = convertStandard(input, currentOptions)
-      val resultSize = result.length.toLong()
-
-      NSLog("AvifConverter: STRICT attempt $attempt: size=$resultSize, target=$targetSize")
-
-      // Check if we meet the size requirement
-      if (resultSize <= targetSize) {
-        targetMet = true
-        bestResult = result
-        NSLog("AvifConverter:   ✓ Meets target, continuing for maximum compression")
-      } else {
-        NSLog("AvifConverter:   ✗ Above target, adjusting parameters")
-      }
-
-      // Continue to next attempt for more aggressive compression
-      currentOptions =
-        adjustCompressionParameters(
-          current = currentOptions,
-          currentSize = resultSize,
-          targetSize = targetSize,
-          attempt = attempt,
-        )
-
-      attempt++
-    }
-
-    // Return the best result if we met the target at least once
-    if (bestResult != null) {
-      NSLog("AvifConverter: STRICT compression succeeded: final size=${bestResult.length}")
-      return bestResult
-    }
-
-    // Final attempt with minimum settings
-    NSLog("AvifConverter: STRICT compression failed to meet target, using fallback")
-    return convertStandard(input, getFallbackOptions())
-  }
-
-  private fun adjustCompressionParameters(
-    current: EncodingOptions,
-    currentSize: Long,
-    targetSize: Long,
-    attempt: Int,
-  ): EncodingOptions {
-    val reductionRatio = targetSize.toFloat() / currentSize
-
-    return when {
-      reductionRatio < 0.5 ->
-        current.copy(
-          quality = maxOf(40, (current.quality * 0.7).toInt()),
-          maxDimension = current.maxDimension?.let { (it * 0.75).toInt() } ?: 1920,
-          subsample = ChromaSubsample.YUV420,
-          alphaQuality = maxOf(50, current.alphaQuality - 20),
-          speed = minOf(10, current.speed + 2),
-        )
-
-      reductionRatio < 0.75 ->
-        current.copy(
-          quality = maxOf(50, current.quality - 15),
-          maxDimension = current.maxDimension?.let { (it * 0.85).toInt() } ?: 2560,
-          alphaQuality = maxOf(60, current.alphaQuality - 10),
-          speed = minOf(10, current.speed + 1),
-        )
-
-      else ->
-        current.copy(
-          quality = maxOf(60, current.quality - 8),
-          alphaQuality = maxOf(70, current.alphaQuality - 5),
-        )
-    }
-  }
-
-  private fun getFallbackOptions() =
-    EncodingOptions(
-      quality = 40,
-      speed = 10,
-      subsample = ChromaSubsample.YUV420,
-      alphaQuality = 50,
-      maxDimension = 1024,
-      preserveMetadata = false,
-    )
-
   private suspend fun convertStandard(input: ImageInput, options: EncodingOptions): NSData =
     withContext(Dispatchers.Default) {
       when (input) {
         is ImageInput.FromBytes -> {
           val nsData = input.data.toNSData()
-          if (AvifFormat.isAvif(input.data)) {
-            nsData
-          } else {
-            val uiImage = UIImage.imageWithData(nsData) ?: throw AvifError.InvalidInput
-            encodeImageToAvif(uiImage, options)
-          }
+          if (AvifFormat.isAvif(input.data)) nsData
+          else encodeImageToAvif(imageFromData(nsData), options)
         }
 
-        is ImageInput.FromBitmap -> {
-          encodeImageToAvif(input.bitmap, options)
-        }
+        is ImageInput.FromBitmap -> encodeImageToAvif(input.bitmap, options)
 
         is ImageInput.FromPath -> {
           val url = NSURL.fileURLWithPath(input.path)
           val data = NSData.dataWithContentsOfURL(url) ?: throw AvifError.InvalidInput
-
-          if (input.path.endsWith(".avif", ignoreCase = true)) {
-            data
-          } else {
-            val uiImage = UIImage.imageWithData(data) ?: throw AvifError.InvalidInput
-            encodeImageToAvif(uiImage, options)
-          }
+          // Sniff by content, not by ".avif" extension (M4).
+          if (AvifFormat.isAvif(data.headerBytes())) data
+          else encodeImageToAvif(imageFromData(data), options)
         }
 
         is ImageInput.FromFile -> {
           val byteData = input.file.readBytes()
           val nsData = byteData.toNSData()
-          if (AvifFormat.isAvif(byteData)) {
-            nsData
-          } else {
-            val uiImage = UIImage.imageWithData(nsData) ?: throw AvifError.InvalidInput
-            encodeImageToAvif(uiImage, options)
-          }
+          if (AvifFormat.isAvif(byteData)) nsData
+          else encodeImageToAvif(imageFromData(nsData), options)
         }
       }
     }
+
+  /** Decode any non-AVIF input to a UIImage. Reads the source exactly once. */
+  private suspend fun decodeSourceToImage(input: ImageInput): UIImage =
+    when (input) {
+      is ImageInput.FromBitmap -> input.bitmap
+      is ImageInput.FromBytes -> imageFromData(input.data.toNSData())
+      is ImageInput.FromFile -> imageFromData(input.file.readBytes().toNSData())
+      is ImageInput.FromPath -> {
+        val url = NSURL.fileURLWithPath(input.path)
+        val data = NSData.dataWithContentsOfURL(url) ?: throw AvifError.InvalidInput
+        imageFromData(data)
+      }
+    }
+
+  private fun imageFromData(data: NSData): UIImage =
+    UIImage.imageWithData(data) ?: throw AvifError.InvalidInput
 
   /**
    * Encode a UIImage to AVIF by calling libavif directly via cinterop. This is the iOS analog of
@@ -471,10 +324,13 @@ actual class AvifConverter {
    */
   private fun encodeImageToAvif(image: UIImage, options: EncodingOptions): NSData {
     try {
+      // Determine alpha from the ORIGINAL image: resizing renders into an RGBA context that always
+      // carries an alpha channel, so it can't be the source of truth (M6).
+      val hasAlpha = imageHasAlpha(image)
       // Orientation-normalize + optional downscale, then pull RGBA8888 bytes via CoreGraphics.
       val normalized = options.maxDimension?.let { resizeImage(image, it) } ?: image
       val rgba = uiImageToRgba(normalized) ?: throw AvifError.InvalidInput
-      return encodeRgbaToAvif(rgba.pixels, rgba.width, rgba.height, options)
+      return encodeRgbaToAvif(rgba.pixels, rgba.width, rgba.height, options, hasAlpha)
     } catch (e: AvifError) {
       throw e
     } catch (e: OutOfMemoryError) {
@@ -496,6 +352,7 @@ actual class AvifConverter {
     width: Int,
     height: Int,
     options: EncodingOptions,
+    hasAlpha: Boolean,
   ): NSData = memScoped {
     val pixelFormat =
       if (options.lossless) {
@@ -534,7 +391,10 @@ actual class AvifConverter {
       encoder.pointed.maxThreads = 4
       encoder.pointed.codecChoice = AVIF_CODEC_CHOICE_AUTO
 
-      val allocRes = avifImageAllocatePlanes(avifImage, AVIF_PLANES_YUV or AVIF_PLANES_A)
+      // Opaque sources skip the alpha plane entirely (M6): smaller output, no phantom alpha on
+      // decode. avifImageRGBToYUV also honors rgb.ignoreAlpha below, so the two agree.
+      val planes = if (hasAlpha) AVIF_PLANES_YUV or AVIF_PLANES_A else AVIF_PLANES_YUV
+      val allocRes = avifImageAllocatePlanes(avifImage, planes)
       if (allocRes != AVIF_RESULT_OK) {
         throw AvifError.EncodingFailed("libavif: ${avifResultToString(allocRes)?.toKString()}")
       }
@@ -551,6 +411,8 @@ actual class AvifConverter {
         // RGB→YUV (AVIF stores straight alpha); otherwise semi-transparent pixels
         // are encoded with darkened RGB values.
         rgb.alphaPremultiplied = AVIF_TRUE
+        // Opaque: treat the RGBA buffer as opaque so RGB→YUV neither reads nor emits alpha.
+        rgb.ignoreAlpha = if (hasAlpha) AVIF_FALSE else AVIF_TRUE
 
         val convertRes = avifImageRGBToYUV(avifImage, rgb.ptr)
         if (convertRes != AVIF_RESULT_OK) {
@@ -774,42 +636,42 @@ actual class AvifConverter {
   }
 
   /**
-   * Downscale a UIImage so its longest side is at most [maxDimension]; no-op if already smaller.
+   * Downscale a UIImage so its longest side is at most [maxDimension] PIXELS; no-op if already
+   * smaller. Uses the CGImage's pixel dimensions (not `image.size`, which is in points and lets
+   * `scale>1` images — screenshots, asset catalogs — dodge the resize, unlike Android). Renders
+   * with UIGraphicsImageRenderer (UIGraphicsBeginImageContext* is deprecated since iOS 17). (M8)
    */
   private fun resizeImage(image: UIImage, maxDimension: Int): UIImage {
-    val width = image.size.useContents { this.width }
-    val height = image.size.useContents { this.height }
+    val cgImage = image.CGImage ?: return image
+    val pxWidth = CGImageGetWidth(cgImage).toInt()
+    val pxHeight = CGImageGetHeight(cgImage).toInt()
 
-    if (width <= maxDimension && height <= maxDimension) {
+    if (pxWidth <= maxDimension && pxHeight <= maxDimension) {
       return image
     }
 
-    val scale = maxDimension.toDouble() / maxOf(width, height)
-    val newWidth = width * scale
-    val newHeight = height * scale
+    val scale = maxDimension.toDouble() / maxOf(pxWidth, pxHeight)
+    // Clamp to >= 1px so an extreme aspect ratio can't collapse the short side to 0.
+    val newWidth = (pxWidth * scale).toInt().coerceAtLeast(1)
+    val newHeight = (pxHeight * scale).toInt().coerceAtLeast(1)
 
-    memScoped {
+    return memScoped {
       val newSize =
         alloc<CGSize>().apply {
-          this.width = newWidth
-          this.height = newHeight
+          this.width = newWidth.toDouble()
+          this.height = newHeight.toDouble()
         }
-
-      UIGraphicsBeginImageContextWithOptions(newSize.readValue(), false, 1.0)
-
+      // scale = 1 so the output is exactly newWidth x newHeight PIXELS (not @2x/@3x points).
+      val format = UIGraphicsImageRendererFormat.defaultFormat().apply { setScale(1.0) }
+      val renderer = UIGraphicsImageRenderer(size = newSize.readValue(), format = format)
       val rect =
         alloc<CGRect>().apply {
           origin.x = 0.0
           origin.y = 0.0
-          size.width = newWidth
-          size.height = newHeight
+          size.width = newWidth.toDouble()
+          size.height = newHeight.toDouble()
         }
-      image.drawInRect(rect.readValue())
-
-      val resizedImage = UIGraphicsGetImageFromCurrentImageContext()
-      UIGraphicsEndImageContext()
-
-      return resizedImage ?: image
+      renderer.imageWithActions { image.drawInRect(rect.readValue()) }
     }
   }
 
@@ -861,6 +723,17 @@ actual class AvifConverter {
       usePinned { pinned ->
         memcpy(pinned.addressOf(0), this@toByteArray.bytes, this@toByteArray.length)
       }
+    }
+  }
+
+  /**
+   * Copy just the leading bytes needed for a format sniff, without materializing the whole file.
+   */
+  private fun NSData.headerBytes(): ByteArray {
+    val n = minOf(this.length.toInt(), AvifFormat.HEADER_CHECK_SIZE)
+    if (n <= 0) return ByteArray(0)
+    return ByteArray(n).apply {
+      usePinned { pinned -> memcpy(pinned.addressOf(0), this@headerBytes.bytes, n.toULong()) }
     }
   }
 }

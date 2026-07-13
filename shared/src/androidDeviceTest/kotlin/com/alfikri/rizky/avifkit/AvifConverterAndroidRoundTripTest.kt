@@ -157,6 +157,82 @@ class AvifConverterAndroidRoundTripTest {
     }
   }
 
+  /** M1 regression: HARDWARE bitmaps (Coil/Glide default) must encode, not throw. */
+  @Test
+  fun hardwareBitmap_encodes() {
+    runBlocking {
+      // Build a software bitmap, then round-trip through HARDWARE config to simulate what image
+      // loaders hand back. (HARDWARE bitmaps have no getPixels access.)
+      val software = solidBitmap(Color.argb(0xFF, 0x20, 0x80, 0xC0))
+      val hardware =
+        software.copy(Bitmap.Config.HARDWARE, false)
+          ?: return@runBlocking // device without HW bitmap support: nothing to test
+
+      val avif = AvifConverter().encodeAvif(ImageInput.from(hardware), Priority.SPEED)
+      assertTrue("hardware bitmap should encode to a real AVIF", avif.size > 12)
+      assertTrue(AvifConverter().isAvifFile(ImageInput.from(avif)))
+    }
+  }
+
+  /** M6 regression: opaque source omits the alpha channel; transparent keeps it. */
+  @Test
+  fun opaqueEncode_omitsAlpha_transparentKeepsIt() {
+    runBlocking {
+      val converter = AvifConverter()
+
+      val opaque = solidBitmap(Color.argb(0xFF, 0x30, 0x60, 0x90))
+      val opaqueAvif = converter.encodeAvif(ImageInput.from(opaque), Priority.SPEED)
+      val opaqueInfo = converter.getImageInfo(ImageInput.from(opaqueAvif))
+      assertTrue("opaque source must not encode an alpha channel", !opaqueInfo.hasAlpha)
+
+      val transparent = solidBitmap(Color.argb(0x80, 0x18, 0x30, 0x48))
+      val transparentAvif =
+        converter.encodeAvif(
+          ImageInput.from(transparent),
+          options = EncodingOptions(quality = 90, speed = 10, alphaQuality = 90),
+        )
+      val transparentInfo = converter.getImageInfo(ImageInput.from(transparentAvif))
+      assertTrue("transparent source must encode an alpha channel", transparentInfo.hasAlpha)
+    }
+  }
+
+  /** M2 regression: getImageInfo on AVIF reports real dims + alpha (works below API 31). */
+  @Test
+  fun getImageInfo_onAvif_reportsDimensionsAndAlpha() {
+    runBlocking {
+      val converter = AvifConverter()
+      val avif =
+        converter.encodeAvif(
+          ImageInput.from(solidBitmap(Color.argb(0x80, 0x40, 0x80, 0xC0))),
+          options = EncodingOptions(quality = 90, speed = 10, alphaQuality = 90),
+        )
+      val info = converter.getImageInfo(ImageInput.from(avif))
+      assertEquals(width, info.width)
+      assertEquals(height, info.height)
+      assertEquals(ImageFormat.AVIF, info.format)
+      assertTrue("alpha-bearing AVIF must report hasAlpha", info.hasAlpha)
+    }
+  }
+
+  /** M8 regression: an extreme aspect ratio must not crash resize (short side clamps to >= 1). */
+  @Test
+  fun extremeAspectRatio_resizesWithoutCrashing() {
+    runBlocking {
+      val wide = Bitmap.createBitmap(4000, 2, Bitmap.Config.ARGB_8888)
+      wide.eraseColor(Color.argb(0xFF, 0x10, 0x20, 0x30))
+
+      val avif =
+        AvifConverter()
+          .encodeAvif(
+            ImageInput.from(wide),
+            options = EncodingOptions(maxDimension = 1024, speed = 10),
+          )
+      val info = AvifConverter().getImageInfo(ImageInput.from(avif))
+      assertEquals(1024, info.width)
+      assertEquals("short side must clamp to 1px, not 0", 1, info.height)
+    }
+  }
+
   private fun assertPixelNear(expected: Int, actual: Int, tolerance: Int = 12) {
     val channels = listOf("A" to 24, "R" to 16, "G" to 8, "B" to 0)
     for ((name, shift) in channels) {

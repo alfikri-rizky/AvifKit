@@ -20,14 +20,14 @@
 | H6 | 🟠 High | ✅ **FIXED 2026-07-13** — CocoaPods podspec 404s — tag and download URL missing the `v` prefix | Distribution |
 | H7 | 🟠 High | ✅ **FIXED 2026-07-13** — Placeholder codec path ships mock data if build is misconfigured (violates own no-silent-fallback rule) | Build integrity |
 | H8 | 🟠 High | ✅ **FIXED 2026-07-13** — Effectively zero test coverage of codec paths + no CI on push/PR | Quality infra |
-| M1 | 🟡 Medium | Hardware bitmaps (Coil/Glide) fail to encode on Android | Android |
-| M2 | 🟡 Medium | `getImageInfo` misreports: `hasAlpha=true` for JPEGs (Android), fails on AVIF pre-API 31 / iOS 15 | API correctness |
-| M3 | 🟡 Medium | `isAvifFile` reads whole file for a 12-byte check and uses `runBlocking` (ANR risk) | Performance |
-| M4 | 🟡 Medium | `FromPath` AVIF passthrough decided by file extension, not content | Consistency |
-| M5 | 🟡 Medium | Adaptive compression re-decodes source image on every attempt (up to 10×) and is not cancellable | Performance |
-| M6 | 🟡 Medium | Alpha plane always encoded, even for opaque images → larger files | Output size |
-| M7 | 🟡 Medium | JNI hardening: OOB debug read for <16-byte input, uncaught `std::bad_alloc` aborts app | Native robustness |
-| M8 | 🟡 Medium | Resize edge cases: 0-dimension crash (Android), points-vs-pixels mismatch + deprecated API (iOS) | Codec |
+| M1 | 🟡 Medium | ✅ **FIXED 2026-07-13** — Hardware bitmaps (Coil/Glide) fail to encode on Android | Android |
+| M2 | 🟡 Medium | ✅ **FIXED 2026-07-13** — `getImageInfo` misreports: `hasAlpha=true` for JPEGs (Android), fails on AVIF pre-API 31 / iOS 15 | API correctness |
+| M3 | 🟡 Medium | ✅ **FIXED 2026-07-13** — `isAvifFile` reads whole file for a 12-byte check and uses `runBlocking` (ANR risk) | Performance |
+| M4 | 🟡 Medium | ✅ **FIXED 2026-07-13** — `FromPath` AVIF passthrough decided by file extension, not content | Consistency |
+| M5 | 🟡 Medium | ✅ **FIXED 2026-07-13** — Adaptive compression re-decodes source image on every attempt (up to 10×) and is not cancellable | Performance |
+| M6 | 🟡 Medium | ✅ **FIXED 2026-07-13** — Alpha plane always encoded, even for opaque images → larger files | Output size |
+| M7 | 🟡 Medium | ✅ **FIXED 2026-07-13** — JNI hardening: OOB debug read for <16-byte input, uncaught `std::bad_alloc` aborts app | Native robustness |
+| M8 | 🟡 Medium | ✅ **FIXED 2026-07-13** — Resize edge cases: 0-dimension crash (Android), points-vs-pixels mismatch + deprecated API (iOS) | Codec |
 | L1 | 🟢 Low | Empty `ByteArray` input crashes with non-`AvifError` exception on iOS | Edge case |
 | L2 | 🟢 Low | CPU-bound encoding runs on `Dispatchers.IO` (Android) | Performance |
 | L3 | 🟢 Low | `maxThreads = 4` hardcoded on both platforms | Performance |
@@ -223,6 +223,17 @@ README advertises `pod 'AvifKit', '~> 0.3.1'`, so any CocoaPods consumer is brok
 ---
 
 ## 🟡 Medium
+
+> **Status update (2026-07-13):** All eight Medium findings were fixed.
+> - **M5** (backbone): the duplicated SMART/STRICT/adjust/fallback logic now lives once in `commonMain/AdaptiveCompression.kt`, is cancellation-aware (`ensureActive()` per attempt), terminates STRICT early at a parameter fixed point, and — crucially — the platform decodes the source ONCE and the loop only re-encodes it. Unit-tested in `AdaptiveCompressionTest` (commonTest).
+> - **M1**: `ensureReadableBitmap` copies HARDWARE bitmaps to ARGB_8888 before `getPixels()`.
+> - **M2**: `getImageInfo` routes AVIF through a parse-only path (`nativeGetAvifInfo` on Android, `avifDecoderParse` on iOS) — exact dimensions/alpha, and works below API 31 / on iOS 15; non-AVIF alpha no longer comes from BitmapFactory's decode config (which reported alpha for every JPEG).
+> - **M3/M4**: header reads are bounded to `AvifFormat.HEADER_CHECK_SIZE`, and AVIF is detected by content on every input kind (FromPath no longer trusts the `.avif` extension).
+> - **M6**: opaque sources skip the alpha plane entirely (`rgb.ignoreAlpha` + YUV-only planes) — smaller files, no phantom alpha on decode.
+> - **M7**: 16-byte debug log guarded, the decode pixel `std::vector` guarded against `std::bad_alloc` (→ catchable `AvifError`, not `std::terminate`), and the `(a << 24)` ARGB pack computed in `uint32_t` to avoid signed-overflow UB.
+> - **M8**: resize clamps both sides to ≥ 1px (no 0-dimension crash); iOS now scales by CGImage PIXEL dimensions (not points) and renders via `UIGraphicsImageRenderer` (the deprecated `UIGraphicsBeginImageContext*` is gone).
+>
+> Verified: 37 tests green via `:shared:iosSimulatorArm64Test` (adds opaque-alpha, AVIF getImageInfo, pixel-resize, plus the AdaptiveCompression unit tests), and 10 instrumented tests green on an API 35 emulator via `:shared:connectedAndroidDeviceTest` (adds hardware-bitmap, opaque-alpha, AVIF getImageInfo, extreme-aspect-ratio). Full `:shared:build` + `ktfmtCheck` green; JNI wrapper syntax-checked in both HAVE_LIBAVIF modes.
 
 ### M1. Hardware bitmaps fail to encode (Android)
 

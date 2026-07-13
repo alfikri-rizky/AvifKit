@@ -7,7 +7,6 @@ import android.graphics.Matrix
 import android.os.Build
 import android.util.Log
 import androidx.exifinterface.media.ExifInterface
-import io.github.vinceglb.filekit.name
 import io.github.vinceglb.filekit.readBytes
 import io.github.vinceglb.filekit.size
 import io.github.vinceglb.filekit.write
@@ -29,9 +28,15 @@ actual class AvifConverter {
     speed: Int,
     subsample: Int,
     lossless: Boolean,
+    hasAlpha: Boolean,
   ): ByteArray?
 
   private external fun nativeDecode(avifData: ByteArray): DecodedImage?
+
+  // Parse-only metadata (no pixel decode): [width, height, hasAlpha(0|1), depth], or null on
+  // failure. Used by getImageInfo so AVIF inspection works below API 31 (where BitmapFactory
+  // can't decode AVIF) and reports alpha accurately.
+  private external fun nativeGetAvifInfo(avifData: ByteArray): IntArray?
 
   private external fun nativeGetVersion(): String
 
@@ -193,53 +198,16 @@ actual class AvifConverter {
   actual suspend fun getImageInfo(input: ImageInput): ImageInfo =
     withContext(Dispatchers.IO) {
       when (input) {
-        is ImageInput.FromBytes -> {
-          val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-          BitmapFactory.decodeByteArray(input.data, 0, input.data.size, options)
-          ImageInfo(
-            width = options.outWidth,
-            height = options.outHeight,
-            format = detectFormat(input.data),
-            hasAlpha =
-              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                options.outConfig == Bitmap.Config.ARGB_8888
-              } else false,
-            fileSize = input.data.size.toLong(),
-          )
-        }
-
+        is ImageInput.FromBytes -> imageInfoFromBytes(input.data, input.data.size.toLong())
         is ImageInput.FromPath -> {
           val file = File(input.path)
-          val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-          BitmapFactory.decodeFile(input.path, options)
-          ImageInfo(
-            width = options.outWidth,
-            height = options.outHeight,
-            format = detectFormatFromPath(input.path),
-            hasAlpha =
-              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                options.outConfig == Bitmap.Config.ARGB_8888
-              } else false,
-            fileSize = file.length(),
-          )
+          if (!file.exists()) throw AvifError.FileError("File not found: ${input.path}")
+          imageInfoFromBytes(file.readBytes(), file.length())
         }
-
         is ImageInput.FromFile -> {
           val data = input.file.readBytes()
-          val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-          BitmapFactory.decodeByteArray(data, 0, data.size, options)
-          ImageInfo(
-            width = options.outWidth,
-            height = options.outHeight,
-            format = detectFormat(data),
-            hasAlpha =
-              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                options.outConfig == Bitmap.Config.ARGB_8888
-              } else false,
-            fileSize = input.file.size(),
-          )
+          imageInfoFromBytes(data, input.file.size())
         }
-
         is ImageInput.FromBitmap -> {
           ImageInfo(
             width = input.bitmap.width,
@@ -251,6 +219,51 @@ actual class AvifConverter {
       }
     }
 
+  private fun imageInfoFromBytes(data: ByteArray, fileSize: Long): ImageInfo {
+    // AVIF: inspect via libavif (parse only, no pixel decode). This is exact for alpha and works
+    // below API 31, where BitmapFactory can't decode AVIF and would return -1 dimensions.
+    if (AvifFormat.isAvif(data)) {
+      nativeGetAvifInfo(data)?.let { info ->
+        return ImageInfo(
+          width = info[0],
+          height = info[1],
+          format = ImageFormat.AVIF,
+          hasAlpha = info[2] == 1,
+          fileSize = fileSize,
+        )
+      }
+    }
+
+    val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(data, 0, data.size, options)
+    val format = detectFormat(data)
+    return ImageInfo(
+      width = options.outWidth,
+      height = options.outHeight,
+      format = format,
+      // Without a full decode we can't know per-pixel alpha, so report the format's capability.
+      // (The old outConfig==ARGB_8888 test was BitmapFactory's default config and reported alpha
+      // for every JPEG.) AVIF above reports exact alpha via libavif.
+      hasAlpha = formatSupportsAlpha(format),
+      fileSize = fileSize,
+    )
+  }
+
+  /**
+   * Whether the container format can carry an alpha channel (best-effort without a full decode).
+   */
+  private fun formatSupportsAlpha(format: ImageFormat): Boolean =
+    when (format) {
+      ImageFormat.PNG,
+      ImageFormat.WEBP,
+      ImageFormat.GIF,
+      ImageFormat.HEIF,
+      ImageFormat.AVIF -> true
+      ImageFormat.JPEG,
+      ImageFormat.BMP,
+      ImageFormat.UNKNOWN -> false
+    }
+
   // Private helper methods
 
   private suspend fun convertWithAdaptiveCompression(
@@ -259,21 +272,25 @@ actual class AvifConverter {
   ): ByteArray {
     val targetSize = options.maxSize!!
 
-    // Already-AVIF input: return it untouched only when it fits the target. Otherwise
-    // decode and run the adaptive loop on the pixels — convertStandard's passthrough
-    // would hand back the same oversized bytes on every attempt.
-    var effectiveInput = input
+    // Already-AVIF input: return it untouched only when it fits the target. Otherwise decode it
+    // (once) and re-encode — the passthrough would hand back the same oversized bytes forever.
     val avifBytes = readInputAvifBytes(input)
-    if (avifBytes != null) {
-      if (avifBytes.size <= targetSize) return avifBytes
-      effectiveInput = ImageInput.FromBitmap(decodeAvifToBitmap(avifBytes))
-    }
+    val source: Bitmap =
+      if (avifBytes != null) {
+        if (avifBytes.size <= targetSize) return avifBytes
+        decodeAvifToBitmap(avifBytes)
+      } else {
+        // Decode + orient the source ONCE; the loop only re-encodes it (M5 — previously each
+        // attempt re-read and re-decoded the input).
+        decodeSourceToBitmap(input)
+      }
 
-    return when (options.compressionStrategy) {
-      CompressionStrategy.SMART -> convertWithSmartCompression(effectiveInput, options, targetSize)
-      CompressionStrategy.STRICT ->
-        convertWithStrictCompression(effectiveInput, options, targetSize)
-    }
+    return AdaptiveCompression.compress(
+      options = options,
+      targetSize = targetSize,
+      encode = { opts -> encodeBitmapToAvif(source, opts) },
+      sizeOf = { it.size.toLong() },
+    )
   }
 
   /** The input's raw bytes when they already contain AVIF data, else null. */
@@ -289,222 +306,62 @@ actual class AvifConverter {
     return if (AvifFormat.isAvif(bytes)) bytes else null
   }
 
-  /**
-   * SMART compression: Find the highest quality image that still meets the target size Uses binary
-   * search for optimal quality setting
-   */
-  private suspend fun convertWithSmartCompression(
-    input: ImageInput,
-    options: EncodingOptions,
-    targetSize: Long,
-  ): ByteArray {
-    Log.d(TAG, "Using SMART compression strategy for target size: $targetSize bytes")
-
-    var bestResult: ByteArray? = null
-    var bestQuality = 0
-
-    // Binary search for optimal quality (40-100 range)
-    var minQuality = 40
-    var maxQuality = 100
-    var attempts = 0
-    val maxAttempts = 8 // Binary search typically needs log2(60) ≈ 6-8 attempts
-
-    while (minQuality <= maxQuality && attempts < maxAttempts) {
-      val testQuality = (minQuality + maxQuality) / 2
-      val testOptions = options.copy(quality = testQuality, maxSize = null)
-
-      val result = convertStandard(input, testOptions)
-      attempts++
-
-      Log.d(
-        TAG,
-        "SMART attempt $attempts: quality=$testQuality, size=${result.size}, target=$targetSize",
-      )
-
-      if (result.size <= targetSize) {
-        // Meets target - save this result and try higher quality
-        bestResult = result
-        bestQuality = testQuality
-        minQuality = testQuality + 1
-        Log.d(TAG, "  ✓ Meets target, trying higher quality")
-      } else {
-        // Too large - try lower quality
-        maxQuality = testQuality - 1
-        Log.d(TAG, "  ✗ Too large, trying lower quality")
-      }
-    }
-
-    // If we found a result that meets target, return it
-    if (bestResult != null) {
-      Log.d(TAG, "SMART compression succeeded: quality=$bestQuality, size=${bestResult.size}")
-      return bestResult
-    }
-
-    // If binary search failed, fall back to aggressive compression
-    Log.w(TAG, "SMART compression failed to meet target, using fallback")
-    return convertStandard(input, getFallbackOptions())
-  }
-
-  /**
-   * STRICT compression: Find the smallest possible image by trying all compression options
-   * Continues even after meeting target to maximize compression
-   */
-  private suspend fun convertWithStrictCompression(
-    input: ImageInput,
-    options: EncodingOptions,
-    targetSize: Long,
-  ): ByteArray {
-    Log.d(TAG, "Using STRICT compression strategy for target size: $targetSize bytes")
-
-    var currentOptions = options.copy(maxSize = null)
-    var attempt = 0
-    val maxAttempts = 10
-    var bestResult: ByteArray? = null
-    var targetMet = false
-
-    while (attempt < maxAttempts) {
-      val result = convertStandard(input, currentOptions)
-
-      Log.d(TAG, "STRICT attempt $attempt: size=${result.size}, target=$targetSize")
-
-      // Check if we meet the size requirement
-      if (result.size <= targetSize) {
-        targetMet = true
-        bestResult = result
-        Log.d(TAG, "  ✓ Meets target, continuing for maximum compression")
-      } else {
-        Log.d(TAG, "  ✗ Above target, adjusting parameters")
-      }
-
-      // Continue to next attempt for more aggressive compression
-      currentOptions =
-        adjustCompressionParameters(
-          current = currentOptions,
-          currentSize = result.size.toLong(),
-          targetSize = targetSize,
-          attempt = attempt,
-        )
-
-      attempt++
-    }
-
-    // Return the best result if we met the target at least once
-    if (bestResult != null) {
-      Log.d(TAG, "STRICT compression succeeded: final size=${bestResult.size}")
-      return bestResult
-    }
-
-    // Final attempt with minimum settings
-    Log.w(TAG, "STRICT compression failed to meet target, using fallback")
-    return convertStandard(input, getFallbackOptions())
-  }
-
-  private fun adjustCompressionParameters(
-    current: EncodingOptions,
-    currentSize: Long,
-    targetSize: Long,
-    attempt: Int,
-  ): EncodingOptions {
-    val reductionRatio = targetSize.toFloat() / currentSize
-
-    return when {
-      // Need >50% reduction
-      reductionRatio < 0.5 ->
-        current.copy(
-          quality = maxOf(40, (current.quality * 0.7).toInt()),
-          maxDimension = current.maxDimension?.let { (it * 0.75).toInt() } ?: 1920,
-          subsample = ChromaSubsample.YUV420,
-          alphaQuality = maxOf(50, current.alphaQuality - 20),
-          speed = minOf(10, current.speed + 2),
-        )
-
-      // Need 25-50% reduction
-      reductionRatio < 0.75 ->
-        current.copy(
-          quality = maxOf(50, current.quality - 15),
-          maxDimension = current.maxDimension?.let { (it * 0.85).toInt() } ?: 2560,
-          alphaQuality = maxOf(60, current.alphaQuality - 10),
-          speed = minOf(10, current.speed + 1),
-        )
-
-      // Need <25% reduction
-      else ->
-        current.copy(
-          quality = maxOf(60, current.quality - 8),
-          alphaQuality = maxOf(70, current.alphaQuality - 5),
-        )
-    }
-  }
-
-  private fun getFallbackOptions() =
-    EncodingOptions(
-      quality = 40,
-      speed = 10,
-      subsample = ChromaSubsample.YUV420,
-      alphaQuality = 50,
-      maxDimension = 1024,
-      preserveMetadata = false,
-    )
-
   private suspend fun convertStandard(input: ImageInput, options: EncodingOptions): ByteArray =
     withContext(Dispatchers.IO) {
       when (input) {
-        is ImageInput.FromBytes -> {
-          if (AvifFormat.isAvif(input.data)) {
-            input.data
-          } else {
-            val bitmap =
-              BitmapFactory.decodeByteArray(input.data, 0, input.data.size)
-                ?: throw AvifError.DecodingFailed("Failed to decode input image")
-            // Apply EXIF orientation if present
-            val orientedBitmap = applyExifOrientation(bitmap, input.data)
-            encodeBitmapToAvif(orientedBitmap, options)
-          }
-        }
+        is ImageInput.FromBytes ->
+          if (AvifFormat.isAvif(input.data)) input.data
+          else encodeBitmapToAvif(decodeBytesToOrientedBitmap(input.data), options)
 
-        is ImageInput.FromBitmap -> {
-          // Bitmap is already in memory, use as-is
-          encodeBitmapToAvif(input.bitmap, options)
-        }
+        is ImageInput.FromBitmap -> encodeBitmapToAvif(input.bitmap, options)
 
         is ImageInput.FromPath -> {
           val file = File(input.path)
-          if (!file.exists()) {
-            throw AvifError.FileError("File not found: ${input.path}")
-          }
-          if (file.extension.lowercase() == "avif") {
-            file.readBytes()
-          } else {
-            val bitmap =
-              BitmapFactory.decodeFile(input.path)
-                ?: throw AvifError.DecodingFailed("Failed to decode file: ${input.path}")
-            // Apply EXIF orientation from file
-            val orientedBitmap = applyExifOrientationFromFile(bitmap, input.path)
-            encodeBitmapToAvif(orientedBitmap, options)
-          }
+          if (!file.exists()) throw AvifError.FileError("File not found: ${input.path}")
+          // Sniff by content, not by ".avif" extension (M4): a mislabeled file must not pass
+          // through unconverted, and a real AVIF with the wrong name must not go to BitmapFactory.
+          val data = file.readBytes()
+          if (AvifFormat.isAvif(data)) data
+          else encodeBitmapToAvif(decodeBytesToOrientedBitmap(data), options)
         }
 
         is ImageInput.FromFile -> {
           val data = input.file.readBytes()
-          if (AvifFormat.isAvif(data)) {
-            data
-          } else {
-            val bitmap =
-              BitmapFactory.decodeByteArray(data, 0, data.size)
-                ?: throw AvifError.DecodingFailed("Failed to decode file: ${input.file.name}")
-            // Apply EXIF orientation if present
-            val orientedBitmap = applyExifOrientation(bitmap, data)
-            encodeBitmapToAvif(orientedBitmap, options)
-          }
+          if (AvifFormat.isAvif(data)) data
+          else encodeBitmapToAvif(decodeBytesToOrientedBitmap(data), options)
         }
       }
     }
 
+  /** Decode any non-AVIF input to an EXIF-oriented bitmap. Reads the source exactly once. */
+  private suspend fun decodeSourceToBitmap(input: ImageInput): Bitmap =
+    when (input) {
+      is ImageInput.FromBitmap -> input.bitmap
+      is ImageInput.FromBytes -> decodeBytesToOrientedBitmap(input.data)
+      is ImageInput.FromFile -> decodeBytesToOrientedBitmap(input.file.readBytes())
+      is ImageInput.FromPath -> {
+        val file = File(input.path)
+        if (!file.exists()) throw AvifError.FileError("File not found: ${input.path}")
+        decodeBytesToOrientedBitmap(file.readBytes())
+      }
+    }
+
+  private fun decodeBytesToOrientedBitmap(data: ByteArray): Bitmap {
+    val bitmap =
+      BitmapFactory.decodeByteArray(data, 0, data.size)
+        ?: throw AvifError.DecodingFailed("Failed to decode input image")
+    return applyExifOrientation(bitmap, data)
+  }
+
   private fun encodeBitmapToAvif(bitmap: Bitmap, options: EncodingOptions): ByteArray {
     try {
+      // HARDWARE bitmaps (Coil/Glide default on API 26+) have no accessible pixels; copy to a
+      // readable config first, else getPixels() throws (M1). Must happen before resize/getPixels.
+      val readable = ensureReadableBitmap(bitmap)
+
       // Resize if needed
       val resizedBitmap =
-        options.maxDimension?.let { maxDim -> resizeBitmap(bitmap, maxDim) } ?: bitmap
+        options.maxDimension?.let { maxDim -> resizeBitmap(readable, maxDim) } ?: readable
 
       if (!nativeLibraryLoaded) {
         throw AvifError.EncodingFailed(
@@ -524,6 +381,10 @@ actual class AvifConverter {
           ChromaSubsample.YUV420 -> 2
         }
 
+      // Skip the alpha plane for opaque sources (M6): smaller output, and no phantom alpha on
+      // decode. A JPEG-backed bitmap reports hasAlpha()==false.
+      val hasAlpha = resizedBitmap.hasAlpha()
+
       // Encode using native method (works with or without libavif)
       return nativeEncode(
         pixels,
@@ -534,6 +395,7 @@ actual class AvifConverter {
         options.speed,
         subsampleValue,
         options.lossless,
+        hasAlpha,
       ) ?: throw AvifError.EncodingFailed("Native encoding failed")
     } catch (e: OutOfMemoryError) {
       Log.e(TAG, "OutOfMemoryError during AVIF encoding", e)
@@ -627,6 +489,15 @@ actual class AvifConverter {
     }
   }
 
+  /** Ensure a bitmap's pixels are readable via getPixels() (HARDWARE bitmaps are not). */
+  private fun ensureReadableBitmap(bitmap: Bitmap): Bitmap {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && bitmap.config == Bitmap.Config.HARDWARE) {
+      return bitmap.copy(Bitmap.Config.ARGB_8888, false)
+        ?: throw AvifError.EncodingFailed("Failed to convert hardware bitmap to a readable format")
+    }
+    return bitmap
+  }
+
   private fun bitmapToByteArray(bitmap: Bitmap): ByteArray {
     val pixels = IntArray(bitmap.width * bitmap.height)
     bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
@@ -651,8 +522,10 @@ actual class AvifConverter {
     }
 
     val scale = maxDimension.toFloat() / maxOf(width, height)
-    val newWidth = (width * scale).toInt()
-    val newHeight = (height * scale).toInt()
+    // Clamp to >= 1: an extreme aspect ratio (e.g. a 20000x1 line) would otherwise round the short
+    // side to 0 and crash createScaledBitmap (M8).
+    val newWidth = (width * scale).toInt().coerceAtLeast(1)
+    val newHeight = (height * scale).toInt().coerceAtLeast(1)
 
     return Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
   }
@@ -696,19 +569,6 @@ actual class AvifConverter {
       rotateImageIfRequired(bitmap, orientation)
     } catch (e: Exception) {
       Log.w(TAG, "Failed to read EXIF orientation from byte array", e)
-      bitmap // Return original bitmap if EXIF reading fails
-    }
-  }
-
-  /** Apply EXIF orientation transformation to bitmap from file path */
-  private fun applyExifOrientationFromFile(bitmap: Bitmap, filePath: String): Bitmap {
-    return try {
-      val exif = ExifInterface(filePath)
-      val orientation =
-        exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
-      rotateImageIfRequired(bitmap, orientation)
-    } catch (e: Exception) {
-      Log.w(TAG, "Failed to read EXIF orientation from file: $filePath", e)
       bitmap // Return original bitmap if EXIF reading fails
     }
   }
