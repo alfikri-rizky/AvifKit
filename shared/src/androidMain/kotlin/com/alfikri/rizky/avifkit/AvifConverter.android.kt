@@ -25,8 +25,10 @@ actual class AvifConverter {
     width: Int,
     height: Int,
     quality: Int,
+    alphaQuality: Int,
     speed: Int,
     subsample: Int,
+    lossless: Boolean,
   ): ByteArray?
 
   private external fun nativeDecode(avifData: ByteArray): DecodedImage?
@@ -488,8 +490,10 @@ actual class AvifConverter {
         resizedBitmap.width,
         resizedBitmap.height,
         options.quality,
+        options.alphaQuality,
         options.speed,
         subsampleValue,
+        options.lossless,
       ) ?: throw AvifError.EncodingFailed("Native encoding failed")
     } catch (e: OutOfMemoryError) {
       Log.e(TAG, "OutOfMemoryError during AVIF encoding", e)

@@ -43,12 +43,18 @@ sealed class ImageInput {
 /**
  * Encoding options for AVIF conversion
  *
- * @param quality Base quality (0-100). May be auto-adjusted if maxSize is set.
+ * @param quality Base quality (0-100). May be auto-adjusted if maxSize is set. Ignored when
+ *   [lossless] is true.
  * @param speed Encoding speed (0-10). 0=slowest/best, 10=fastest
- * @param subsample Chroma subsampling mode
- * @param alphaQuality Quality for alpha channel (0-100)
- * @param lossless Enable lossless compression
- * @param preserveMetadata Keep EXIF and other metadata
+ * @param subsample Chroma subsampling mode. Ignored when [lossless] is true (lossless forces
+ *   YUV444, since chroma subsampling is inherently lossy).
+ * @param alphaQuality Quality for alpha channel (0-100). Ignored when [lossless] is true.
+ * @param lossless Enable true lossless compression. Overrides [quality], [alphaQuality], and
+ *   [subsample]: encodes at quality 100 with YUV444 and identity matrix coefficients. Output files
+ *   are significantly larger than lossy output.
+ * @param preserveMetadata NOT YET IMPLEMENTED — currently a no-op on both platforms. EXIF
+ *   orientation is always baked into the pixels before encoding instead; other metadata (EXIF
+ *   fields, XMP, ICC) is not copied to the output.
  * @param maxDimension Auto-resize if larger. May be auto-adjusted if maxSize is set.
  * @param maxSize Target maximum file size in bytes. If set, will override other params to achieve
  *   this size through adaptive compression.
@@ -93,7 +99,8 @@ data class EncodingOptions(
             speed = 5,
             subsample = ChromaSubsample.YUV444,
             alphaQuality = 98,
-            preserveMetadata = true,
+            // preserveMetadata is not implemented yet; keep the preset honest until it is.
+            preserveMetadata = false,
             maxDimension = 4096,
           )
         Priority.STORAGE ->

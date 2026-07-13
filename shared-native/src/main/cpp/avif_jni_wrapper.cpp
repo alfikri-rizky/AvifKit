@@ -27,11 +27,13 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeEncode(
     jint width,
     jint height,
     jint quality,
+    jint alphaQuality,
     jint speed,
-    jint subsample) {
+    jint subsample,
+    jboolean lossless) {
 
-    LOGI("nativeEncode: %dx%d, quality=%d, speed=%d, subsample=%d",
-         width, height, quality, speed, subsample);
+    LOGI("nativeEncode: %dx%d, quality=%d, alphaQuality=%d, speed=%d, subsample=%d, lossless=%d",
+         width, height, quality, alphaQuality, speed, subsample, (int)lossless);
 
     // Get pixel data from Java
     jbyte* pixelData = env->GetByteArrayElements(pixels, nullptr);
@@ -67,20 +69,27 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeEncode(
         return nullptr;
     }
 
-    // Set encoding parameters
-    encoder->quality = quality;
-    encoder->qualityAlpha = quality;  // Same quality for alpha
+    // Set encoding parameters. For lossless, both channels must be
+    // AVIF_QUALITY_LOSSLESS (100) — see also the identity matrix below.
+    encoder->quality = lossless ? AVIF_QUALITY_LOSSLESS : quality;
+    encoder->qualityAlpha = lossless ? AVIF_QUALITY_LOSSLESS : alphaQuality;
     encoder->speed = speed;
     encoder->maxThreads = 4;  // Use up to 4 threads
     encoder->codecChoice = AVIF_CODEC_CHOICE_AUTO;
 
-    // Determine pixel format from subsample
+    // Determine pixel format from subsample. True lossless requires identity
+    // matrix coefficients, which libavif only supports with YUV444 — any chroma
+    // subsampling is inherently lossy, so it overrides the requested subsample.
     avifPixelFormat pixelFormat;
-    switch (subsample) {
-        case 0: pixelFormat = AVIF_PIXEL_FORMAT_YUV444; break;
-        case 1: pixelFormat = AVIF_PIXEL_FORMAT_YUV422; break;
-        case 2:
-        default: pixelFormat = AVIF_PIXEL_FORMAT_YUV420; break;
+    if (lossless) {
+        pixelFormat = AVIF_PIXEL_FORMAT_YUV444;
+    } else {
+        switch (subsample) {
+            case 0: pixelFormat = AVIF_PIXEL_FORMAT_YUV444; break;
+            case 1: pixelFormat = AVIF_PIXEL_FORMAT_YUV422; break;
+            case 2:
+            default: pixelFormat = AVIF_PIXEL_FORMAT_YUV420; break;
+        }
     }
 
     // Create AVIF image
@@ -90,6 +99,11 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeEncode(
         env->ReleaseByteArrayElements(pixels, pixelData, JNI_ABORT);
         LOGE("Failed to create AVIF image");
         return nullptr;
+    }
+    if (lossless) {
+        // Without identity coefficients the RGB→YUV transform rounds, and
+        // quality=100 alone is NOT lossless. avifImageCreate defaults to full range.
+        image->matrixCoefficients = AVIF_MATRIX_COEFFICIENTS_IDENTITY;
     }
 
     // Allocate image planes

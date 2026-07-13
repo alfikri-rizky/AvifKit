@@ -469,15 +469,25 @@ actual class AvifConverter {
     options: EncodingOptions,
   ): NSData = memScoped {
     val pixelFormat =
-      when (options.subsample) {
-        ChromaSubsample.YUV444 -> AVIF_PIXEL_FORMAT_YUV444
-        ChromaSubsample.YUV422 -> AVIF_PIXEL_FORMAT_YUV422
-        ChromaSubsample.YUV420 -> AVIF_PIXEL_FORMAT_YUV420
-      }
+      if (options.lossless) {
+        // True lossless requires identity matrix coefficients, which libavif only
+        // supports with YUV444 — any chroma subsampling is inherently lossy.
+        AVIF_PIXEL_FORMAT_YUV444
+      } else
+        when (options.subsample) {
+          ChromaSubsample.YUV444 -> AVIF_PIXEL_FORMAT_YUV444
+          ChromaSubsample.YUV422 -> AVIF_PIXEL_FORMAT_YUV422
+          ChromaSubsample.YUV420 -> AVIF_PIXEL_FORMAT_YUV420
+        }
 
     val avifImage =
       avifImageCreate(width.toUInt(), height.toUInt(), 8u, pixelFormat)
         ?: throw AvifError.EncodingFailed("libavif: failed to create image")
+    if (options.lossless) {
+      // Without identity coefficients the RGB→YUV transform rounds and quality=100
+      // alone is NOT lossless. (avifImageCreate defaults yuvRange to full range.)
+      avifImage.pointed.matrixCoefficients = AVIF_MATRIX_COEFFICIENTS_IDENTITY.convert()
+    }
     val encoder =
       avifEncoderCreate()
         ?: run {
@@ -487,9 +497,10 @@ actual class AvifConverter {
 
     try {
       // Quality (0-100), alpha quality, and speed map straight onto the encoder, matching the
-      // Android wrapper. For lossless, libavif uses quality == AVIF_QUALITY_LOSSLESS (100).
+      // Android wrapper. For lossless, both channels must be AVIF_QUALITY_LOSSLESS (100).
       encoder.pointed.quality = if (options.lossless) AVIF_QUALITY_LOSSLESS else options.quality
-      encoder.pointed.qualityAlpha = options.alphaQuality
+      encoder.pointed.qualityAlpha =
+        if (options.lossless) AVIF_QUALITY_LOSSLESS else options.alphaQuality
       encoder.pointed.speed = options.speed
       encoder.pointed.maxThreads = 4
       encoder.pointed.codecChoice = AVIF_CODEC_CHOICE_AUTO
@@ -506,6 +517,11 @@ actual class AvifConverter {
         rgb.rowBytes = (width * 4).toUInt()
         rgb.format = AVIF_RGB_FORMAT_RGBA
         rgb.depth = 8u
+        // uiImageToRgba draws through CGBitmapContext, which can only produce
+        // PREMULTIPLIED alpha. Declaring it so makes libavif unpremultiply during
+        // RGB→YUV (AVIF stores straight alpha); otherwise semi-transparent pixels
+        // are encoded with darkened RGB values.
+        rgb.alphaPremultiplied = AVIF_TRUE
 
         val convertRes = avifImageRGBToYUV(avifImage, rgb.ptr)
         if (convertRes != AVIF_RESULT_OK) {
@@ -570,6 +586,11 @@ actual class AvifConverter {
           avifRGBImageSetDefaults(rgb.ptr, decodedImage)
           rgb.format = AVIF_RGB_FORMAT_RGBA
           rgb.depth = 8u
+          // rgbaToUIImage wraps this buffer in a CGImage declared as PREMULTIPLIED
+          // alpha (the only mode CGBitmapContext supports), so ask libavif to
+          // premultiply during YUV→RGB. Without this, straight-alpha bytes get
+          // displayed as premultiplied — washed-out/fringed transparency.
+          rgb.alphaPremultiplied = AVIF_TRUE
           val rgbAllocRes = avifRGBImageAllocatePixels(rgb.ptr)
           if (rgbAllocRes != AVIF_RESULT_OK) {
             throw AvifError.DecodingFailed(
