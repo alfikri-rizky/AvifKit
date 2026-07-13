@@ -1,5 +1,6 @@
 #include <jni.h>
 #include <android/log.h>
+#include <unistd.h>
 #include <vector>
 #include <memory>
 #include <cstring>
@@ -13,6 +14,15 @@
 #define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 #define LOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
+
+// Codec thread count from the actual online CPU count (was hardcoded 4), capped so small
+// images don't pay coordination overhead that outweighs the gain.
+static int recommendedThreadCount() {
+    long n = sysconf(_SC_NPROCESSORS_ONLN);
+    if (n < 1) n = 1;
+    if (n > 8) n = 8;
+    return static_cast<int>(n);
+}
 
 extern "C" {
 
@@ -75,7 +85,7 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeEncode(
     encoder->quality = lossless ? AVIF_QUALITY_LOSSLESS : quality;
     encoder->qualityAlpha = lossless ? AVIF_QUALITY_LOSSLESS : alphaQuality;
     encoder->speed = speed;
-    encoder->maxThreads = 4;  // Use up to 4 threads
+    encoder->maxThreads = recommendedThreadCount();
     encoder->codecChoice = AVIF_CODEC_CHOICE_AUTO;
 
     // Determine pixel format from subsample. True lossless requires identity
@@ -255,7 +265,7 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeDecode(
     }
 
     // Set decoder options
-    decoder->maxThreads = 4;
+    decoder->maxThreads = recommendedThreadCount();
     decoder->ignoreXMP = AVIF_TRUE;
     decoder->ignoreExif = AVIF_FALSE;  // IMPORTANT: Preserve EXIF for orientation data
 

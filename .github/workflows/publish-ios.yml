@@ -1,21 +1,30 @@
 name: Publish iOS
 
+# Release procedure (changed to avoid the tag force-move race, CODE_REVIEW.md L9):
+# instead of pushing a tag first (which the workflow then had to force-MOVE onto the
+# checksum commit — breaking any SPM resolve that happened in between), run this workflow
+# manually with the target version. It builds from main, commits the checksum into
+# Package.swift, then creates the tag ONCE on that commit and cuts the release. The tag
+# never moves, so SPM always resolves a Package.swift whose checksum matches the asset.
 on:
-  push:
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+'  # Trigger on version tags (e.g., v0.1.1, v1.2.3)
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, e.g. 0.3.2 (no "v" prefix)'
+        required: true
 
 permissions:
-  contents: write  # Required to create releases and push commits
+  contents: write  # Required to create releases, push commits, and create the tag
 
 jobs:
   publish-ios:
     runs-on: macos-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout main
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0  # Full history for git operations
 
       - name: Set up JDK
@@ -56,11 +65,20 @@ jobs:
           chmod +x scripts/build-ios-libavif.sh
           ./scripts/build-ios-libavif.sh
 
-      - name: Extract version from tag
+      - name: Determine and validate version
         id: get_version
         run: |
-          # Remove 'v' prefix from tag (v0.1.1 -> 0.1.1)
-          VERSION=${GITHUB_REF#refs/tags/v}
+          VERSION="${{ github.event.inputs.version }}"
+          VERSION="${VERSION#v}"  # tolerate a stray leading "v"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid version '$VERSION' — expected x.y.z"
+            exit 1
+          fi
+          # Refuse to re-release an existing tag (would otherwise need a force-move again).
+          if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+            echo "::error::Tag v$VERSION already exists — bump the version"
+            exit 1
+          fi
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
 
@@ -84,11 +102,7 @@ jobs:
           VERSION="v${{ steps.get_version.outputs.VERSION }}"
           CHECKSUM="${{ steps.checksum.outputs.CHECKSUM }}"
 
-          # Checkout main branch (we're on detached HEAD from the tag)
-          git fetch origin main
-          git checkout main
-
-          # Replace any existing checksum (placeholder or old) with the real one
+          # Already on main (checked out above). Replace any existing checksum with the real one.
           sed -i '' "s|checksum: \"[a-fA-F0-9]*\"|checksum: \"$CHECKSUM\"|" Package.swift
           sed -i '' "s|checksum: \"CHECKSUM_PLACEHOLDER_UPDATE_AFTER_BUILD\"|checksum: \"$CHECKSUM\"|" Package.swift
 
@@ -100,27 +114,27 @@ jobs:
           echo "Version: $VERSION"
           cat Package.swift | grep -A1 "checksum"
 
-      - name: Commit Package.swift and update tag
+      - name: Commit Package.swift and create tag (once)
         run: |
           VERSION="v${{ steps.get_version.outputs.VERSION }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Package.swift
-          if git diff --staged --quiet; then
-            echo "No changes to commit"
-          else
-            git commit -m "Update Package.swift checksum for release ${{ steps.get_version.outputs.VERSION }} [skip ci]"
-            git push origin main
+          # Commit the checksum (there is always a change: at minimum the download URL version).
+          git commit -m "Update Package.swift checksum for release ${{ steps.get_version.outputs.VERSION }} [skip ci]"
+          git push origin main
 
-            # Move the tag to this new commit so SPM resolves the correct Package.swift
-            git tag -f "$VERSION"
-            git push origin "$VERSION" --force
-            echo "✅ Tag $VERSION updated to include correct checksum"
-          fi
+          # Create the tag ONCE, on the commit that already carries the correct checksum. No
+          # force-move — the tag SPM resolves is immutable and always matches the released asset.
+          git tag "$VERSION"
+          git push origin "$VERSION"
+          echo "✅ Tagged $VERSION on the checksum commit"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
+          # Explicit tag (workflow_dispatch has no tag ref); attaches to the tag created above.
+          tag_name: v${{ steps.get_version.outputs.VERSION }}
           files: build/release/Shared.xcframework.zip
           body: |
             ## AvifKit v${{ steps.get_version.outputs.VERSION }}
@@ -164,8 +178,8 @@ jobs:
             - 📱 Native performance using libavif
             - 🔄 Kotlin Multiplatform shared code
             - 📂 PlatformFile API for cross-platform file operations
-            - ✅ Android: libavif bundled in AAR automatically
-            - ✅ iOS: libavif resolved via SPM/CocoaPods automatically
+            - ✅ Android: libavif bundled in the AAR automatically
+            - ✅ iOS: libavif embedded in the self-contained XCFramework (no extra codec dependency)
 
             ### 🔐 XCFramework Checksum
             ```

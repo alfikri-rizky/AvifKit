@@ -272,7 +272,7 @@ pod 'AvifKit', '~> 0.3.1'
 
 **Recommended alternatives:**
 1. **Swift Package Manager** (fully supported, recommended)
-2. **Direct XCFramework** from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.2.3)
+2. **Direct XCFramework** from [GitHub Releases](https://github.com/alfikri-rizky/AvifKit/releases/latest)
 
 ---
 

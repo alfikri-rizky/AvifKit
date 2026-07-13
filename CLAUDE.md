@@ -149,19 +149,24 @@ Triggered by: GitHub Release or manual workflow dispatch
 
 ### iOS (SPM + XCFramework)
 
-Triggered by: Git tag `vX.Y.Z`
+Triggered by: **manual `workflow_dispatch`** with a `version` input (Actions → "Publish iOS" → Run
+workflow → enter `x.y.z`). Do NOT pre-create the `vX.Y.Z` tag — the workflow creates it.
 
 ```bash
 # CI workflow: .github/workflows/publish-ios.yml
 # Process:
-1. Builds XCFramework
+1. Builds XCFramework from main
 2. Calculates checksum
-3. Updates Package.swift on main branch
-4. Force-moves tag to updated commit
-5. Creates GitHub Release with XCFramework attached
+3. Commits the checksum into Package.swift on main
+4. Creates the tag vX.Y.Z ONCE on that commit (no force-move)
+5. Creates GitHub Release with the XCFramework attached
 ```
 
-**Important**: The workflow automatically updates `Package.swift` checksum and moves the tag. Don't manually create releases for version tags.
+**Why dispatch, not a tag push**: the checksum can only be computed after the XCFramework is built,
+so the tag must point at the post-checksum commit. The old tag-push flow force-MOVED the tag onto
+that commit, which could break an SPM resolve that landed in between (CODE_REVIEW.md L9). Building
+first and tagging once removes that race. The tag is immutable, so `Package.swift` at `vX.Y.Z`
+always matches the released asset.
 
 ## Critical Rules & Anti-Patterns
 
@@ -235,7 +240,7 @@ Cross-platform file abstraction via `io.github.vinceglb:filekit-core:0.12.0`:
 
 - `SKILL.md` — Comprehensive project documentation (architecture, API reference, conventions)
 - `shared/AGENTS.md` — Shared module instructions
-- `shared/src/androidMain/cpp/AGENTS.md` — Android C++/JNI details
+- `shared-native/src/main/cpp/AGENTS.md` — Android C++/JNI details
 - `README.md` — User-facing documentation with usage examples
 
 ## Key Dependencies
@@ -243,11 +248,11 @@ Cross-platform file abstraction via `io.github.vinceglb:filekit-core:0.12.0`:
 | Dependency | Version | Purpose |
 |---|---|---|
 | Kotlin | 2.2.20 | Language |
-| AGP | 8.11.2 | Android Gradle Plugin |
-| Compose Multiplatform | 1.9.1 | UI (demo apps) |
-| kotlinx-coroutines-core | 1.8.0 | Async operations |
+| AGP | 9.2.1 | Android Gradle Plugin |
+| Compose Multiplatform | 1.9.3 | UI (demo apps) |
+| kotlinx-coroutines-core | 1.11.0 | Async operations |
 | filekit-core | 0.12.0 | Cross-platform file handling |
-| androidx.exifinterface | 1.3.7 | EXIF orientation (Android) |
+| androidx.exifinterface | 1.4.2 | EXIF orientation (Android) |
 | libavif + AOM | v1.2.1 / aom v3.12.0 | AVIF encode/decode on BOTH platforms (JNI on Android, cinterop on iOS) |
 
 ## Testing

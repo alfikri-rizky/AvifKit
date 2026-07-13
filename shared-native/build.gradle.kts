@@ -32,9 +32,9 @@ android {
         minSdk = libs.versions.android.minSdk.get().toInt()
 
         // NDK configuration for native AVIF support.
-        // The native library is built conditionally (see CMakeLists.txt):
-        // - With libavif: true AVIF encoding/decoding
-        // - Without libavif: JPEG fallback / placeholder mode
+        // The native library requires libavif (see CMakeLists.txt): without it the build fails
+        // unless -DAVIFKIT_ALLOW_PLACEHOLDER=ON is passed, and the placeholder wrapper's
+        // encode/decode return null (surfaced as AvifError) — there is no JPEG fallback.
         ndk {
             abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))
         }
@@ -43,8 +43,12 @@ android {
             cmake {
                 cppFlags += "-std=c++17"
                 arguments += listOf(
-                    "-DANDROID_STL=c++_shared",
-                    "-DANDROID_PLATFORM=android-21"
+                    // Static libc++: everything (wrapper + libavif + AOM) links into one .so, so
+                    // there's no second .so to share a runtime with — avoids bundling
+                    // libc++_shared.so and any STL-version clash with the consumer app (L7).
+                    "-DANDROID_STL=c++_static",
+                    // Match minSdk (was android-21); the library never runs below the app's minSdk.
+                    "-DANDROID_PLATFORM=android-${libs.versions.android.minSdk.get()}"
                 )
             }
         }

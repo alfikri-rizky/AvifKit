@@ -78,7 +78,7 @@ actual class AvifConverter {
     priority: Priority,
     options: EncodingOptions?,
   ): PlatformBitmap =
-    withContext(Dispatchers.IO) {
+    withContext(Dispatchers.Default) {
       val encodingOptions = options ?: EncodingOptions.fromPriority(priority)
 
       // Handle maxSize if specified
@@ -99,7 +99,7 @@ actual class AvifConverter {
     priority: Priority,
     options: EncodingOptions?,
   ): String =
-    withContext(Dispatchers.IO) {
+    withContext(Dispatchers.Default) {
       val encodingOptions = options ?: EncodingOptions.fromPriority(priority)
 
       // Handle maxSize if specified
@@ -110,10 +110,12 @@ actual class AvifConverter {
           convertStandard(input, encodingOptions)
         }
 
-      // Save to file
-      File(outputPath).apply {
-        parentFile?.mkdirs()
-        writeBytes(avifData)
+      // Save to file (blocking I/O off the CPU pool).
+      withContext(Dispatchers.IO) {
+        File(outputPath).apply {
+          parentFile?.mkdirs()
+          writeBytes(avifData)
+        }
       }
 
       outputPath
@@ -125,7 +127,7 @@ actual class AvifConverter {
     priority: Priority,
     options: EncodingOptions?,
   ): PlatformFile =
-    withContext(Dispatchers.IO) {
+    withContext(Dispatchers.Default) {
       val encodingOptions = options ?: EncodingOptions.fromPriority(priority)
 
       // Handle maxSize if specified
@@ -146,7 +148,7 @@ actual class AvifConverter {
     priority: Priority,
     options: EncodingOptions?,
   ): ByteArray =
-    withContext(Dispatchers.IO) {
+    withContext(Dispatchers.Default) {
       val encodingOptions = options ?: EncodingOptions.fromPriority(priority)
 
       if (encodingOptions.maxSize != null) {
@@ -157,11 +159,11 @@ actual class AvifConverter {
     }
 
   actual suspend fun decodeAvif(input: ImageInput): PlatformBitmap =
-    withContext(Dispatchers.IO) {
+    withContext(Dispatchers.Default) {
       val data =
         when (input) {
           is ImageInput.FromBytes -> input.data
-          is ImageInput.FromPath -> File(input.path).readBytes()
+          is ImageInput.FromPath -> readFileOnIo(File(input.path))
           is ImageInput.FromFile -> input.file.readBytes()
           is ImageInput.FromBitmap -> throw AvifError.InvalidInput
         }
@@ -196,13 +198,13 @@ actual class AvifConverter {
   }
 
   actual suspend fun getImageInfo(input: ImageInput): ImageInfo =
-    withContext(Dispatchers.IO) {
+    withContext(Dispatchers.Default) {
       when (input) {
         is ImageInput.FromBytes -> imageInfoFromBytes(input.data, input.data.size.toLong())
         is ImageInput.FromPath -> {
           val file = File(input.path)
           if (!file.exists()) throw AvifError.FileError("File not found: ${input.path}")
-          imageInfoFromBytes(file.readBytes(), file.length())
+          imageInfoFromBytes(readFileOnIo(file), file.length())
         }
         is ImageInput.FromFile -> {
           val data = input.file.readBytes()
@@ -236,7 +238,7 @@ actual class AvifConverter {
 
     val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeByteArray(data, 0, data.size, options)
-    val format = detectFormat(data)
+    val format = ImageFormats.detect(data)
     return ImageInfo(
       width = options.outWidth,
       height = options.outHeight,
@@ -299,7 +301,7 @@ actual class AvifConverter {
       when (input) {
         is ImageInput.FromBytes -> input.data
         is ImageInput.FromPath ->
-          File(input.path).takeIf { it.exists() }?.readBytes() ?: return null
+          File(input.path).takeIf { it.exists() }?.let { readFileOnIo(it) } ?: return null
         is ImageInput.FromFile -> input.file.readBytes()
         is ImageInput.FromBitmap -> return null
       }
@@ -307,7 +309,7 @@ actual class AvifConverter {
   }
 
   private suspend fun convertStandard(input: ImageInput, options: EncodingOptions): ByteArray =
-    withContext(Dispatchers.IO) {
+    withContext(Dispatchers.Default) {
       when (input) {
         is ImageInput.FromBytes ->
           if (AvifFormat.isAvif(input.data)) input.data
@@ -320,7 +322,7 @@ actual class AvifConverter {
           if (!file.exists()) throw AvifError.FileError("File not found: ${input.path}")
           // Sniff by content, not by ".avif" extension (M4): a mislabeled file must not pass
           // through unconverted, and a real AVIF with the wrong name must not go to BitmapFactory.
-          val data = file.readBytes()
+          val data = readFileOnIo(file)
           if (AvifFormat.isAvif(data)) data
           else encodeBitmapToAvif(decodeBytesToOrientedBitmap(data), options)
         }
@@ -342,9 +344,13 @@ actual class AvifConverter {
       is ImageInput.FromPath -> {
         val file = File(input.path)
         if (!file.exists()) throw AvifError.FileError("File not found: ${input.path}")
-        decodeBytesToOrientedBitmap(file.readBytes())
+        decodeBytesToOrientedBitmap(readFileOnIo(file))
       }
     }
+
+  /** Read a file's bytes on the IO dispatcher (encode/decode run on Default — L2). */
+  private suspend fun readFileOnIo(file: File): ByteArray =
+    withContext(Dispatchers.IO) { file.readBytes() }
 
   private fun decodeBytesToOrientedBitmap(data: ByteArray): Bitmap {
     val bitmap =
@@ -528,33 +534,6 @@ actual class AvifConverter {
     val newHeight = (height * scale).toInt().coerceAtLeast(1)
 
     return Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
-  }
-
-  private fun detectFormat(data: ByteArray): ImageFormat {
-    if (data.size < 12) return ImageFormat.UNKNOWN
-
-    return when {
-      AvifFormat.isAvif(data) -> ImageFormat.AVIF
-      data[0] == 0xFF.toByte() && data[1] == 0xD8.toByte() -> ImageFormat.JPEG
-      data[0] == 0x89.toByte() && data[1] == 0x50.toByte() -> ImageFormat.PNG
-      data[8] == 0x57.toByte() && data[9] == 0x45.toByte() -> ImageFormat.WEBP
-      else -> ImageFormat.UNKNOWN
-    }
-  }
-
-  private fun detectFormatFromPath(path: String): ImageFormat {
-    return when (File(path).extension.lowercase()) {
-      "avif" -> ImageFormat.AVIF
-      "jpg",
-      "jpeg" -> ImageFormat.JPEG
-      "png" -> ImageFormat.PNG
-      "webp" -> ImageFormat.WEBP
-      "bmp" -> ImageFormat.BMP
-      "gif" -> ImageFormat.GIF
-      "heif",
-      "heic" -> ImageFormat.HEIF
-      else -> ImageFormat.UNKNOWN
-    }
   }
 
   /**

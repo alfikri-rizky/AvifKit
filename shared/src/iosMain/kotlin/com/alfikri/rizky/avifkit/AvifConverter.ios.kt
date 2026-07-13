@@ -14,6 +14,12 @@ import platform.posix.memcpy
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 actual class AvifConverter {
 
+  // Codec thread count from the actual CPU count (was hardcoded 4), capped to avoid
+  // over-threading small images where coordination outweighs the gain.
+  private val codecThreads: Int by lazy {
+    NSProcessInfo.processInfo.activeProcessorCount.toInt().coerceIn(1, 8)
+  }
+
   actual suspend fun convertToBitmap(
     input: ImageInput,
     priority: Priority,
@@ -199,7 +205,7 @@ actual class AvifConverter {
     return ImageInfo(
       width = (width * image.scale).toInt(),
       height = (height * image.scale).toInt(),
-      format = detectFormat(header),
+      format = ImageFormats.detect(header),
       hasAlpha = imageHasAlpha(image),
       fileSize = fileSize,
     )
@@ -388,7 +394,7 @@ actual class AvifConverter {
       encoder.pointed.qualityAlpha =
         if (options.lossless) AVIF_QUALITY_LOSSLESS else options.alphaQuality
       encoder.pointed.speed = options.speed
-      encoder.pointed.maxThreads = 4
+      encoder.pointed.maxThreads = codecThreads
       encoder.pointed.codecChoice = AVIF_CODEC_CHOICE_AUTO
 
       // Opaque sources skip the alpha plane entirely (M6): smaller output, no phantom alpha on
@@ -451,7 +457,7 @@ actual class AvifConverter {
         val rgb = alloc<avifRGBImage>()
         var rgbAllocated = false
         try {
-          decoder.pointed.maxThreads = 4
+          decoder.pointed.maxThreads = codecThreads
           decoder.pointed.ignoreXMP = AVIF_TRUE
           decoder.pointed.ignoreExif = AVIF_FALSE
 
@@ -675,34 +681,6 @@ actual class AvifConverter {
     }
   }
 
-  private fun detectFormat(data: ByteArray): ImageFormat {
-    if (data.size < 12) return ImageFormat.UNKNOWN
-
-    return when {
-      AvifFormat.isAvif(data) -> ImageFormat.AVIF
-      data[0] == 0xFF.toByte() && data[1] == 0xD8.toByte() -> ImageFormat.JPEG
-      data[0] == 0x89.toByte() && data[1] == 0x50.toByte() -> ImageFormat.PNG
-      data[8] == 0x57.toByte() && data[9] == 0x45.toByte() -> ImageFormat.WEBP
-      else -> ImageFormat.UNKNOWN
-    }
-  }
-
-  private fun detectFormatFromPath(path: String): ImageFormat {
-    val extension = (path.substringAfterLast('.', "")).lowercase()
-    return when (extension) {
-      "avif" -> ImageFormat.AVIF
-      "jpg",
-      "jpeg" -> ImageFormat.JPEG
-      "png" -> ImageFormat.PNG
-      "webp" -> ImageFormat.WEBP
-      "bmp" -> ImageFormat.BMP
-      "gif" -> ImageFormat.GIF
-      "heif",
-      "heic" -> ImageFormat.HEIF
-      else -> ImageFormat.UNKNOWN
-    }
-  }
-
   private fun imageHasAlpha(image: UIImage): Boolean {
     val cgImage = image.CGImage ?: return false
     val alphaInfo = CGImageGetAlphaInfo(cgImage)
@@ -713,12 +691,15 @@ actual class AvifConverter {
 
   // Extension functions for data conversion
   private fun ByteArray.toNSData(): NSData {
+    // addressOf(0) throws on an empty array, escaping the AvifError hierarchy (L1).
+    if (isEmpty()) return NSData()
     return usePinned { pinned ->
       NSData.create(bytes = pinned.addressOf(0), length = this.size.toULong())
     }
   }
 
   private fun NSData.toByteArray(): ByteArray {
+    if (this.length.toInt() == 0) return ByteArray(0)
     return ByteArray(this.length.toInt()).apply {
       usePinned { pinned ->
         memcpy(pinned.addressOf(0), this@toByteArray.bytes, this@toByteArray.length)

@@ -28,15 +28,15 @@
 | M6 | 🟡 Medium | ✅ **FIXED 2026-07-13** — Alpha plane always encoded, even for opaque images → larger files | Output size |
 | M7 | 🟡 Medium | ✅ **FIXED 2026-07-13** — JNI hardening: OOB debug read for <16-byte input, uncaught `std::bad_alloc` aborts app | Native robustness |
 | M8 | 🟡 Medium | ✅ **FIXED 2026-07-13** — Resize edge cases: 0-dimension crash (Android), points-vs-pixels mismatch + deprecated API (iOS) | Codec |
-| L1 | 🟢 Low | Empty `ByteArray` input crashes with non-`AvifError` exception on iOS | Edge case |
-| L2 | 🟢 Low | CPU-bound encoding runs on `Dispatchers.IO` (Android) | Performance |
-| L3 | 🟢 Low | `maxThreads = 4` hardcoded on both platforms | Performance |
-| L4 | 🟢 Low | `AvifSamples.kt` ships inside the published library | Artifact hygiene |
-| L5 | 🟢 Low | Documentation drift (CLAUDE.md deps, README links, stale comments) | Docs |
-| L6 | 🟢 Low | Repo hygiene: stale `shared/src/androidMain/cpp/` leftover, local main behind origin, stale local tags | Housekeeping |
-| L7 | 🟢 Low | `c++_shared` STL for a single tiny `.so`; minSdk 24 vs `ANDROID_PLATFORM=android-21` mismatch | Build config |
-| L8 | 🟢 Low | Weak magic-byte detection for WEBP; BMP/GIF/HEIF only detected by extension | Format detection |
-| L9 | 🟢 Low | Tag force-move during iOS release can break SPM resolves in flight | Release process |
+| L1 | 🟢 Low | ✅ **FIXED 2026-07-13** — Empty `ByteArray` input crashes with non-`AvifError` exception on iOS | Edge case |
+| L2 | 🟢 Low | ✅ **FIXED 2026-07-13** — CPU-bound encoding runs on `Dispatchers.IO` (Android) | Performance |
+| L3 | 🟢 Low | ✅ **FIXED 2026-07-13** — `maxThreads = 4` hardcoded on both platforms | Performance |
+| L4 | 🟢 Low | ✅ **FIXED 2026-07-13** — `AvifSamples.kt` ships inside the published library | Artifact hygiene |
+| L5 | 🟢 Low | ✅ **FIXED 2026-07-13** — Documentation drift (CLAUDE.md deps, README links, stale comments) | Docs |
+| L6 | 🟢 Low | ✅ **FIXED 2026-07-13** — Repo hygiene: stale `shared/src/androidMain/cpp/` leftover, local main behind origin, stale local tags | Housekeeping |
+| L7 | 🟢 Low | ✅ **FIXED 2026-07-13** — `c++_shared` STL for a single tiny `.so`; minSdk 24 vs `ANDROID_PLATFORM=android-21` mismatch | Build config |
+| L8 | 🟢 Low | ✅ **FIXED 2026-07-13** — Weak magic-byte detection for WEBP; BMP/GIF/HEIF only detected by extension | Format detection |
+| L9 | 🟢 Low | ✅ **FIXED 2026-07-13** — Tag force-move during iOS release can break SPM resolves in flight | Release process |
 
 ---
 
@@ -307,6 +307,19 @@ Opaque JPEG sources still get a full alpha plane encoded → measurably larger f
 ---
 
 ## 🟢 Low
+
+> **Status update (2026-07-13):** All nine Low findings were fixed.
+> - **L1**: iOS `toNSData`/`toByteArray` short-circuit empty input instead of throwing `ArrayIndexOutOfBoundsException`.
+> - **L2**: Android orchestration runs on `Dispatchers.Default` (CPU-bound codec work); raw `java.io.File` reads/writes are wrapped in `Dispatchers.IO` via `readFileOnIo`.
+> - **L3**: codec `maxThreads` comes from the CPU count — `sysconf(_SC_NPROCESSORS_ONLN)` (Android, capped 1..8) / `NSProcessInfo.activeProcessorCount` (iOS, capped 1..8).
+> - **L4**: `AvifSamples.kt` deleted from the published library.
+> - **L5**: doc sweep — CLAUDE.md dependency versions (AGP 9.2.1, Compose 1.9.3, coroutines 1.11.0, exifinterface 1.4.2) and the `AGENTS.md` path, the `:shared-native` "JPEG fallback" comment, the README v0.2.3 link (→ `/releases/latest`), and the publish-ios release-note wording.
+> - **L6**: removed the `shared/src/androidMain/cpp` leftover and the root `Shared.xcframework.zip`.
+> - **L7**: `ANDROID_STL=c++_static` (single self-contained `.so`, no bundled `libc++_shared.so`) and `ANDROID_PLATFORM` aligned to `minSdk` (24).
+> - **L8**: content-based format detection centralized in `commonMain/ImageFormats.kt` — WEBP now requires the `RIFF` container, and BMP/GIF/HEIF are detected by magic bytes (removed two duplicated per-platform `detectFormat`s).
+> - **L9**: `publish-ios.yml` reworked to a manual `workflow_dispatch` (validated `version` input) that builds from main, commits the checksum, then creates the tag ONCE — no force-move, so an in-flight SPM resolve can't hit a mismatched `Package.swift`. **Behavior change**: iOS releases are now cut by running the workflow, not by pushing a `vX.Y.Z` tag (documented in CLAUDE.md).
+>
+> Verified: 45 tests green on iOS simulator (adds the `ImageFormats` detection suite) and 10 instrumented tests on an API 35 emulator against a `.so` rebuilt with `c++_static`/`sysconf`/`android-24`; full `:shared:build` + `ktfmtCheck` green; C++ syntax-checked in both HAVE_LIBAVIF modes; all three workflow YAMLs parse.
 
 ### L1. Empty input crashes with the wrong exception type (iOS)
 `AvifConverter.ios.kt:777-781` — `ByteArray.toNSData()` calls `pinned.addressOf(0)` which throws `ArrayIndexOutOfBoundsException` on an empty array, escaping the `AvifError` hierarchy. Guard: `if (isEmpty()) return NSData()`. Same guard in `NSData.toByteArray()`.
