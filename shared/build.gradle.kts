@@ -131,11 +131,38 @@ kotlin {
 
 // KGP silently disables simulator test tasks when its default device (e.g. "iPhone 14")
 // doesn't exist in the installed Xcode — tests then never run without any failure.
-// Pin a device that ships with current Xcode; override with -PiosSimulatorDevice=<name>.
+// A pinned name breaks the same way when the CI runner image moves (Xcode 26.5 dropped
+// "iPhone 16"), so resolve an iPhone that actually exists in the installed Xcode;
+// override with -PiosSimulatorDevice=<name>.
+val iosSimulatorDevice =
+  providers
+    .gradleProperty("iosSimulatorDevice")
+    .orElse(
+      providers
+        .exec { commandLine("xcrun", "simctl", "list", "devices", "available") }
+        .standardOutput
+        .asText
+        .map { list ->
+          // Lines look like "    iPhone 17 Pro (<UDID>) (Shutdown)"; names may contain
+          // parens ("iPhone SE (3rd generation)"), so anchor on the 36-char UDID.
+          // Devices are grouped by runtime in ascending version order — take the last
+          // match so the device runs the newest runtime (min deployment target is 15).
+          Regex("""^\s+(iPhone .+?) \([0-9A-Fa-f-]{36}\)""", RegexOption.MULTILINE)
+            .findAll(list)
+            .lastOrNull()
+            ?.groupValues
+            ?.get(1)
+            ?: error(
+              "No available iPhone simulator in the installed Xcode — " +
+                "pass -PiosSimulatorDevice=<name>"
+            )
+        }
+    )
+
 tasks
   .withType(org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeSimulatorTest::class)
   .configureEach {
-    device.set(providers.gradleProperty("iosSimulatorDevice").getOrElse("iPhone 16"))
+    device.set(iosSimulatorDevice)
     enabled = true
   }
 
