@@ -12,7 +12,9 @@ plugins {
 }
 
 group = "io.github.alfikri-rizky"
-version = "0.2.10"
+// Version comes from the catalog so :shared and :shared-native can never drift apart;
+// CI overrides it with -PVERSION_NAME (see .github/workflows/publish.yml).
+version = providers.gradleProperty("VERSION_NAME").getOrElse(libs.versions.avifkit.get())
 
 android {
     namespace = "com.alfikri.rizky.avifkit.nativelib"

@@ -124,6 +124,82 @@ class AvifConverterIosRoundTripTest {
     )
   }
 
+  /**
+   * H4 regression: AVIF stores orientation as irot/imir properties that libavif reports but does
+   * not apply — the decoder must rotate/mirror the pixels itself. The fixture is written by raw
+   * libavif with irot angle 1 (90° anti-clockwise).
+   */
+  @Test
+  fun decode_appliesIrotOrientation() = runBlocking {
+    // Black canvas with a red 8×8 marker block in the top-left corner (straight alpha, opaque).
+    val src = solidRgba(0x00, 0x00, 0x00, 0xFF)
+    for (y in 0 until 8) {
+      for (x in 0 until 8) {
+        src[(y * width + x) * 4] = 0xFF.toByte() // R
+      }
+    }
+    val avif = encodeRawStraightAvif(src, width, height, irotAngle = 1)
+
+    val decoded = AvifConverter().decodeAvif(ImageInput.from(avif))
+    val out = uiImagePremultipliedRgba(decoded)
+
+    // 90° CCW: dimensions swap and the top-left marker lands at the bottom-left.
+    assertEquals(height, out.width, "rotated width")
+    assertEquals(width, out.height, "rotated height")
+    fun red(x: Int, y: Int): Int = out.pixels[(y * out.width + x) * 4].toInt() and 0xFF
+    assertTrue(red(4, out.height - 4) > 0x80, "marker should move to the bottom-left corner")
+    assertTrue(red(4, 4) < 0x40, "top-left corner should now be background")
+  }
+
+  /**
+   * H1 regression: maxSize with an already-AVIF input must re-encode when the input exceeds the
+   * target instead of silently returning the oversized original.
+   */
+  @Test
+  fun maxSize_reencodesOversizedAvifInput() = runBlocking {
+    // Random noise compresses poorly → a near-lossless encode is comfortably large.
+    val rnd = kotlin.random.Random(42)
+    val noise = ByteArray(width * height * 4)
+    rnd.nextBytes(noise)
+    for (i in 0 until width * height) noise[i * 4 + 3] = 0xFF.toByte()
+    val image = makeImageFromPremultipliedRgba(noise, width, height)
+
+    val converter = AvifConverter()
+    val original =
+      converter.encodeAvif(
+        ImageInput.from(image),
+        options = EncodingOptions(quality = 100, speed = 10, subsample = ChromaSubsample.YUV444),
+      )
+    val target = original.size / 2L
+
+    val compressed =
+      converter.encodeAvif(
+        ImageInput.from(original),
+        options = EncodingOptions(maxSize = target, speed = 10),
+      )
+
+    assertTrue(
+      compressed.size <= target,
+      "expected re-encode to ≤$target bytes, got ${compressed.size} (input ${original.size})",
+    )
+    assertTrue(converter.isAvifFile(ImageInput.from(compressed)), "output must still be AVIF")
+  }
+
+  /** Companion to the above: input that already fits the target passes through unchanged. */
+  @Test
+  fun maxSize_passesThroughAvifInputWithinTarget() = runBlocking {
+    val converter = AvifConverter()
+    val avif = converter.encodeAvif(ImageInput.from(makeTestImage()), Priority.BALANCED)
+
+    val result =
+      converter.encodeAvif(
+        ImageInput.from(avif),
+        options = EncodingOptions(maxSize = avif.size + 1000L),
+      )
+
+    assertTrue(result.contentEquals(avif), "fitting AVIF input must be returned byte-identical")
+  }
+
   @Test
   fun encodeThenDecode_roundTrips() = runBlocking {
     val converter = AvifConverter()
@@ -230,46 +306,58 @@ class AvifConverterIosRoundTripTest {
   /**
    * Encode STRAIGHT-alpha RGBA to AVIF through raw libavif — ground truth that bypasses both
    * AvifConverter and CoreGraphics (alphaPremultiplied stays AVIF_FALSE, libavif's default).
+   * [irotAngle]/[imirAxis] write the corresponding orientation properties into the file.
    */
-  private fun encodeRawStraightAvif(rgba: ByteArray, width: Int, height: Int): ByteArray =
-    memScoped {
-      val image =
-        avifImageCreate(width.toUInt(), height.toUInt(), 8u, AVIF_PIXEL_FORMAT_YUV444)
-          ?: error("avifImageCreate failed")
-      val encoder = avifEncoderCreate() ?: error("avifEncoderCreate failed")
+  private fun encodeRawStraightAvif(
+    rgba: ByteArray,
+    width: Int,
+    height: Int,
+    irotAngle: Int = 0,
+    imirAxis: Int = -1,
+  ): ByteArray = memScoped {
+    val image =
+      avifImageCreate(width.toUInt(), height.toUInt(), 8u, AVIF_PIXEL_FORMAT_YUV444)
+        ?: error("avifImageCreate failed")
+    if (irotAngle != 0) {
+      image.pointed.transformFlags = image.pointed.transformFlags or AVIF_TRANSFORM_IROT.toUInt()
+      image.pointed.irot.angle = irotAngle.toUByte()
+    }
+    if (imirAxis >= 0) {
+      image.pointed.transformFlags = image.pointed.transformFlags or AVIF_TRANSFORM_IMIR.toUInt()
+      image.pointed.imir.axis = imirAxis.toUByte()
+    }
+    val encoder = avifEncoderCreate() ?: error("avifEncoderCreate failed")
+    try {
+      encoder.pointed.quality = 95
+      encoder.pointed.qualityAlpha = 100
+      encoder.pointed.speed = 10
+
+      rgba.usePinned { pinned ->
+        val rgb = alloc<avifRGBImage>()
+        avifRGBImageSetDefaults(rgb.ptr, image)
+        rgb.pixels = pinned.addressOf(0).reinterpret()
+        rgb.rowBytes = (width * 4).toUInt()
+        rgb.format = AVIF_RGB_FORMAT_RGBA
+        rgb.depth = 8u
+        val res = avifImageRGBToYUV(image, rgb.ptr)
+        check(res == AVIF_RESULT_OK) { "RGBToYUV: ${avifResultToString(res)?.toKString()}" }
+      }
+
+      val output = alloc<avifRWData>()
       try {
-        encoder.pointed.quality = 95
-        encoder.pointed.qualityAlpha = 100
-        encoder.pointed.speed = 10
-
-        rgba.usePinned { pinned ->
-          val rgb = alloc<avifRGBImage>()
-          avifRGBImageSetDefaults(rgb.ptr, image)
-          rgb.pixels = pinned.addressOf(0).reinterpret()
-          rgb.rowBytes = (width * 4).toUInt()
-          rgb.format = AVIF_RGB_FORMAT_RGBA
-          rgb.depth = 8u
-          val res = avifImageRGBToYUV(image, rgb.ptr)
-          check(res == AVIF_RESULT_OK) { "RGBToYUV: ${avifResultToString(res)?.toKString()}" }
-        }
-
-        val output = alloc<avifRWData>()
-        try {
-          val res = avifEncoderWrite(encoder, image, output.ptr)
-          check(res == AVIF_RESULT_OK) { "encoderWrite: ${avifResultToString(res)?.toKString()}" }
-          ByteArray(output.size.toInt()).also { bytes ->
-            bytes.usePinned { pinnedOut ->
-              memcpy(pinnedOut.addressOf(0), output.data, output.size)
-            }
-          }
-        } finally {
-          avifRWDataFree(output.ptr)
+        val res = avifEncoderWrite(encoder, image, output.ptr)
+        check(res == AVIF_RESULT_OK) { "encoderWrite: ${avifResultToString(res)?.toKString()}" }
+        ByteArray(output.size.toInt()).also { bytes ->
+          bytes.usePinned { pinnedOut -> memcpy(pinnedOut.addressOf(0), output.data, output.size) }
         }
       } finally {
-        avifImageDestroy(image)
-        avifEncoderDestroy(encoder)
+        avifRWDataFree(output.ptr)
       }
+    } finally {
+      avifImageDestroy(image)
+      avifEncoderDestroy(encoder)
     }
+  }
 
   /**
    * Decode AVIF to STRAIGHT-alpha RGBA through raw libavif — ground truth that bypasses both

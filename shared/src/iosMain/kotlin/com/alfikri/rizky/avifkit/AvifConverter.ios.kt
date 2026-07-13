@@ -134,15 +134,17 @@ actual class AvifConverter {
           is ImageInput.FromPath -> {
             val url = NSURL.fileURLWithPath(input.path)
             val nsData = NSData.dataWithContentsOfURL(url)
-            nsData?.toByteArray()?.take(12)?.toByteArray() ?: return false
+            nsData?.toByteArray()?.take(AvifFormat.HEADER_CHECK_SIZE)?.toByteArray() ?: return false
           }
 
           is ImageInput.FromFile ->
-            kotlinx.coroutines.runBlocking { input.file.readBytes().take(12).toByteArray() }
+            kotlinx.coroutines.runBlocking {
+              input.file.readBytes().take(AvifFormat.HEADER_CHECK_SIZE).toByteArray()
+            }
 
           is ImageInput.FromBitmap -> return false
         }
-      isAvifFormat(data)
+      AvifFormat.isAvif(data)
     } catch (e: Exception) {
       false
     }
@@ -230,10 +232,37 @@ actual class AvifConverter {
   ): NSData {
     val targetSize = options.maxSize!!
 
-    return when (options.compressionStrategy) {
-      CompressionStrategy.SMART -> convertWithSmartCompression(input, options, targetSize)
-      CompressionStrategy.STRICT -> convertWithStrictCompression(input, options, targetSize)
+    // Already-AVIF input: return it untouched only when it fits the target. Otherwise
+    // decode and run the adaptive loop on the pixels — convertStandard's passthrough
+    // would hand back the same oversized bytes on every attempt.
+    var effectiveInput = input
+    val avifBytes = readInputAvifBytes(input)
+    if (avifBytes != null) {
+      val nsData = avifBytes.toNSData()
+      if (avifBytes.size <= targetSize) return nsData
+      effectiveInput = ImageInput.FromBitmap(decodeAvifToImage(nsData))
     }
+
+    return when (options.compressionStrategy) {
+      CompressionStrategy.SMART -> convertWithSmartCompression(effectiveInput, options, targetSize)
+      CompressionStrategy.STRICT ->
+        convertWithStrictCompression(effectiveInput, options, targetSize)
+    }
+  }
+
+  /** The input's raw bytes when they already contain AVIF data, else null. */
+  private suspend fun readInputAvifBytes(input: ImageInput): ByteArray? {
+    val bytes =
+      when (input) {
+        is ImageInput.FromBytes -> input.data
+        is ImageInput.FromPath -> {
+          val url = NSURL.fileURLWithPath(input.path)
+          NSData.dataWithContentsOfURL(url)?.toByteArray() ?: return null
+        }
+        is ImageInput.FromFile -> input.file.readBytes()
+        is ImageInput.FromBitmap -> return null
+      }
+    return if (AvifFormat.isAvif(bytes)) bytes else null
   }
 
   /**
@@ -398,7 +427,7 @@ actual class AvifConverter {
       when (input) {
         is ImageInput.FromBytes -> {
           val nsData = input.data.toNSData()
-          if (isAvifFormat(input.data)) {
+          if (AvifFormat.isAvif(input.data)) {
             nsData
           } else {
             val uiImage = UIImage.imageWithData(nsData) ?: throw AvifError.InvalidInput
@@ -425,7 +454,7 @@ actual class AvifConverter {
         is ImageInput.FromFile -> {
           val byteData = input.file.readBytes()
           val nsData = byteData.toNSData()
-          if (isAvifFormat(byteData)) {
+          if (AvifFormat.isAvif(byteData)) {
             nsData
           } else {
             val uiImage = UIImage.imageWithData(nsData) ?: throw AvifError.InvalidInput
@@ -604,8 +633,41 @@ actual class AvifConverter {
             throw AvifError.DecodingFailed("libavif: ${avifResultToString(yuvRes)?.toKString()}")
           }
 
-          rgbaToUIImage(rgb.pixels!!, rgb.width.toInt(), rgb.height.toInt(), rgb.rowBytes.toInt())
-            ?: throw AvifError.DecodingFailed("libavif: failed to build UIImage from RGBA")
+          // AVIF irot/imir orientation: libavif reports the transform properties but does
+          // not apply them to the pixels — do it here (rotation first, then mirror).
+          val transformFlags = decodedImage.pointed.transformFlags
+          val irotAngle =
+            if (transformFlags and AVIF_TRANSFORM_IROT.toUInt() != 0u) {
+              decodedImage.pointed.irot.angle.toInt() and 3
+            } else 0
+          val imirAxis =
+            if (transformFlags and AVIF_TRANSFORM_IMIR.toUInt() != 0u) {
+              decodedImage.pointed.imir.axis.toInt() and 1
+            } else -1
+
+          val width = rgb.width.toInt()
+          val height = rgb.height.toInt()
+          val rowBytes = rgb.rowBytes.toInt()
+          val image =
+            if (RgbaTransform.isIdentity(irotAngle, imirAxis)) {
+              rgbaToUIImage(rgb.pixels!!, width, height, rowBytes)
+            } else {
+              val srcBytes = ByteArray(rowBytes * height)
+              srcBytes.usePinned { pinned ->
+                memcpy(pinned.addressOf(0), rgb.pixels, (rowBytes * height).toULong())
+              }
+              val oriented =
+                RgbaTransform.apply(srcBytes, width, height, rowBytes, irotAngle, imirAxis)
+              oriented.pixels.usePinned { pinned ->
+                rgbaToUIImage(
+                  pinned.addressOf(0).reinterpret(),
+                  oriented.width,
+                  oriented.height,
+                  oriented.width * 4,
+                )
+              }
+            }
+          image ?: throw AvifError.DecodingFailed("libavif: failed to build UIImage from RGBA")
         } finally {
           if (rgbAllocated) avifRGBImageFreePixels(rgb.ptr)
           avifDecoderDestroy(decoder)
@@ -751,18 +813,11 @@ actual class AvifConverter {
     }
   }
 
-  private fun isAvifFormat(data: ByteArray): Boolean {
-    return data.size > 12 &&
-      data
-        .sliceArray(4..11)
-        .contentEquals(byteArrayOf(0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66))
-  }
-
   private fun detectFormat(data: ByteArray): ImageFormat {
     if (data.size < 12) return ImageFormat.UNKNOWN
 
     return when {
-      isAvifFormat(data) -> ImageFormat.AVIF
+      AvifFormat.isAvif(data) -> ImageFormat.AVIF
       data[0] == 0xFF.toByte() && data[1] == 0xD8.toByte() -> ImageFormat.JPEG
       data[0] == 0x89.toByte() && data[1] == 0x50.toByte() -> ImageFormat.PNG
       data[8] == 0x57.toByte() && data[9] == 0x45.toByte() -> ImageFormat.WEBP

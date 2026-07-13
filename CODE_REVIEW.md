@@ -12,14 +12,14 @@
 | C1 | 🔴 Critical | ✅ **FIXED 2026-07-11** — iOS alpha channel corrupted on encode **and** decode (premultiplied vs straight mismatch) | iOS codec |
 | C2 | 🔴 Critical | ✅ **FIXED 2026-07-11** (`preserveMetadata` documented as no-op, not implemented) — `EncodingOptions` contract violated: `alphaQuality`, `lossless`, `preserveMetadata` silently ignored | API correctness |
 | C3 | 🔴 Critical | ✅ **FIXED 2026-07-11** — `lossless = true` does not produce lossless AVIF even on iOS | API correctness |
-| H1 | 🟠 High | `maxSize` silently no-ops (returns oversized file) when input is already AVIF | Compression |
-| H2 | 🟠 High | Android `isAvifSupported()` returns `true` even when the native library failed to load | API correctness |
-| H3 | 🟠 High | AVIF signature detection misses valid AVIF files (`avis`, `mif1`+compatible brands) | Format detection |
-| H4 | 🟠 High | Decoder ignores AVIF orientation metadata (`irot`/`imir`, EXIF) on both platforms | Codec |
-| H5 | 🟠 High | Version management fragile — junk `v0.3.0` on Maven Central, `0.3.0` never published, module versions drift (`:shared-native` says 0.2.10) | Release engineering |
-| H6 | 🟠 High | CocoaPods podspec 404s — tag and download URL missing the `v` prefix | Distribution |
-| H7 | 🟠 High | Placeholder codec path ships mock data if build is misconfigured (violates own no-silent-fallback rule) | Build integrity |
-| H8 | 🟠 High | Effectively zero test coverage of codec paths + no CI on push/PR | Quality infra |
+| H1 | 🟠 High | ✅ **FIXED 2026-07-13** — `maxSize` silently no-ops (returns oversized file) when input is already AVIF | Compression |
+| H2 | 🟠 High | ✅ **FIXED 2026-07-13** — Android `isAvifSupported()` returns `true` even when the native library failed to load | API correctness |
+| H3 | 🟠 High | ✅ **FIXED 2026-07-13** — AVIF signature detection misses valid AVIF files (`avis`, `mif1`+compatible brands) | Format detection |
+| H4 | 🟠 High | ✅ **FIXED 2026-07-13** — Decoder ignores AVIF orientation metadata (`irot`/`imir`, EXIF) on both platforms | Codec |
+| H5 | 🟠 High | ✅ **FIXED 2026-07-13** — Version management fragile — junk `v0.3.0` on Maven Central, `0.3.0` never published, module versions drift (`:shared-native` says 0.2.10) | Release engineering |
+| H6 | 🟠 High | ✅ **FIXED 2026-07-13** — CocoaPods podspec 404s — tag and download URL missing the `v` prefix | Distribution |
+| H7 | 🟠 High | ✅ **FIXED 2026-07-13** — Placeholder codec path ships mock data if build is misconfigured (violates own no-silent-fallback rule) | Build integrity |
+| H8 | 🟠 High | ✅ **FIXED 2026-07-13** — Effectively zero test coverage of codec paths + no CI on push/PR | Quality infra |
 | M1 | 🟡 Medium | Hardware bitmaps (Coil/Glide) fail to encode on Android | Android |
 | M2 | 🟡 Medium | `getImageInfo` misreports: `hasAlpha=true` for JPEGs (Android), fails on AVIF pre-API 31 / iOS 15 | API correctness |
 | M3 | 🟡 Medium | `isAvifFile` reads whole file for a 12-byte check and uses `runBlocking` (ANR risk) | Performance |
@@ -114,6 +114,18 @@ Today `EncodingOptions(lossless = true)` produces a **lossy** file on iOS and a 
 ---
 
 ## 🟠 High
+
+> **Status update (2026-07-13):** All eight High findings were fixed.
+> - **H1**: adaptive compression now short-circuits fitting AVIF input and decodes + re-encodes oversized AVIF input; the best-effort contract is documented on `EncodingOptions.maxSize`.
+> - **H2**: `isAvifSupported()` returns real availability (library loaded AND compiled against libavif, via the version string).
+> - **H3**: one shared `ftyp` parser (`commonMain/AvifFormat.kt`) checks major + compatible brands (`avif`/`avis`) on both platforms; header reads widened from 12 to 64 bytes; dead `nativeIsAvif` removed.
+> - **H4**: decode applies `irot`/`imir` via shared `RgbaTransform` (commonMain) — the JNI wrapper passes the properties through `DecodedImage`, iOS reads them from the cinterop struct.
+> - **H5**: single version source in `gradle/libs.versions.toml` for both modules (CI `VERSION_NAME` still overrides); publish.yml normalizes + validates the version (rejects `vX.Y.Z` style junk); CLAUDE.md checklist updated.
+> - **H6**: podspec tag and download URL carry the `v` prefix (plus `curl -f` so a 404 fails); `pod spec lint --quick` passes.
+> - **H7**: CMake now hard-fails without libavif unless `-DAVIFKIT_ALLOW_PLACEHOLDER=ON`; placeholder branches return null (→ `AvifError`) instead of mock data.
+> - **H8**: `.github/workflows/ci.yml` (build + host/simulator tests on macOS, instrumented emulator job on Ubuntu); commonTest suites for AvifFormat/RgbaTransform/EncodingOptions; `androidDeviceTest` round-trip suite mirroring iOS; the KGP simulator-test task self-disable is fixed (`device` pinned + `enabled = true` in shared/build.gradle.kts), so `allTests` actually runs simulator tests now.
+>
+> Verified: 29 tests green via `:shared:iosSimulatorArm64Test` (incl. new irot + maxSize regression tests), 6 instrumented tests green on an API 35 emulator via `:shared:connectedAndroidDeviceTest` (incl. on-device alpha + lossless + maxSize), `:shared:build` + `ktfmtCheck` green, podspec lints clean.
 
 ### H1. `maxSize` silently returns oversized output for AVIF input
 

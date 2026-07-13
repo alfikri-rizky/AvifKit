@@ -10,7 +10,9 @@ plugins {
 
 group = "io.github.alfikri-rizky"
 
-version = "0.3.1"
+// Version comes from the catalog so :shared and :shared-native can never drift apart;
+// CI overrides it with -PVERSION_NAME (see .github/workflows/publish.yml).
+version = providers.gradleProperty("VERSION_NAME").getOrElse(libs.versions.avifkit.get())
 
 ktfmt { googleStyle() }
 
@@ -26,6 +28,10 @@ kotlin {
     minSdk = libs.versions.android.minSdk.get().toInt()
     compilerOptions { jvmTarget.set(JvmTarget.JVM_11) }
     withHostTest {}
+    // Instrumented tests (androidDeviceTest source set): the codec path needs the real
+    // .so, so it can only be exercised on a device/emulator via
+    // :shared:connectedAndroidDeviceTest (or the CI emulator job).
+    withDeviceTest {}
   }
 
   // Create XCFramework for iOS distribution (CocoaPods, SPM, direct usage)
@@ -113,8 +119,22 @@ kotlin {
       // consumers of io.github.alfikri-rizky:avifkit receive the .so automatically.
       implementation(projects.sharedNative)
     }
+    getByName("androidDeviceTest").dependencies {
+      implementation(libs.androidx.testExt.junit)
+      implementation(libs.androidx.test.runner)
+    }
   }
 }
+
+// KGP silently disables simulator test tasks when its default device (e.g. "iPhone 14")
+// doesn't exist in the installed Xcode — tests then never run without any failure.
+// Pin a device that ships with current Xcode; override with -PiosSimulatorDevice=<name>.
+tasks
+  .withType(org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeSimulatorTest::class)
+  .configureEach {
+    device.set(providers.gradleProperty("iosSimulatorDevice").getOrElse("iPhone 16"))
+    enabled = true
+  }
 
 // Maven Central Publishing Configuration (New Portal API)
 // ========================================================

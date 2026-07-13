@@ -119,10 +119,17 @@ Kotlin/Native (AvifConverter.ios.kt)
 
 ### Version Locations
 
+The Gradle version for BOTH `:shared` (avifkit) and `:shared-native` (avifkit-native) comes from
+a single source: `gradle/libs.versions.toml` (`avifkit = "x.y.z"`). CI publishes override it with
+the `VERSION_NAME` Gradle property derived from the release tag (the vanniktech plugin gives that
+property precedence). The two artifacts must always ship as a matching version pair — the Kotlin
+side calls the `.so` through a private JNI signature.
+
 When bumping version, update ALL of these:
-1. `shared/build.gradle.kts` line 12 (`version = "x.y.z"`)
-2. `Package.swift` line 45 (URL + checksum)
-3. `AvifKit.podspec` (if using CocoaPods)
+1. `gradle/libs.versions.toml` (`avifkit = "x.y.z"`)
+2. `Package.swift` (URL + checksum — updated automatically by the iOS publish workflow)
+3. `AvifKit.podspec` (`spec.version`)
+4. `README.md` (installation snippets)
 
 ## Publishing Workflow
 

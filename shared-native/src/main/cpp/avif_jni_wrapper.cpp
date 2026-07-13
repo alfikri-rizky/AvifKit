@@ -177,31 +177,18 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeEncode(
 
 #else
     // ==========================================
-    // PLACEHOLDER: Mock AVIF implementation
+    // PLACEHOLDER build (no libavif): fail loudly.
     // ==========================================
+    // No mock data — returning fabricated bytes here silently ships garbage to
+    // consumers (see CODE_REVIEW.md H7). A null return surfaces in Kotlin as
+    // AvifError.EncodingFailed.
 
-    LOGW("PLACEHOLDER: libavif not available, returning mock AVIF header");
+    LOGE("libavif not compiled into this build (HAVE_LIBAVIF=0); encoding unavailable. "
+         "Run scripts/setup-android-libavif.sh and rebuild.");
 
     env->ReleaseByteArrayElements(pixels, pixelData, JNI_ABORT);
 
-    // Create minimal AVIF file signature
-    std::vector<uint8_t> mockAvif = {
-        0x00, 0x00, 0x00, 0x20,  // box size
-        0x66, 0x74, 0x79, 0x70,  // 'ftyp'
-        0x61, 0x76, 0x69, 0x66,  // 'avif'
-        0x00, 0x00, 0x00, 0x00,  // minor version
-        0x61, 0x76, 0x69, 0x66,  // compatible brand 'avif'
-        0x6D, 0x69, 0x66, 0x31,  // compatible brand 'mif1'
-        0x6D, 0x69, 0x61, 0x66   // compatible brand 'miaf'
-    };
-
-    jbyteArray result = env->NewByteArray(mockAvif.size());
-    if (result) {
-        env->SetByteArrayRegion(result, 0, mockAvif.size(),
-                               reinterpret_cast<const jbyte*>(mockAvif.data()));
-    }
-
-    return result;
+    return nullptr;
 #endif
 }
 
@@ -306,6 +293,18 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeDecode(
     // Get decoded image
     avifImage* image = decoder->image;
 
+    // AVIF stores orientation as irot/imir transform properties; libavif reports them
+    // but does not rotate the pixels. Hand them to Kotlin, which applies them via
+    // RgbaTransform (must be read before avifDecoderDestroy below).
+    int irotAngle = 0;
+    int imirAxis = -1;
+    if (image->transformFlags & AVIF_TRANSFORM_IROT) {
+        irotAngle = image->irot.angle & 3;
+    }
+    if (image->transformFlags & AVIF_TRANSFORM_IMIR) {
+        imirAxis = image->imir.axis & 1;
+    }
+
     // Setup RGB conversion
     avifRGBImage rgb;
     avifRGBImageSetDefaults(&rgb, image);
@@ -364,7 +363,7 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeDecode(
         return nullptr;
     }
 
-    jmethodID constructor = env->GetMethodID(decodedImageClass, "<init>", "([III)V");
+    jmethodID constructor = env->GetMethodID(decodedImageClass, "<init>", "([IIIII)V");
     if (!constructor) {
         LOGE("Failed to find DecodedImage constructor");
         // Check for pending JNI exceptions
@@ -386,7 +385,7 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeDecode(
 
     // Create and return DecodedImage object
     jobject result = env->NewObject(decodedImageClass, constructor,
-                                    pixelArray, width, height);
+                                    pixelArray, width, height, irotAngle, imirAxis);
 
     if (!result) {
         LOGE("Failed to create DecodedImage object");
@@ -404,89 +403,18 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeDecode(
 
 #else
     // ==========================================
-    // PLACEHOLDER: Mock decoding
+    // PLACEHOLDER build (no libavif): fail loudly.
     // ==========================================
+    // No mock gradient image — see the encode placeholder above. A null return
+    // surfaces in Kotlin as AvifError.DecodingFailed.
 
-    LOGW("PLACEHOLDER: libavif not available, returning test image");
+    LOGE("libavif not compiled into this build (HAVE_LIBAVIF=0); decoding unavailable. "
+         "Run scripts/setup-android-libavif.sh and rebuild.");
 
     env->ReleaseByteArrayElements(avifData, data, JNI_ABORT);
 
-    // Create a simple 100x100 colored test image
-    int width = 100;
-    int height = 100;
-    std::vector<int32_t> pixels(width * height);
-
-    // Create a gradient test pattern
-    for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-            int r = (x * 255) / width;
-            int g = (y * 255) / height;
-            int b = 128;
-            int a = 255;
-            pixels[y * width + x] = (a << 24) | (r << 16) | (g << 8) | b;
-        }
-    }
-
-    // Create DecodedImage object
-    jclass decodedImageClass = env->FindClass("com/alfikri/rizky/avifkit/DecodedImage");
-    if (!decodedImageClass) {
-        LOGE("Failed to find DecodedImage class");
-        return nullptr;
-    }
-
-    jmethodID constructor = env->GetMethodID(decodedImageClass, "<init>", "([III)V");
-    if (!constructor) {
-        LOGE("Failed to find DecodedImage constructor");
-        return nullptr;
-    }
-
-    jintArray pixelArray = env->NewIntArray(pixels.size());
-    if (!pixelArray) {
-        LOGE("Failed to allocate pixel array");
-        return nullptr;
-    }
-
-    env->SetIntArrayRegion(pixelArray, 0, pixels.size(), reinterpret_cast<const jint*>(pixels.data()));
-
-    jobject result = env->NewObject(decodedImageClass, constructor,
-                                    pixelArray, width, height);
-
-    if (!result) {
-        LOGE("Failed to create DecodedImage object");
-        return nullptr;
-    }
-
-    LOGI("Returned placeholder test image: %dx%d", width, height);
-
-    return result;
+    return nullptr;
 #endif
-}
-
-/**
- * Check if data is AVIF format
- */
-JNIEXPORT jboolean JNICALL
-Java_com_alfikri_rizky_avifkit_AvifConverter_nativeIsAvif(
-    JNIEnv* env,
-    jobject /* this */,
-    jbyteArray data) {
-
-    if (!data) return JNI_FALSE;
-
-    jsize length = env->GetArrayLength(data);
-    if (length < 12) return JNI_FALSE;
-
-    jbyte* bytes = env->GetByteArrayElements(data, nullptr);
-
-    // Check AVIF file signature (ftypavif)
-    bool isAvif = (bytes[4] == 0x66 && bytes[5] == 0x74 &&
-                   bytes[6] == 0x79 && bytes[7] == 0x70 &&
-                   bytes[8] == 0x61 && bytes[9] == 0x76 &&
-                   bytes[10] == 0x69 && bytes[11] == 0x66);
-
-    env->ReleaseByteArrayElements(data, bytes, JNI_ABORT);
-
-    return isAvif ? JNI_TRUE : JNI_FALSE;
 }
 
 /**

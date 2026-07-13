@@ -57,7 +57,10 @@ sealed class ImageInput {
  *   fields, XMP, ICC) is not copied to the output.
  * @param maxDimension Auto-resize if larger. May be auto-adjusted if maxSize is set.
  * @param maxSize Target maximum file size in bytes. If set, will override other params to achieve
- *   this size through adaptive compression.
+ *   this size through adaptive compression. Best-effort: if even the most aggressive settings
+ *   cannot reach the target, the smallest achieved result is returned rather than throwing.
+ *   Already-AVIF input is returned unchanged when it fits the target, and decoded + re-encoded when
+ *   it does not.
  * @param compressionStrategy Strategy for adaptive compression when maxSize is set. SMART (default)
  *   finds highest quality within target size. STRICT finds smallest possible size.
  */
@@ -179,8 +182,20 @@ data class ImageInfo(
   val fileSize: Long? = null,
 )
 
-/** Internal data class for decoded image data */
-data class DecodedImage(val pixels: IntArray, val width: Int, val height: Int) {
+/**
+ * Internal data class for decoded image data.
+ *
+ * [irotAngle]/[imirAxis] carry the AVIF `irot`/`imir` orientation properties (see [RgbaTransform]);
+ * the Android JNI wrapper constructs this class reflectively, so the primary constructor signature
+ * must stay in sync with `avif_jni_wrapper.cpp` (`([IIIII)V`).
+ */
+data class DecodedImage(
+  val pixels: IntArray,
+  val width: Int,
+  val height: Int,
+  val irotAngle: Int = 0,
+  val imirAxis: Int = -1,
+) {
   override fun equals(other: Any?): Boolean {
     if (this === other) return true
     if (other == null || this::class != other::class) return false
@@ -188,6 +203,8 @@ data class DecodedImage(val pixels: IntArray, val width: Int, val height: Int) {
     if (!pixels.contentEquals(other.pixels)) return false
     if (width != other.width) return false
     if (height != other.height) return false
+    if (irotAngle != other.irotAngle) return false
+    if (imirAxis != other.imirAxis) return false
     return true
   }
 
@@ -195,6 +212,8 @@ data class DecodedImage(val pixels: IntArray, val width: Int, val height: Int) {
     var result = pixels.contentHashCode()
     result = 31 * result + width
     result = 31 * result + height
+    result = 31 * result + irotAngle
+    result = 31 * result + imirAxis
     return result
   }
 }

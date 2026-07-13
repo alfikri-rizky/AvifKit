@@ -94,7 +94,9 @@ fi
 if [ -f "$LOCALAOM_CMAKE" ]; then
     if grep -q 'aomedia.googlesource.com/aom/+archive' "$LOCALAOM_CMAKE"; then
         echo "🔧 Patching LocalAom.cmake to use local aom source..."
-        sed -i '' 's|libaom URL "https://aomedia.googlesource.com/aom/+archive/${AVIF_AOM_GIT_TAG}.tar.gz" BINARY_DIR "${AOM_BINARY_DIR}"|libaom SOURCE_DIR "${AOM_EXT_SOURCE_DIR}" BINARY_DIR "${AOM_BINARY_DIR}"|' "$LOCALAOM_CMAKE"
+        # -i.bak (not -i '') so this works with both BSD (macOS) and GNU (Linux) sed.
+        sed -i.bak 's|libaom URL "https://aomedia.googlesource.com/aom/+archive/${AVIF_AOM_GIT_TAG}.tar.gz" BINARY_DIR "${AOM_BINARY_DIR}"|libaom SOURCE_DIR "${AOM_EXT_SOURCE_DIR}" BINARY_DIR "${AOM_BINARY_DIR}"|' "$LOCALAOM_CMAKE"
+        rm -f "$LOCALAOM_CMAKE.bak"
         echo "✅ LocalAom.cmake patched (URL → SOURCE_DIR)"
     fi
 fi

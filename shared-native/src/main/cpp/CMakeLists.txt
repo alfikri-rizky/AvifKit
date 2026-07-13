@@ -58,12 +58,21 @@ if(EXISTS ${LIBAVIF_DIR}/CMakeLists.txt)
     add_compile_definitions(HAVE_LIBAVIF=1)
 
     set(HAS_LIBAVIF TRUE)
-else()
-    message(WARNING "⚠️  libavif not found - Using placeholder implementation")
-    message(WARNING "⚠️  Run: ./scripts/setup-android-libavif.sh")
+elseif(AVIFKIT_ALLOW_PLACEHOLDER)
+    # Dev-only escape hatch: builds a wrapper whose encode/decode return null
+    # (Kotlin surfaces AvifError). Never ship this — pass the flag explicitly:
+    #   -DAVIFKIT_ALLOW_PLACEHOLDER=ON
+    message(WARNING "⚠️  libavif not found - building PLACEHOLDER wrapper (AVIF calls will fail at runtime)")
     add_compile_definitions(HAVE_LIBAVIF=0)
 
     set(HAS_LIBAVIF FALSE)
+else()
+    # Fail hard instead of silently producing a codec-less .so. A misconfigured
+    # build must break here, not in consumers' apps (CODE_REVIEW.md H7).
+    message(FATAL_ERROR
+        "libavif source not found at ${LIBAVIF_DIR}.\n"
+        "Run ./scripts/setup-android-libavif.sh first, or pass "
+        "-DAVIFKIT_ALLOW_PLACEHOLDER=ON to build a stub wrapper for development.")
 endif()
 
 # Create JNI wrapper library

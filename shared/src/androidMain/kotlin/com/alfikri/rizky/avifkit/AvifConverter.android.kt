@@ -33,8 +33,6 @@ actual class AvifConverter {
 
   private external fun nativeDecode(avifData: ByteArray): DecodedImage?
 
-  private external fun nativeIsAvif(data: ByteArray): Boolean
-
   private external fun nativeGetVersion(): String
 
   companion object {
@@ -53,6 +51,21 @@ actual class AvifConverter {
     }
 
     fun isNativeLibraryLoaded(): Boolean = nativeLibraryLoaded
+
+    // True only when the .so is loaded AND was compiled against libavif (a wrapper
+    // built in placeholder mode reports a non-libavif version string).
+    private val avifCodecAvailable: Boolean by lazy {
+      if (!nativeLibraryLoaded) {
+        false
+      } else {
+        try {
+          AvifConverter().nativeGetVersion().startsWith("libavif")
+        } catch (e: Throwable) {
+          Log.w(TAG, "Failed to query native library version", e)
+          false
+        }
+      }
+    }
   }
 
   actual suspend fun convertToBitmap(
@@ -152,9 +165,9 @@ actual class AvifConverter {
     }
 
   actual fun isAvifSupported(): Boolean {
-    // Return true if native library is loaded
-    // Currently returns true with placeholder implementation
-    return true
+    // Honest feature detection: false when the native library failed to load (or was
+    // built without libavif), so callers can branch instead of hitting AvifError later.
+    return avifCodecAvailable
   }
 
   actual fun isAvifFile(input: ImageInput): Boolean {
@@ -162,13 +175,16 @@ actual class AvifConverter {
       val data =
         when (input) {
           is ImageInput.FromBytes -> input.data
-          is ImageInput.FromPath -> File(input.path).readBytes().take(12).toByteArray()
+          is ImageInput.FromPath ->
+            File(input.path).readBytes().take(AvifFormat.HEADER_CHECK_SIZE).toByteArray()
           is ImageInput.FromFile ->
-            kotlinx.coroutines.runBlocking { input.file.readBytes().take(12).toByteArray() }
+            kotlinx.coroutines.runBlocking {
+              input.file.readBytes().take(AvifFormat.HEADER_CHECK_SIZE).toByteArray()
+            }
 
           is ImageInput.FromBitmap -> return false
         }
-      isAvifFormat(data)
+      AvifFormat.isAvif(data)
     } catch (e: Exception) {
       false
     }
@@ -243,10 +259,34 @@ actual class AvifConverter {
   ): ByteArray {
     val targetSize = options.maxSize!!
 
-    return when (options.compressionStrategy) {
-      CompressionStrategy.SMART -> convertWithSmartCompression(input, options, targetSize)
-      CompressionStrategy.STRICT -> convertWithStrictCompression(input, options, targetSize)
+    // Already-AVIF input: return it untouched only when it fits the target. Otherwise
+    // decode and run the adaptive loop on the pixels — convertStandard's passthrough
+    // would hand back the same oversized bytes on every attempt.
+    var effectiveInput = input
+    val avifBytes = readInputAvifBytes(input)
+    if (avifBytes != null) {
+      if (avifBytes.size <= targetSize) return avifBytes
+      effectiveInput = ImageInput.FromBitmap(decodeAvifToBitmap(avifBytes))
     }
+
+    return when (options.compressionStrategy) {
+      CompressionStrategy.SMART -> convertWithSmartCompression(effectiveInput, options, targetSize)
+      CompressionStrategy.STRICT ->
+        convertWithStrictCompression(effectiveInput, options, targetSize)
+    }
+  }
+
+  /** The input's raw bytes when they already contain AVIF data, else null. */
+  private suspend fun readInputAvifBytes(input: ImageInput): ByteArray? {
+    val bytes =
+      when (input) {
+        is ImageInput.FromBytes -> input.data
+        is ImageInput.FromPath ->
+          File(input.path).takeIf { it.exists() }?.readBytes() ?: return null
+        is ImageInput.FromFile -> input.file.readBytes()
+        is ImageInput.FromBitmap -> return null
+      }
+    return if (AvifFormat.isAvif(bytes)) bytes else null
   }
 
   /**
@@ -410,7 +450,7 @@ actual class AvifConverter {
     withContext(Dispatchers.IO) {
       when (input) {
         is ImageInput.FromBytes -> {
-          if (isAvifFormat(input.data)) {
+          if (AvifFormat.isAvif(input.data)) {
             input.data
           } else {
             val bitmap =
@@ -446,7 +486,7 @@ actual class AvifConverter {
 
         is ImageInput.FromFile -> {
           val data = input.file.readBytes()
-          if (isAvifFormat(data)) {
+          if (AvifFormat.isAvif(data)) {
             data
           } else {
             val bitmap =
@@ -537,10 +577,29 @@ actual class AvifConverter {
           throw AvifError.DecodingFailed("Native decoding failed: ${e.message}")
         }
 
+      // Apply AVIF irot/imir orientation (libavif reports but does not apply it).
+      val oriented =
+        if (RgbaTransform.isIdentity(decoded.irotAngle, decoded.imirAxis)) {
+          decoded
+        } else {
+          DecodedImage(
+            pixels =
+              RgbaTransform.applyToPixels(
+                decoded.pixels,
+                decoded.width,
+                decoded.height,
+                decoded.irotAngle,
+                decoded.imirAxis,
+              ),
+            width = RgbaTransform.outputWidth(decoded.width, decoded.height, decoded.irotAngle),
+            height = RgbaTransform.outputHeight(decoded.width, decoded.height, decoded.irotAngle),
+          )
+        }
+
       return Bitmap.createBitmap(
-        decoded.pixels,
-        decoded.width,
-        decoded.height,
+        oriented.pixels,
+        oriented.width,
+        oriented.height,
         Bitmap.Config.ARGB_8888,
       )
     } catch (e: OutOfMemoryError) {
@@ -598,19 +657,11 @@ actual class AvifConverter {
     return Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
   }
 
-  private fun isAvifFormat(data: ByteArray): Boolean {
-    // Check AVIF file signature
-    return data.size > 12 &&
-      data
-        .sliceArray(4..11)
-        .contentEquals(byteArrayOf(0x66, 0x74, 0x79, 0x70, 0x61, 0x76, 0x69, 0x66))
-  }
-
   private fun detectFormat(data: ByteArray): ImageFormat {
     if (data.size < 12) return ImageFormat.UNKNOWN
 
     return when {
-      isAvifFormat(data) -> ImageFormat.AVIF
+      AvifFormat.isAvif(data) -> ImageFormat.AVIF
       data[0] == 0xFF.toByte() && data[1] == 0xD8.toByte() -> ImageFormat.JPEG
       data[0] == 0x89.toByte() && data[1] == 0x50.toByte() -> ImageFormat.PNG
       data[8] == 0x57.toByte() && data[9] == 0x45.toByte() -> ImageFormat.WEBP

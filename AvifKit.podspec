@@ -26,7 +26,7 @@ Pod::Spec.new do |spec|
 
   spec.source       = {
     :git => "https://github.com/alfikri-rizky/AvifKit.git",
-    :tag => "#{spec.version}"
+    :tag => "v#{spec.version}"
   }
 
   # Download pre-built Kotlin Multiplatform XCFramework from GitHub Release.
@@ -36,8 +36,8 @@ Pod::Spec.new do |spec|
 
   # Prepare command downloads the XCFramework from GitHub Release
   spec.prepare_command = <<-CMD
-    curl -L -o Shared.xcframework.zip \
-      https://github.com/alfikri-rizky/AvifKit/releases/download/#{spec.version}/Shared.xcframework.zip
+    curl -fL -o Shared.xcframework.zip \
+      https://github.com/alfikri-rizky/AvifKit/releases/download/v#{spec.version}/Shared.xcframework.zip
     unzip -q Shared.xcframework.zip
     rm Shared.xcframework.zip
   CMD
