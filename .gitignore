@@ -84,3 +84,7 @@ shared/src/nativeInterop/libs/
 docs
 scripts
 .claude
+shared/AGENTS.md
+
+# libavif source clone (fetched by scripts/setup-android-libavif.sh, cached in CI)
+shared-native/src/main/cpp/libavif/

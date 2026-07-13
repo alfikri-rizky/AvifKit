@@ -209,7 +209,7 @@ Add the dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.alfikri-rizky:avifkit:0.3.1")
+    implementation("io.github.alfikri-rizky:avifkit:0.3.2")
 }
 ```
 
@@ -220,14 +220,14 @@ dependencies {
 **In Xcode:**
 1. File → Add Packages...
 2. Enter repository URL: `https://github.com/alfikri-rizky/AvifKit`
-3. Select version: `0.3.1` or higher
+3. Select version: `0.3.2` or higher
 4. **Important:** After adding the package, **clean build folder** (Cmd+Shift+K) before first build
 
 **Or add to your `Package.swift`:**
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.3.1")
+    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.3.2")
 ]
 ```
 
@@ -255,14 +255,14 @@ print("AVIF available:", converter.isAvifSupported())  // true
    ```
 2. **In Xcode:** File → Packages → Reset Package Caches; Product → Clean Build Folder (Cmd+Shift+K); Build.
 
-**Download from GitHub Releases:** [v0.3.1](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.3.1)
+**Download from GitHub Releases:** [v0.3.2](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.3.2)
 
 #### iOS (CocoaPods) - Not Recommended ⚠️
 
 CocoaPods support is technically available but **not recommended** due to validation issues:
 
 ```ruby
-pod 'AvifKit', '~> 0.3.1'
+pod 'AvifKit', '~> 0.3.2'
 ```
 
 **Important Notes:**
@@ -413,6 +413,29 @@ pod trunk push AvifKit.podspec
 ---
 
 ### Changelog
+
+#### v0.3.2
+
+Codec-correctness release — resolves all 29 findings (C1–C3, H1–H8, M1–M8, L1–L9) from a full code review of both platform codecs.
+
+- **Critical — alpha & lossless correctness:**
+  - **iOS:** premultiplied alpha is now declared to libavif on both encode and decode. CoreGraphics only produces/consumes premultiplied RGBA, so every semi-transparent pixel was previously encoded with darkened RGB and decoded washed-out.
+  - **Android:** `EncodingOptions` are now fully honored — `alphaQuality` and `lossless` reach the encoder (alpha was silently encoded at color quality; lossless was ignored entirely).
+  - **Both:** `lossless = true` is now pixel-exact (forces YUV444 + identity matrix coefficients + `qualityAlpha=100`); `quality=100` alone still rounds through the YUV transform.
+- **High:**
+  - `maxSize` with already-AVIF input now decodes + re-encodes when the original doesn't fit the target (previously the oversized original was returned silently).
+  - Android `isAvifSupported()` reports real codec availability instead of hardcoded `true`.
+  - AVIF detection parses the `ftyp` box properly (major + compatible brands, `avif`/`avis`) in one shared implementation.
+  - Decode now applies `irot`/`imir` orientation on both platforms.
+  - **CocoaPods:** fixed podspec tag/download URL missing the `v` prefix (404 for every CocoaPods consumer).
+- **Medium:**
+  - Android: HARDWARE bitmaps (Coil/Glide default) are copied before pixel access instead of throwing.
+  - `getImageInfo` uses a parse-only AVIF path for exact dimensions/alpha (works below API 31 and on iOS 15); non-AVIF inputs no longer report phantom alpha.
+  - Opaque sources skip the alpha plane entirely — smaller files, no phantom alpha on decode.
+  - Adaptive compression (SMART/STRICT) unified in common code: decodes the source once, cancellation-aware, terminates early once parameters floor out.
+  - Resize clamps to ≥ 1px; iOS scales by pixel dimensions via `UIGraphicsImageRenderer`.
+- **Low / infrastructure:** codec thread count derived from CPU cores (capped 1–8), Android orchestration on `Dispatchers.Default` with file I/O on `Dispatchers.IO`, self-contained `.so` via `c++_static`, content-based format detection centralized in common code, new CI workflow (host + iOS simulator + Android emulator tests), and a race-free manual iOS release workflow.
+- **⚠️ Breaking (internal):** the JNI signature changed — `avifkit` and `avifkit-native` must ship as a matching version pair (the Gradle project dependency already guarantees this for consumers).
 
 #### v0.3.1
 - **iOS Maven-channel fix:** the v0.3.0 Kotlin/Native artifact shipped the cinterop
