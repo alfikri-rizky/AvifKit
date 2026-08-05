@@ -39,12 +39,4 @@ object ConversionPlanner {
     outputBytes: Long,
     settings: ConversionSettings,
   ): Boolean = settings.skipIfLarger && inputBytes > 0 && outputBytes >= inputBytes
-
-  /**
-   * Estimated per-image peak memory, in bytes, used to warn before a batch of very large photos. A
-   * decoded bitmap is 4 bytes per pixel, and the pipeline holds roughly the source bytes plus one
-   * decoded copy plus the encoder's output at once.
-   */
-  fun estimatedPeakBytes(width: Int, height: Int, sourceBytes: Long): Long =
-    width.toLong() * height.toLong() * 4L + sourceBytes * 2L
 }

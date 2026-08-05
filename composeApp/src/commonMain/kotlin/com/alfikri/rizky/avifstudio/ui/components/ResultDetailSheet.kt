@@ -83,7 +83,12 @@ fun ResultDetailSheet(job: ConversionJob, onDismiss: () -> Unit, onShare: (Platf
       )
       DetailRow(
         label = stringResource(Res.string.dimensions),
-        before = "—",
+        before =
+          if (output.inputWidth != null && output.inputHeight != null) {
+            formatDimensions(output.inputWidth, output.inputHeight)
+          } else {
+            "—"
+          },
         after = formatDimensions(output.width, output.height),
       )
       Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {

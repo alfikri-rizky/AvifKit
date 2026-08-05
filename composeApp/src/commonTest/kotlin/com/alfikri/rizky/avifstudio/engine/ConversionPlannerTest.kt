@@ -71,13 +71,6 @@ class ConversionPlannerTest {
     )
   }
 
-  @Test
-  fun estimatesPeakMemoryFromPixelsNotFileSize() {
-    // A 12 MP photo is ~48 MB decoded regardless of how well it happens to be compressed.
-    val estimate = ConversionPlanner.estimatedPeakBytes(4000, 3000, sourceBytes = 3_000_000)
-    assertEquals(4000L * 3000L * 4L + 6_000_000L, estimate)
-  }
-
   private fun source(name: String) =
     SourceImage(id = name, file = PlatformFile("/tmp/$name"), displayName = name, sizeBytes = 1000)
 }

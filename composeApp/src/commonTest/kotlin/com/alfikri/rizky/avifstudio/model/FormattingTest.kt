@@ -37,38 +37,10 @@ class FormattingTest {
   }
 
   @Test
-  fun wordsSavingsInTheDirectionOfTheChange() {
-    assertEquals("80% smaller", formatSavings(1000, 200))
-    assertEquals("50% larger", formatSavings(1000, 1500))
-    assertEquals("same size", formatSavings(1000, 1000))
-  }
-
-  @Test
   fun switchesDurationUnitAtOneSecond() {
     assertEquals("840 ms", formatDuration(840))
     assertEquals("1.0 s", formatDuration(1000))
     assertEquals("12.5 s", formatDuration(12_500))
-  }
-
-  @Test
-  fun capsLongestEdgeAndKeepsAspectRatio() {
-    assertEquals(1920 to 1440, scaledDimensions(4032, 3024, 1920))
-    assertEquals(1440 to 1920, scaledDimensions(3024, 4032, 1920))
-  }
-
-  @Test
-  fun neverUpscalesAndTreatsNoCapAsKeepOriginal() {
-    assertEquals(800 to 600, scaledDimensions(800, 600, 1920))
-    assertEquals(4032 to 3024, scaledDimensions(4032, 3024, null))
-    assertEquals(4032 to 3024, scaledDimensions(4032, 3024, 0))
-  }
-
-  /** A 500:1 panorama would round its short edge to 0 px without the coerce. */
-  @Test
-  fun neverScalesAnEdgeDownToZeroPixels() {
-    val (width, height) = scaledDimensions(10_000, 20, 100)
-    assertEquals(100, width)
-    assertEquals(1, height)
   }
 
   @Test

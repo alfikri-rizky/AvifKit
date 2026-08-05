@@ -37,7 +37,7 @@ import kotlinx.coroutines.sync.withPermit
 class ConversionEngine(
   private val converter: AvifConverter = AvifConverter(),
   private val codec: ImageCodec = ImageCodec(),
-) {
+) : ConversionRunner {
 
   /** Where converted files land before the user exports them. */
   private val outputDir: PlatformFile
@@ -49,29 +49,47 @@ class ConversionEngine(
    * Returns `null` when [ConversionSettings.skipIfLarger] applies — the conversion ran, the output
    * was no smaller than the original, and the caller should keep the original instead.
    */
-  suspend fun convert(
+  override suspend fun convert(
     source: SourceImage,
     settings: ConversionSettings,
     outputName: String,
-  ): ConversionOutput? = encodeGate.withPermit {
+  ): ConversionOutput? {
     val startedAt = TimeSource.Monotonic.markNow()
+    // Outside the permit on purpose. A file picked from a cloud provider streams at whatever the
+    // network gives you; holding the single encode permit through that download would freeze every
+    // thumbnail and preview in the app for no memory benefit — the permit exists to cap decoded
+    // bitmaps, not to serialise I/O.
     val sourceBytes = readSource(source.file)
     if (sourceBytes.isEmpty()) {
       throw IllegalStateException("The file is empty or could not be read")
     }
 
-    val encoded =
+    val encoded = encodeGate.withPermit {
       when (settings.outputFormat) {
         OutputFormat.AVIF -> encodeAvif(sourceBytes, settings)
         OutputFormat.JPEG,
         OutputFormat.PNG -> encodeViaBitmap(sourceBytes, settings)
       }
+    }
 
     // Measured, not advertised: a content provider can report -1 for a file it happily streams,
     // and every downstream number (savings, "was it smaller?") has to come from what was read.
     val inputBytes = sourceBytes.size.toLong()
+    // Header-only read, so this costs nothing next to the encode that just ran. AVIF sources go
+    // through AvifKit because BitmapFactory cannot read them below API 31.
+    val inputSize =
+      runCatching {
+          if (ImageSniffer.isAvif(sourceBytes)) {
+            converter.getImageInfo(ImageInput.from(sourceBytes)).let {
+              PixelSize(it.width, it.height)
+            }
+          } else {
+            codec.readSize(sourceBytes)
+          }
+        }
+        .getOrNull()
     if (ConversionPlanner.shouldKeepOriginal(inputBytes, encoded.bytes.size.toLong(), settings)) {
-      return@withPermit null
+      return null
     }
 
     val target = outputDir / outputName
@@ -81,11 +99,13 @@ class ConversionEngine(
     if (target.exists()) target.delete(mustExist = false)
     target.write(encoded.bytes)
 
-    ConversionOutput(
+    return ConversionOutput(
       file = target,
       displayName = outputName,
       sizeBytes = encoded.bytes.size.toLong(),
       inputBytes = inputBytes,
+      inputWidth = inputSize?.width,
+      inputHeight = inputSize?.height,
       width = encoded.size.width,
       height = encoded.size.height,
       format = settings.outputFormat,
@@ -97,16 +117,13 @@ class ConversionEngine(
   suspend fun decodeForDisplay(
     file: PlatformFile,
     maxDimension: Int?,
-  ): com.alfikri.rizky.avifkit.PlatformBitmap = encodeGate.withPermit {
+  ): com.alfikri.rizky.avifkit.PlatformBitmap {
     val bytes = readSource(file)
-    decodeAny(bytes, maxDimension)
+    return encodeGate.withPermit { decodeAny(bytes, maxDimension) }
   }
 
-  /** Reads the bytes of an already-converted output (no gate — these are small and local). */
-  suspend fun readOutput(file: PlatformFile): ByteArray = file.readBytes()
-
   /** Removes everything this engine has written. Called when the user clears a batch. */
-  suspend fun clearOutputs() {
+  override suspend fun clearOutputs() {
     val dir = outputDir
     if (dir.exists()) dir.delete(mustExist = false)
   }
@@ -173,6 +190,3 @@ class ConversionEngine(
     private val encodeGate = Semaphore(permits = 1)
   }
 }
-
-/** Reads a file's size without throwing when the provider does not report one. */
-internal fun PlatformFile.sizeOrZero(): Long = size().coerceAtLeast(0L)

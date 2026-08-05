@@ -121,15 +121,9 @@ private fun StatusLine(job: ConversionJob) {
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.error,
       )
-      status.detail?.let {
-        Text(
-          text = it,
-          style = MaterialTheme.typography.labelSmall,
-          color = MaterialTheme.colorScheme.onSurfaceVariant,
-          maxLines = 2,
-          overflow = TextOverflow.Ellipsis,
-        )
-      }
+      // The raw codec/platform message is deliberately NOT rendered. It is always English, and it
+      // leaked things like "com.alfikri.rizky.avifstudio has no access to content://media/..."
+      // into the UI. It stays on JobStatus.Failed.detail for logs and bug reports.
     }
     JobStatus.Skipped -> Muted(stringResource(Res.string.skipped_reason))
     JobStatus.Cancelled -> Muted(stringResource(Res.string.status_cancelled))

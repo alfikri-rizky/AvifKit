@@ -9,33 +9,6 @@ package com.alfikri.rizky.avifstudio.model
  */
 object ImageSniffer {
 
-  /** Enough for an ISO-BMFF `ftyp` box with a healthy list of compatible brands. */
-  const val HEADER_BYTES = 64
-
-  enum class Kind(val label: String) {
-    AVIF("AVIF"),
-    JPEG("JPEG"),
-    PNG("PNG"),
-    WEBP("WebP"),
-    HEIF("HEIF"),
-    GIF("GIF"),
-    BMP("BMP"),
-    UNKNOWN("Image"),
-  }
-
-  fun detect(header: ByteArray): Kind =
-    when {
-      isAvif(header) -> Kind.AVIF
-      startsWith(header, 0, 0xFF, 0xD8, 0xFF) -> Kind.JPEG
-      startsWith(header, 0, 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A) -> Kind.PNG
-      startsWith(header, 0, 0x52, 0x49, 0x46, 0x46) &&
-        startsWith(header, 8, 0x57, 0x45, 0x42, 0x50) -> Kind.WEBP
-      isFtyp(header) && startsWith(header, 8, 0x68, 0x65) -> Kind.HEIF
-      startsWith(header, 0, 0x47, 0x49, 0x46, 0x38) -> Kind.GIF
-      startsWith(header, 0, 0x42, 0x4D) -> Kind.BMP
-      else -> Kind.UNKNOWN
-    }
-
   /**
    * AVIF containers do not always put `avif` in the major brand — encoders routinely emit `mif1` or
    * `miaf` there and list `avif` only among the compatible brands, so a plain `ftypavif` prefix
@@ -46,6 +19,9 @@ object ImageSniffer {
     if (isAvifBrand(header, 8)) return true
 
     val boxSize = readBe32(header, 0)
+    // Stop at whichever comes first: the end of the declared ftyp box, or the end of the bytes we
+    // were given. This is a scan bound, NOT a safety guard — `startsWith` range-checks every read,
+    // so removing this changes how far the loop walks, never whether it can crash or misreport.
     val end = if (boxSize in 16..header.size) boxSize else header.size
     var offset = 16 // skip box size, "ftyp", major brand and minor version
     while (offset + 4 <= end) {

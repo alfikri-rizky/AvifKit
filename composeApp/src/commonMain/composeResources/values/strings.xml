@@ -95,7 +95,7 @@
     <string name="failure_unreadable">Could not read this file</string>
     <string name="failure_not_an_image">This is not an image we can read</string>
     <string name="failure_encode">Conversion failed</string>
-    <string name="failure_out_of_memory">Too large for this device\'s memory — try it on a device with more RAM</string>
+    <string name="failure_out_of_memory">Too large for this device's memory — try it on a device with more RAM</string>
     <string name="failure_unknown">Something went wrong</string>
 
     <string name="savings_smaller">%1$d% smaller</string>
@@ -140,5 +140,4 @@
     <string name="cannot_decode">Could not open this image: %1$s</string>
     <string name="github_repo">AvifKit on GitHub</string>
     <string name="github_repo_desc">The open-source library that does the encoding</string>
-    <string name="open_source">Open source</string>
 </resources>

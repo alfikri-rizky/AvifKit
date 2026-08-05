@@ -8,7 +8,7 @@ import com.alfikri.rizky.avifkit.CompressionStrategy
  *
  * "Quality 75, speed 6, YUV420" tells a stranger nothing; "Web-ready" does. [CUSTOM] is the escape
  * hatch that exposes every knob for people who do know what YUV420 means. Titles and descriptions
- * live in [com.alfikri.rizky.avifstudio.i18n.Strings] so they can be translated.
+ * live in the `composeResources` string files so they can be translated.
  */
 enum class Recipe(val glyph: String) {
   WEB_READY("\uD83C\uDF10"),

@@ -68,8 +68,10 @@ jobs:
         run: |
           cat > gradle.properties << 'EOF'
           android.useAndroidX=true
+          android.enableJetifier=false
           org.gradle.parallel=true
           org.gradle.caching=true
+          org.gradle.configureondemand=false
           org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m
           kotlin.code.style=official
           kotlin.mpp.stability.nowarn=true
@@ -102,6 +104,11 @@ jobs:
       - name: Build the iOS app itself
         # Proves the Xcode project still links the Kotlin framework — a green Gradle build
         # says nothing about whether the app target compiles against it.
+        #
+        # `shell: bash` is load-bearing: it turns on pipefail. GitHub's implicit default is
+        # `bash -e {0}` with no pipefail, so `xcodebuild ... | tail` would report tail's exit
+        # status and this step could never fail.
+        shell: bash
         run: |
           DEVICE_ID=$(xcrun simctl list devices available \
             | grep -Eo '\(([0-9A-F-]{36})\)' | tr -d '()' | head -1)
@@ -156,8 +163,10 @@ jobs:
         run: |
           cat > gradle.properties << 'EOF'
           android.useAndroidX=true
+          android.enableJetifier=false
           org.gradle.parallel=true
           org.gradle.caching=true
+          org.gradle.configureondemand=false
           org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m
           kotlin.code.style=official
           kotlin.mpp.stability.nowarn=true

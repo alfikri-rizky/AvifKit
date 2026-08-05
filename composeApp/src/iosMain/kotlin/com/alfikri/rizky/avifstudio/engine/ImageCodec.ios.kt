@@ -35,6 +35,7 @@ import platform.UIKit.UIGraphicsEndImageContext
 import platform.UIKit.UIGraphicsGetImageFromCurrentImageContext
 import platform.UIKit.UIImage
 import platform.UIKit.UIImageJPEGRepresentation
+import platform.UIKit.UIImageOrientation
 import platform.UIKit.UIImagePNGRepresentation
 import platform.posix.memcpy
 
@@ -60,11 +61,19 @@ actual class ImageCodec {
     withContext(Dispatchers.Default) {
       val current = pixelSize(bitmap)
       if (current.width <= 0 || current.height <= 0) return@withContext bitmap
-      if (maxDimension == null || maxDimension <= 0) return@withContext bitmap
-      val longest = max(current.width, current.height)
-      if (longest <= maxDimension) return@withContext bitmap
 
-      val factor = maxDimension.toDouble() / longest
+      // Redrawing is also what bakes the EXIF orientation into the pixels. A rotated photo that
+      // happens to need no downscaling must still go through here, or `CGImage` (which is NOT
+      // rotated) and `UIImage.size` (which IS) disagree, and the preview renders sideways.
+      val needsScale =
+        maxDimension != null &&
+          maxDimension > 0 &&
+          max(current.width, current.height) > maxDimension
+      val needsRotation = bitmap.imageOrientation != UIImageOrientation.UIImageOrientationUp
+      if (!needsScale && !needsRotation) return@withContext bitmap
+
+      val factor =
+        if (needsScale) maxDimension!!.toDouble() / max(current.width, current.height) else 1.0
       val width = (current.width * factor).toInt().coerceAtLeast(1)
       val height = (current.height * factor).toInt().coerceAtLeast(1)
 

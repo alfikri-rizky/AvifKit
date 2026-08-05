@@ -26,6 +26,8 @@ import com.alfikri.rizky.avifkit.PlatformFile
 import com.alfikri.rizky.avifstudio.engine.ConversionEngine
 import com.alfikri.rizky.avifstudio.engine.toImageBitmap
 import io.github.vinceglb.filekit.path
+import io.github.vinceglb.filekit.size
+import kotlinx.coroutines.CancellationException
 
 /**
  * Small preview for a list row.
@@ -37,7 +39,10 @@ import io.github.vinceglb.filekit.path
  */
 @Composable
 fun Thumbnail(file: PlatformFile, size: Dp = 56.dp, modifier: Modifier = Modifier) {
-  val key = remember(file) { file.path }
+  // Output paths are deterministic (cache/avifstudio-output/IMG_x.avif), so the path alone is not
+  // a content key: re-running the same batch at a different quality reuses the same name and would
+  // otherwise redisplay the previous run's thumbnail. Size discriminates the two.
+  val key = remember(file) { "${file.path}:${file.size()}" }
   var image by remember(key) { mutableStateOf(ThumbnailCache[key]) }
 
   LaunchedEffect(key) {
@@ -47,6 +52,8 @@ fun Thumbnail(file: PlatformFile, size: Dp = 56.dp, modifier: Modifier = Modifie
         ConversionEngine().decodeForDisplay(file, THUMBNAIL_PX).toImageBitmap().also {
           ThumbnailCache[key] = it
         }
+      } catch (cancellation: CancellationException) {
+        throw cancellation
       } catch (_: Throwable) {
         // A thumbnail is decoration; a file that cannot be decoded reports itself through the
         // row's own error state instead.

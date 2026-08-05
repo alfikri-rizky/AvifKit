@@ -40,6 +40,9 @@ import com.alfikri.rizky.avifstudio.resources.Res
 import com.alfikri.rizky.avifstudio.resources.cannot_decode
 import com.alfikri.rizky.avifstudio.resources.close
 import com.alfikri.rizky.avifstudio.resources.decoding
+import com.alfikri.rizky.avifstudio.resources.view_full_screen
+import com.alfikri.rizky.avifstudio.resources.viewer_hint
+import kotlinx.coroutines.CancellationException
 import org.jetbrains.compose.resources.stringResource
 
 /** Decode outcome for a preview. */
@@ -68,6 +71,10 @@ fun rememberDecodedImage(file: PlatformFile, maxDimension: Int): DecodeState {
     state =
       try {
         DecodeState.Ready(ConversionEngine().decodeForDisplay(file, maxDimension).toImageBitmap())
+      } catch (cancellation: CancellationException) {
+        // Leaving the screen cancels this effect. Swallowing it rendered
+        // "StandaloneCoroutine was cancelled" as if the image were broken.
+        throw cancellation
       } catch (error: Throwable) {
         DecodeState.Failed(error.message?.take(120) ?: fallbackMessage)
       }
@@ -127,7 +134,17 @@ fun FullScreenImageViewer(file: PlatformFile, onDismiss: () -> Unit) {
             textAlign = TextAlign.Center,
             modifier = Modifier.align(Alignment.Center).padding(24.dp),
           )
-        is DecodeState.Ready -> ZoomableImage(state.image)
+        is DecodeState.Ready ->
+          ZoomableImage(state.image, stringResource(Res.string.view_full_screen))
+      }
+
+      if (state is DecodeState.Ready) {
+        Text(
+          text = stringResource(Res.string.viewer_hint),
+          color = Color.White.copy(alpha = 0.75f),
+          style = MaterialTheme.typography.labelMedium,
+          modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp),
+        )
       }
 
       IconButton(
@@ -148,7 +165,7 @@ fun FullScreenImageViewer(file: PlatformFile, onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun ZoomableImage(image: ImageBitmap) {
+private fun ZoomableImage(image: ImageBitmap, contentDescription: String) {
   var scale by remember { mutableFloatStateOf(1f) }
   var offsetX by remember { mutableFloatStateOf(0f) }
   var offsetY by remember { mutableFloatStateOf(0f) }
@@ -184,7 +201,8 @@ private fun ZoomableImage(image: ImageBitmap) {
   ) {
     Image(
       bitmap = image,
-      contentDescription = null,
+      // Without this the whole viewer screen is silent to a screen reader.
+      contentDescription = contentDescription,
       contentScale = ContentScale.Fit,
       modifier =
         Modifier.fillMaxSize().graphicsLayer {

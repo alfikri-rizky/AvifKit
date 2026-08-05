@@ -68,14 +68,6 @@ class FileNamingTest {
   }
 
   @Test
-  fun readsBaseNameAndExtension() {
-    assertEquals("a.b", FileNaming.baseName("a.b.jpg"))
-    assertEquals("README", FileNaming.baseName("README"))
-    assertEquals("jpg", FileNaming.extensionOf("a.b.JPG"))
-    assertEquals("", FileNaming.extensionOf("README"))
-  }
-
-  @Test
   fun sanitiseNeverLeavesATrailingDot() {
     assertTrue(!FileNaming.sanitize("weird.").endsWith("."))
   }

@@ -70,6 +70,8 @@ class BatchSummaryTest {
             displayName = "out-${src.id}",
             sizeBytes = outputBytes,
             inputBytes = inputBytes,
+            inputWidth = 4032,
+            inputHeight = 3024,
             width = 1920,
             height = 1080,
             format = OutputFormat.AVIF,

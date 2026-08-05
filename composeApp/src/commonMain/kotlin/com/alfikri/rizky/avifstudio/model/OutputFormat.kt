@@ -15,20 +15,4 @@ enum class OutputFormat(val extension: String, val mimeType: String, val label: 
   /** True when the encoder ignores the quality setting, so the UI can hide the slider. */
   val isLossless: Boolean
     get() = this == PNG
-
-  companion object {
-    /** Maps a file extension (with or without a leading dot, any case) to a known format. */
-    fun fromExtension(extension: String): OutputFormat? {
-      val normalized = extension.removePrefix(".").lowercase()
-      return when (normalized) {
-        "avif",
-        "avifs" -> AVIF
-        "jpg",
-        "jpeg",
-        "jpe" -> JPEG
-        "png" -> PNG
-        else -> null
-      }
-    }
-  }
 }

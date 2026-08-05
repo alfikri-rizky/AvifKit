@@ -126,5 +126,4 @@
     <string name="cannot_decode">Gambar ini tidak bisa dibuka: %1$s</string>
     <string name="github_repo">AvifKit di GitHub</string>
     <string name="github_repo_desc">Pustaka sumber terbuka yang melakukan enkodenya</string>
-    <string name="open_source">Sumber terbuka</string>
 </resources>

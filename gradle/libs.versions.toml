@@ -17,9 +17,9 @@ androidx-espresso = "3.7.0"
 androidx-lifecycle = "2.9.5"
 androidx-testExt = "1.3.0"
 composeMultiplatform = "1.9.3"
+datastore = "1.2.1"
 # FileKit is pinned in one place: :shared publishes filekit-core as an api() dependency, so the
 # app and the library must never drift onto different versions.
-datastore = "1.2.1"
 filekit = "0.12.0"
 junit = "4.13.2"
 kotlin = "2.2.20"

@@ -22,6 +22,9 @@ data class ConversionOutput(
    * win; this is the number the summary uses.
    */
   val inputBytes: Long,
+  /** Source dimensions, read from the header before encoding. Null if the header was unreadable. */
+  val inputWidth: Int? = null,
+  val inputHeight: Int? = null,
   val width: Int,
   val height: Int,
   val format: OutputFormat,
@@ -92,6 +95,9 @@ data class BatchSummary(
   val failed: Int,
   val skipped: Int,
   val inputBytes: Long,
+  /** Source dimensions, read from the header before encoding. Null if the header was unreadable. */
+  val inputWidth: Int? = null,
+  val inputHeight: Int? = null,
   val outputBytes: Long,
 ) {
   val savedBytes: Long

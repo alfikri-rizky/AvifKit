@@ -5,7 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.alfikri.rizky.avifkit.AvifError
 import com.alfikri.rizky.avifkit.PlatformFile
 import com.alfikri.rizky.avifstudio.engine.ConversionEngine
-import com.alfikri.rizky.avifstudio.engine.ConversionPlanner
+import com.alfikri.rizky.avifstudio.engine.ConversionRunner
 import com.alfikri.rizky.avifstudio.model.BatchSummary
 import com.alfikri.rizky.avifstudio.model.ConversionJob
 import com.alfikri.rizky.avifstudio.model.ConversionSettings
@@ -17,9 +17,11 @@ import com.alfikri.rizky.avifstudio.model.SourceImage
 import com.alfikri.rizky.avifstudio.platform.resolveMetadata
 import com.alfikri.rizky.avifstudio.settings.AppLanguage
 import com.alfikri.rizky.avifstudio.settings.AppSettings
+import com.alfikri.rizky.avifstudio.settings.SettingsRepository
 import com.alfikri.rizky.avifstudio.settings.SettingsStore
 import com.alfikri.rizky.avifstudio.settings.ThemeMode
 import com.alfikri.rizky.avifstudio.settings.applyAppLanguage
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -65,13 +67,20 @@ data class StudioUiState(
   val completedCount: Int
     get() = jobs.count { it.status.isTerminal }
 
+  /**
+   * Everything Save and Share should hand over — including the sources of jobs that were kept
+   * as-is. "3 kept as-is" then quietly writing only the other two is the kind of omission a user
+   * discovers much later, in the folder they exported to.
+   */
   val exportableFiles: List<PlatformFile>
-    get() = jobs.mapNotNull { it.outputOrNull?.file }
+    get() = jobs.mapNotNull { job ->
+      job.outputOrNull?.file ?: job.source.file.takeIf { job.status is JobStatus.Skipped }
+    }
 }
 
 class StudioViewModel(
-  private val engine: ConversionEngine = ConversionEngine(),
-  private val settingsStore: SettingsStore = SettingsStore(),
+  private val engine: ConversionRunner = ConversionEngine(),
+  private val settingsStore: SettingsRepository = SettingsStore(),
 ) : ViewModel() {
 
   private val _state = MutableStateFlow(StudioUiState())
@@ -91,6 +100,7 @@ class StudioViewModel(
   val notice: StateFlow<Notice?> = _notice.asStateFlow()
 
   private var runJob: Job? = null
+  private val retryJobs = mutableListOf<Job>()
   private var nextId = 0L
 
   /**
@@ -156,12 +166,16 @@ class StudioViewModel(
       return
     }
 
-    _state.update {
-      it.copy(
+    _state.update { current ->
+      current.copy(
         // Adding to a finished batch starts a fresh one; mixing new Pending rows into old results
         // would make the summary a lie.
-        jobs = if (it.phase == BatchPhase.FINISHED) additions else it.jobs + additions,
-        phase = BatchPhase.READY,
+        jobs = if (current.phase == BatchPhase.FINISHED) additions else current.jobs + additions,
+        // A share can arrive at any moment — including mid-batch, since this is a share target.
+        // Resetting to READY there would hide the progress bar, re-enable Clear all and Remove,
+        // and strand the new rows on Pending forever, because the run loop had already snapshotted
+        // its work. Leave RUNNING alone; the loop below picks the new rows up.
+        phase = if (current.phase == BatchPhase.RUNNING) BatchPhase.RUNNING else BatchPhase.READY,
       )
     }
   }
@@ -178,6 +192,9 @@ class StudioViewModel(
 
   fun clearAll() {
     runJob?.cancel()
+    runJob = null
+    retryJobs.forEach { it.cancel() }
+    retryJobs.clear()
     val keep = _state.value
     _state.value = StudioUiState(recipe = keep.recipe, settings = keep.settings)
     viewModelScope.launch { runCatching { engine.clearOutputs() } }
@@ -198,7 +215,15 @@ class StudioViewModel(
   }
 
   fun updateSettings(settings: ConversionSettings) {
-    _state.update { it.copy(settings = settings) }
+    _state.update { current ->
+      current.copy(
+        settings = settings,
+        // Once a knob is off the preset's own defaults, the preset is no longer what is being
+        // applied. Leaving "Web-ready" selected would both misdescribe the encode and let one
+        // tap on that still-selected card silently discard the edit.
+        recipe = if (settings == current.recipe.defaultSettings()) current.recipe else Recipe.CUSTOM,
+      )
+    }
     pendingSettingsWrite.value = settings
   }
 
@@ -217,8 +242,6 @@ class StudioViewModel(
     if (snapshot.jobs.isEmpty()) return
 
     val settings = snapshot.settings
-    val sources = snapshot.jobs.map { it.source }
-    val names = ConversionPlanner.outputNames(sources, settings.outputFormat)
 
     _state.update { current ->
       current.copy(
@@ -227,16 +250,25 @@ class StudioViewModel(
       )
     }
 
-    runJob = viewModelScope.launch {
+    val job = viewModelScope.launch {
       try {
-        sources.forEachIndexed { index, source ->
-          updateStatus(source.id, JobStatus.Running)
-          updateStatus(source.id, runOne(source, settings, names[index]))
+        // Drains the live list rather than a snapshot, so anything shared into the app while
+        // this is running still gets converted instead of sitting on Pending forever.
+        while (true) {
+          val next =
+            _state.value.jobs.firstOrNull { it.status == JobStatus.Pending }?.source ?: break
+          updateStatus(next.id, JobStatus.Running)
+          updateStatus(next.id, runOne(next, settings, outputNameFor(next, settings)))
         }
         _state.update { it.copy(phase = BatchPhase.FINISHED) }
       } catch (_: CancellationException) {
         // Anything still queued when the user hit cancel is reported as cancelled rather than
         // left spinning forever.
+        //
+        // Only the run that is still current may write this. clearAll() cancels the job and
+        // then empties the state; without this guard the cancellation handler lands afterwards
+        // and revives an empty batch into FINISHED, which has no way back to the pickers.
+        if (runJob !== coroutineContext[Job]) return@launch
         _state.update { current ->
           current.copy(
             phase = BatchPhase.FINISHED,
@@ -248,10 +280,13 @@ class StudioViewModel(
         }
       }
     }
+    runJob = job
   }
 
   fun cancel() {
     runJob?.cancel()
+    retryJobs.forEach { it.cancel() }
+    retryJobs.clear()
   }
 
   /** Re-runs a single job with the current settings. */
@@ -259,20 +294,36 @@ class StudioViewModel(
     val current = _state.value
     val job = current.jobs.firstOrNull { it.source.id == id } ?: return
     val settings = current.settings
-    val taken =
-      current.jobs.mapNotNullTo(mutableSetOf()) {
-        if (it.source.id == id) null else it.outputOrNull?.displayName
-      }
-    val name =
-      FileNaming.uniqueName(
-        FileNaming.outputName(job.source.displayName, settings.outputFormat),
-        taken,
-      )
+    val name = outputNameFor(job.source, settings)
 
-    viewModelScope.launch {
-      updateStatus(id, JobStatus.Running)
-      updateStatus(id, runOne(job.source, settings, name))
+    // Tracked so Cancel and Clear all stop a retry too. Left untracked, it kept the single
+    // encode permit while clearAll() deleted the directory underneath it.
+    lateinit var retry: Job
+    retry = viewModelScope.launch {
+      try {
+        updateStatus(id, JobStatus.Running)
+        updateStatus(id, runOne(job.source, settings, name))
+      } finally {
+        retryJobs.remove(retry)
+      }
     }
+    retryJobs.add(retry)
+  }
+
+  /**
+   * A unique output name for [source], measured against the names every other job has already
+   * claimed. Computed per item rather than for the batch up front, because the queue can grow
+   * mid-run when something is shared into the app.
+   */
+  private fun outputNameFor(source: SourceImage, settings: ConversionSettings): String {
+    val taken =
+      _state.value.jobs.mapNotNullTo(mutableSetOf()) {
+        if (it.source.id == source.id) null else it.outputOrNull?.displayName
+      }
+    return FileNaming.uniqueName(
+      FileNaming.outputName(source.displayName, settings.outputFormat),
+      taken,
+    )
   }
 
   private suspend fun runOne(
@@ -308,6 +359,7 @@ class StudioViewModel(
 
   override fun onCleared() {
     runJob?.cancel()
+    retryJobs.forEach { it.cancel() }
     super.onCleared()
   }
 

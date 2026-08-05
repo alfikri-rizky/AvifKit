@@ -40,35 +40,9 @@ fun savingsPercent(originalBytes: Long, newBytes: Long): Int {
   return (((originalBytes - newBytes).toDouble() / originalBytes) * 100).roundToInt()
 }
 
-/** `1.4 MB → 210 KB` with the sign of the change spelled out, for result rows. */
-fun formatSavings(originalBytes: Long, newBytes: Long): String {
-  val percent = savingsPercent(originalBytes, newBytes)
-  return when {
-    percent > 0 -> "$percent% smaller"
-    percent < 0 -> "${-percent}% larger"
-    else -> "same size"
-  }
-}
-
 /** `4032 × 3024` for dimension labels. */
 fun formatDimensions(width: Int, height: Int): String = "$width × $height"
 
 /** `1.2 s` / `840 ms` — encode timings, where sub-second precision is the interesting part. */
 fun formatDuration(millis: Long): String =
   if (millis < 1000) "$millis ms" else "${formatOneDecimal(millis / 1000.0)} s"
-
-/**
- * Scales [width] × [height] so the longest edge is at most [maxDimension], matching what AvifKit's
- * `EncodingOptions.maxDimension` does, so the UI can predict output dimensions before encoding.
- * Never upscales.
- */
-fun scaledDimensions(width: Int, height: Int, maxDimension: Int?): Pair<Int, Int> {
-  if (maxDimension == null || maxDimension <= 0) return width to height
-  val longest = maxOf(width, height)
-  if (longest <= maxDimension) return width to height
-  val scale = maxDimension.toDouble() / longest
-  // Never round a non-empty image down to a zero-pixel edge.
-  val scaledWidth = (width * scale).roundToInt().coerceAtLeast(1)
-  val scaledHeight = (height * scale).roundToInt().coerceAtLeast(1)
-  return scaledWidth to scaledHeight
-}

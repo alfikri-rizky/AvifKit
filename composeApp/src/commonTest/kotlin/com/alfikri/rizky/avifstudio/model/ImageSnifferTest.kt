@@ -1,87 +1,69 @@
 package com.alfikri.rizky.avifstudio.model
 
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
+/**
+ * `isAvif` decides whether a file goes to libavif or to the platform decoder. Getting it wrong in
+ * either direction is a failed conversion, not a cosmetic issue — the platform decoder cannot read
+ * AVIF below Android 12, and libavif cannot read a JPEG.
+ */
 class ImageSnifferTest {
 
   @Test
   fun recognisesAvifFromTheMajorBrand() {
-    assertEquals(ImageSniffer.Kind.AVIF, ImageSniffer.detect(ftyp("avif", "mif1", "miaf")))
+    assertTrue(ImageSniffer.isAvif(ftyp("avif", "mif1", "miaf")))
   }
 
   /**
    * The case a naive `ftypavif` prefix check gets wrong: plenty of encoders write `mif1` as the
-   * major brand and only list `avif` among the compatible brands.
+   * major brand and list `avif` only among the compatible brands.
    */
   @Test
   fun recognisesAvifListedOnlyAsACompatibleBrand() {
     assertTrue(ImageSniffer.isAvif(ftyp("mif1", "miaf", "MA1B", "avif")))
-    assertEquals(ImageSniffer.Kind.AVIF, ImageSniffer.detect(ftyp("mif1", "miaf", "avif")))
+    assertTrue(ImageSniffer.isAvif(ftyp("mif1", "miaf", "avif")))
   }
 
   @Test
   fun recognisesAvifImageSequences() {
-    assertEquals(ImageSniffer.Kind.AVIF, ImageSniffer.detect(ftyp("avis", "avif", "msf1")))
+    assertTrue(ImageSniffer.isAvif(ftyp("avis", "avif", "msf1")))
   }
 
+  /** HEIF shares the ISO-BMFF container; routing one to libavif would fail the conversion. */
   @Test
   fun doesNotMistakeHeicForAvif() {
-    val heic = ftyp("heic", "mif1", "miaf")
-    assertFalse(ImageSniffer.isAvif(heic))
-    assertEquals(ImageSniffer.Kind.HEIF, ImageSniffer.detect(heic))
-  }
-
-  @Test
-  fun recognisesTheOrdinaryFormats() {
-    assertEquals(
-      ImageSniffer.Kind.JPEG,
-      ImageSniffer.detect(bytes(0xFF, 0xD8, 0xFF, 0xE0) + ByteArray(16)),
-    )
-    assertEquals(
-      ImageSniffer.Kind.PNG,
-      ImageSniffer.detect(bytes(0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A) + ByteArray(16)),
-    )
-    assertEquals(
-      ImageSniffer.Kind.GIF,
-      ImageSniffer.detect("GIF89a".encodeToByteArray() + ByteArray(16)),
-    )
-    assertEquals(
-      ImageSniffer.Kind.BMP,
-      ImageSniffer.detect("BM".encodeToByteArray() + ByteArray(16)),
-    )
-  }
-
-  /** A bare `RIFF` header is not WebP; the form type at byte 8 has to say so too. */
-  @Test
-  fun requiresBothTheRiffContainerAndTheWebpForm() {
-    val webp = "RIFF".encodeToByteArray() + ByteArray(4) + "WEBP".encodeToByteArray() + ByteArray(8)
-    assertEquals(ImageSniffer.Kind.WEBP, ImageSniffer.detect(webp))
-
-    val wave = "RIFF".encodeToByteArray() + ByteArray(4) + "WAVE".encodeToByteArray() + ByteArray(8)
-    assertEquals(ImageSniffer.Kind.UNKNOWN, ImageSniffer.detect(wave))
+    assertFalse(ImageSniffer.isAvif(ftyp("heic", "mif1", "miaf")))
   }
 
   @Test
   fun survivesTruncatedAndEmptyInput() {
     assertFalse(ImageSniffer.isAvif(ByteArray(0)))
     assertFalse(ImageSniffer.isAvif(bytes(0x00, 0x00, 0x00, 0x20, 0x66)))
-    assertEquals(ImageSniffer.Kind.UNKNOWN, ImageSniffer.detect(ByteArray(0)))
-    assertEquals(ImageSniffer.Kind.UNKNOWN, ImageSniffer.detect(ByteArray(64)))
+    assertFalse(ImageSniffer.isAvif(ByteArray(64)))
+    // A JPEG must never be routed to the AVIF decoder.
+    assertFalse(ImageSniffer.isAvif(bytes(0xFF, 0xD8, 0xFF, 0xE0) + ByteArray(16)))
   }
 
   /**
-   * A box size larger than the buffer must not make the brand scan read past the end — that is the
-   * difference between a wrong answer and a crash on a truncated download.
+   * A partial download declares a box size larger than the bytes on hand.
+   *
+   * The previous version of this test cut the buffer to exactly its own length, so it truncated
+   * nothing at all. This one genuinely truncates — but note it still cannot distinguish the scan
+   * bound in `isAvif` being present from it being absent, because `startsWith` range-checks every
+   * read and both variants return the same answer. What it does pin down is the behaviour a caller
+   * depends on: a brand that did not arrive is not reported as present.
    */
   @Test
   fun doesNotReadPastTheEndWhenTheBoxSizeLies() {
-    val header = ftyp("mif1", "avif")
-    val truncated = header.copyOf(20)
-    // Still finds the brand that is actually present, and does not throw on the missing tail.
-    assertTrue(ImageSniffer.isAvif(truncated))
+    val full = ftyp("mif1", "miaf", "MA1B", "avif")
+    // The header still claims a 32-byte box, but only 24 bytes arrived — and the `avif` brand
+    // lives in the part that did not.
+    val truncated = full.copyOf(24)
+    assertTrue(full.size > truncated.size, "the fixture must actually be truncated")
+    assertFalse(ImageSniffer.isAvif(truncated))
+    assertTrue(ImageSniffer.isAvif(full))
   }
 
   /** Builds a real `ftyp` box: size, "ftyp", major brand, minor version, compatible brands. */

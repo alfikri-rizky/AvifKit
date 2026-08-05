@@ -413,41 +413,41 @@ private fun BottomBar(
           .padding(horizontal = 20.dp, vertical = 14.dp),
       horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-      when (state.phase) {
-        BatchPhase.READY ->
-          if (!state.hasSources) {
-            Button(
-              onClick = onPickImages,
-              modifier = Modifier.weight(1f).height(54.dp),
-              shape = MaterialTheme.shapes.small,
-            ) {
-              // Emoji rather than a Material icon: material-icons-core has no picture or folder
-              // glyph, and the app already speaks emoji for recipes, themes and languages.
-              Text("\uD83D\uDDBC\uFE0F", fontSize = 17.sp)
-              Spacer(Modifier.width(8.dp))
-              Text(stringResource(Res.string.add_photos))
-            }
-            OutlinedButton(
-              onClick = onPickFiles,
-              modifier = Modifier.weight(1f).height(54.dp),
-              shape = MaterialTheme.shapes.small,
-            ) {
-              Text("\uD83D\uDCC1", fontSize = 17.sp)
-              Spacer(Modifier.width(8.dp))
-              Text(stringResource(Res.string.add_files))
-            }
-          } else {
-            Button(
-              onClick = onStart,
-              modifier = Modifier.weight(1f).height(54.dp),
-              shape = MaterialTheme.shapes.small,
-            ) {
-              Text(
-                pluralStringResource(Res.plurals.convert_count, state.jobs.size, state.jobs.size)
-              )
-            }
+      // Keyed on "is there anything to act on?" before phase, so no state can strand the user
+      // without a way back to the pickers — an empty FINISHED batch used to show Save/Share only.
+      when {
+        !state.hasSources -> {
+          Button(
+            onClick = onPickImages,
+            modifier = Modifier.weight(1f).height(54.dp),
+            shape = MaterialTheme.shapes.small,
+          ) {
+            // Emoji rather than a Material icon: material-icons-core has no picture or folder
+            // glyph, and the app already speaks emoji for recipes, themes and languages.
+            Text("\uD83D\uDDBC\uFE0F", fontSize = 17.sp)
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(Res.string.add_photos))
           }
-        BatchPhase.RUNNING -> {
+          OutlinedButton(
+            onClick = onPickFiles,
+            modifier = Modifier.weight(1f).height(54.dp),
+            shape = MaterialTheme.shapes.small,
+          ) {
+            Text("\uD83D\uDCC1", fontSize = 17.sp)
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(Res.string.add_files))
+          }
+        }
+        state.phase == BatchPhase.READY -> {
+          Button(
+            onClick = onStart,
+            modifier = Modifier.weight(1f).height(54.dp),
+            shape = MaterialTheme.shapes.small,
+          ) {
+            Text(pluralStringResource(Res.plurals.convert_count, state.jobs.size, state.jobs.size))
+          }
+        }
+        state.phase == BatchPhase.RUNNING -> {
           Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
             Text(stringResource(Res.string.converting), style = MaterialTheme.typography.titleSmall)
           }
@@ -457,7 +457,7 @@ private fun BottomBar(
             Text(stringResource(Res.string.cancel))
           }
         }
-        BatchPhase.FINISHED -> {
+        else -> {
           Button(
             onClick = onExport,
             modifier = Modifier.weight(1f).height(54.dp),

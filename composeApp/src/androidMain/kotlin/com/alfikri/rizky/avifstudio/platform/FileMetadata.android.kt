@@ -2,11 +2,15 @@ package com.alfikri.rizky.avifstudio.platform
 
 import android.content.Context
 import android.net.Uri
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import com.alfikri.rizky.avifkit.PlatformFile
 import io.github.vinceglb.filekit.AndroidFile
 import io.github.vinceglb.filekit.name
 import io.github.vinceglb.filekit.size
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 actual fun PlatformFile.resolveMetadata(): FileMetadata {
   val fallbackName = name
@@ -44,7 +48,51 @@ actual fun PlatformFile.resolveMetadata(): FileMetadata {
 
   val name = queried?.name ?: fallbackName
   val size = (queried?.sizeBytes ?: fallbackSize).coerceAtLeast(0L)
-  return FileMetadata(name = name.withExtension(uri, context), sizeBytes = size)
+  return FileMetadata(
+    name = name.withExtension(uri, context).deredact(uri, context),
+    sizeBytes = size,
+  )
+}
+
+/**
+ * The Android photo picker deliberately withholds the real filename and hands back the MediaStore
+ * row id instead — `50.jpg` for a photo actually called `holiday.jpg`. Nothing can recover the
+ * original name, but a bare row id is a poor thing to name the user's exported file after, so fall
+ * back to the capture date, which the picker does expose.
+ */
+private fun String.deredact(uri: Uri, context: Context): String {
+  val base = substringBeforeLast('.', this)
+  if (base.isEmpty() || !base.all { it.isDigit() }) return this
+  val extension = substringAfterLast('.', "")
+  val suffix = if (extension.isEmpty()) "" else ".$extension"
+
+  val takenAtMillis =
+    try {
+      context.contentResolver
+        .query(
+          uri,
+          arrayOf(MediaStore.MediaColumns.DATE_TAKEN, MediaStore.MediaColumns.DATE_ADDED),
+          null,
+          null,
+          null,
+        )
+        ?.use { cursor ->
+          if (!cursor.moveToFirst()) return@use null
+          val takenIndex = cursor.getColumnIndex(MediaStore.MediaColumns.DATE_TAKEN)
+          val addedIndex = cursor.getColumnIndex(MediaStore.MediaColumns.DATE_ADDED)
+          when {
+            takenIndex >= 0 && !cursor.isNull(takenIndex) -> cursor.getLong(takenIndex)
+            // DATE_ADDED is in seconds, DATE_TAKEN in milliseconds.
+            addedIndex >= 0 && !cursor.isNull(addedIndex) -> cursor.getLong(addedIndex) * 1000
+            else -> null
+          }
+        }
+    } catch (_: Exception) {
+      null
+    } ?: return "IMG_$base$suffix"
+
+  val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date(takenAtMillis))
+  return "IMG_$stamp$suffix"
 }
 
 /**

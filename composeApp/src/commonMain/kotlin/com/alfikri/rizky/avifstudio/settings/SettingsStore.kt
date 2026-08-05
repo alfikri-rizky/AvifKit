@@ -14,14 +14,32 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 
 /**
+ * Reads and writes the user's preferences.
+ *
+ * An interface so the ViewModel can be constructed in a test without a real DataStore file.
+ */
+interface SettingsRepository {
+  val settings: Flow<AppSettings>
+
+  suspend fun setLanguage(language: AppLanguage)
+
+  suspend fun setThemeMode(mode: ThemeMode)
+
+  suspend fun setLastRecipe(recipe: Recipe)
+
+  suspend fun setConversionSettings(settings: ConversionSettings)
+}
+
+/**
  * Persists [AppSettings] in a Preferences DataStore.
  *
  * Reads never throw: a corrupt or unreadable store falls back to defaults, because losing a theme
  * preference is not a reason to fail a launch.
  */
-class SettingsStore(private val dataStore: DataStore<Preferences> = settingsDataStore()) {
+class SettingsStore(private val dataStore: DataStore<Preferences> = settingsDataStore()) :
+  SettingsRepository {
 
-  val settings: Flow<AppSettings> =
+  override val settings: Flow<AppSettings> =
     dataStore.data
       .catch { emit(androidx.datastore.preferences.core.emptyPreferences()) }
       .map { preferences ->
@@ -33,19 +51,19 @@ class SettingsStore(private val dataStore: DataStore<Preferences> = settingsData
         )
       }
 
-  suspend fun setLanguage(language: AppLanguage) {
+  override suspend fun setLanguage(language: AppLanguage) {
     runCatching { dataStore.edit { it[KEY_LANGUAGE] = language.tag } }
   }
 
-  suspend fun setThemeMode(mode: ThemeMode) {
+  override suspend fun setThemeMode(mode: ThemeMode) {
     runCatching { dataStore.edit { it[KEY_THEME] = mode.tag } }
   }
 
-  suspend fun setLastRecipe(recipe: Recipe) {
+  override suspend fun setLastRecipe(recipe: Recipe) {
     runCatching { dataStore.edit { it[KEY_RECIPE] = recipe.name } }
   }
 
-  suspend fun setConversionSettings(settings: ConversionSettings) {
+  override suspend fun setConversionSettings(settings: ConversionSettings) {
     runCatching {
       dataStore.edit { preferences ->
         preferences[KEY_FORMAT] = settings.outputFormat.name

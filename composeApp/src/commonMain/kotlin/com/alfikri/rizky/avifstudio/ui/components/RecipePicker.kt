@@ -38,6 +38,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -140,7 +142,9 @@ private fun RecipeCard(recipe: Recipe, selected: Boolean, enabled: Boolean, onCl
   Surface(
     onClick = onClick,
     enabled = enabled,
-    modifier = Modifier.width(124.dp).height(112.dp),
+    // Selection was conveyed by colour, a border and a decorative check icon only — none of which
+    // a screen reader announces.
+    modifier = Modifier.width(124.dp).height(112.dp).semantics { this.selected = selected },
     shape = MaterialTheme.shapes.medium,
     color = container,
     tonalElevation = if (selected) 3.dp else 0.dp,

@@ -48,9 +48,6 @@ object FileNaming {
   /** Name without its final extension: `a.b.jpg` → `a.b`, `README` → `README`. */
   fun baseName(name: String): String = name.substringBeforeLast('.', name)
 
-  /** Lowercased extension without the dot, or `""` when there is none. */
-  fun extensionOf(name: String): String = name.substringAfterLast('.', "").lowercase()
-
   /** Strips path separators and other characters that would break a save target. */
   fun sanitize(name: String): String =
     name

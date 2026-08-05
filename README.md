@@ -3,7 +3,8 @@ Plugin 9.2** (requires Gradle 9.4.1+ and JDK 17+).
 
 * [/shared](shared/src) — the AvifKit library itself. The cross-platform API lives in
   [commonMain](shared/src/commonMain/kotlin); platform code is in `androidMain` (Kotlin JNI
-  bindings) and `iosMain` (Swift bridge). Published to Maven Central as
+  bindings) and `iosMain` (Kotlin/Native cinterop straight to libavif's C API — no Swift).
+  Published to Maven Central as
   `io.github.alfikri-rizky:avifkit`. Uses the AGP 9 KMP library plugin
   (`com.android.kotlin.multiplatform.library`).
 
@@ -354,7 +355,7 @@ pod 'AvifKit', '~> 0.3.2'
 |-----------|--------|----------|-------|
 | **Core Library** | ✅ Complete | `shared/src/commonMain/` | Cross-platform API |
 | **Android Native** | ✅ Complete | `shared-native/src/main/cpp/` | JNI + libavif (`:shared-native` module) |
-| **iOS Native** | ✅ Complete | `shared/src/iosMain/swift/` | Swift + libavif |
+| **iOS Native** | ✅ Complete | `shared/src/iosMain/kotlin/` + `shared/src/nativeInterop/` | cinterop + libavif (no Swift) |
 | **Adaptive Compression** | ✅ Complete | Both platforms | SMART & STRICT strategies |
 | **Orientation Support** | ✅ Complete | Both platforms | EXIF (Android), UIImage (iOS) |
 | **Fallback Mode** | ❌ Removed | Both platforms | Replaced with explicit `AvifError` exceptions |
@@ -366,7 +367,7 @@ pod 'AvifKit', '~> 0.3.2'
 1. **Library Size:**
    - Including libavif increases app size (~2-3MB per architecture on Android, ~1-2MB on iOS)
    - This is standard for any AVIF library and necessary for native performance
-   - Fallback mode available if size is critical
+   - There is no smaller build to fall back to: the codec is the library
 
 2. **No Fallback Mode (v0.2.3+):**
    - Library no longer silently falls back to JPEG
