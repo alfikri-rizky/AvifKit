@@ -1,0 +1,34 @@
+package com.alfikri.rizky.avifstudio.model
+
+/**
+ * The image format a job writes out.
+ *
+ * AVIF is what AvifKit encodes natively. JPEG and PNG exist because the reverse direction is the
+ * other half of the real-world problem: an `.avif` downloaded from the web opens nowhere on Android
+ * 11 and below, and plenty of upload forms still reject anything that isn't JPEG or PNG.
+ */
+enum class OutputFormat(val extension: String, val mimeType: String, val label: String) {
+  AVIF("avif", "image/avif", "AVIF"),
+  JPEG("jpg", "image/jpeg", "JPEG"),
+  PNG("png", "image/png", "PNG");
+
+  /** True when the encoder ignores the quality setting, so the UI can hide the slider. */
+  val isLossless: Boolean
+    get() = this == PNG
+
+  companion object {
+    /** Maps a file extension (with or without a leading dot, any case) to a known format. */
+    fun fromExtension(extension: String): OutputFormat? {
+      val normalized = extension.removePrefix(".").lowercase()
+      return when (normalized) {
+        "avif",
+        "avifs" -> AVIF
+        "jpg",
+        "jpeg",
+        "jpe" -> JPEG
+        "png" -> PNG
+        else -> null
+      }
+    }
+  }
+}

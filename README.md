@@ -12,10 +12,53 @@ Plugin 9.2** (requires Gradle 9.4.1+ and JDK 17+).
   can't build native code. Published as the companion artifact `avifkit-native`, which `:shared`
   pulls in transitively — so consumers only ever depend on `avifkit`.
 
-* [/composeApp](composeApp/src) — the Android demo app, a plain `com.android.application` module
-  with Compose Multiplatform UI. Not published.
+* [/composeApp](composeApp/src) — **AVIF Studio**, the shared Compose Multiplatform UI for the
+  Android and iOS apps. A KMP *library* module (AGP 9 forbids the KMP plugin alongside
+  `com.android.application` in one module), producing the `ComposeApp` framework for iOS.
+  Not published.
 
-* [/iosApp](iosApp/iosApp) — the iOS demo app (SwiftUI entry point). Not published.
+* [/androidApp](androidApp/src) — the Android application shell: one Activity, a manifest and
+  launcher resources. Everything the user sees comes from `:composeApp`. Not published.
+
+* [/iosApp](iosApp/iosApp) — the iOS application shell: a SwiftUI `@main` that hosts
+  `MainViewController()` from the `ComposeApp` framework. Not published.
+
+---
+
+## AVIF Studio (the app)
+
+A free, offline image converter built on AvifKit — the reference app for the library, and a real
+app in its own right. No ads, no accounts, no network permission.
+
+* **Batch convert** photos to AVIF, or back out of AVIF to JPEG/PNG when the other end cannot read
+  it (Android 11 and below cannot display AVIF at all).
+* **Job-shaped presets** — "Web-ready", "Fit a size limit", "Smallest file", "Archive quality" —
+  rather than a wall of codec settings, with every knob still available under Advanced settings.
+* **Fit a byte budget** using AvifKit's adaptive compression (100 KB … 2 MB, SMART or STRICT).
+* **One image at a time**, gated by a single-permit semaphore. Twenty 12 MP photos decoded
+  concurrently is an OOM on a mid-range phone; this caps peak memory at one in-flight image no
+  matter how many callers arrive at once.
+* **Keeps the original** when the conversion came out no smaller, instead of quietly handing back
+  a bigger file.
+* **English and Bahasa Indonesia**, light/dark/system theme, both persisted in DataStore along with
+  the last preset used.
+* **Share to** and **Open with** integration on both platforms, so an `.avif` from a browser
+  download opens here.
+
+Run it with `./gradlew :androidApp:installDebug`, or open `iosApp/iosApp.xcodeproj` in Xcode.
+Both build the same UI from `:composeApp`.
+
+| Home | Pick a recipe | Converting |
+|---|---|---|
+| ![Home](art/screenshots/android-01-home.webp) | ![Queue](art/screenshots/android-02-queue.webp) | ![Running](art/screenshots/android-06-running.webp) |
+
+| Results | Settings | Bahasa Indonesia + dark |
+|---|---|---|
+| ![Results](art/screenshots/android-03-results.webp) | ![Settings](art/screenshots/android-04-settings.webp) | ![Dark](art/screenshots/android-05-settings-dark-id.webp) |
+
+The same Compose UI on iOS, from the same `:composeApp` module:
+
+<img src="art/screenshots/ios-01-home.webp" width="300" alt="AVIF Studio on iOS" />
 
 ### Build and Run Android Application
 
@@ -23,11 +66,11 @@ To build and run the development version of the Android app, use the run configu
 in your IDE’s toolbar or build it directly from the terminal:
 - on macOS/Linux
   ```shell
-  ./gradlew :composeApp:assembleDebug
+  ./gradlew :androidApp:assembleDebug
   ```
 - on Windows
   ```shell
-  .\gradlew.bat :composeApp:assembleDebug
+  .\gradlew.bat :androidApp:assembleDebug
   ```
 
 ### Build and Run iOS Application

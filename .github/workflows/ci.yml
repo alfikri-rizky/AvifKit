@@ -77,18 +77,37 @@ jobs:
           EOF
 
       - name: Check formatting
-        run: ./gradlew :shared:ktfmtCheck --no-daemon
+        run: ./gradlew :shared:ktfmtCheck :composeApp:ktfmtCheck :androidApp:ktfmtCheck --no-daemon
 
-      - name: Build
+      - name: Build library
         # iosX64Test is excluded here and below: GitHub's arm64 macOS runners can't
         # launch x86_64 simulators reliably (the x64 klib/framework still builds).
         run: ./gradlew :shared:build -x :shared:iosX64Test --no-daemon --stacktrace
+
+      - name: Build AVIF Studio (Android APK + iOS framework)
+        run: |
+          ./gradlew :androidApp:assembleDebug \
+                    :composeApp:linkDebugFrameworkIosSimulatorArm64 \
+                    :composeApp:linkDebugFrameworkIosArm64 \
+                    --no-daemon --stacktrace
 
       - name: Run tests (host + iOS simulator)
         # The simulator device name must exist in the runner's Xcode — override with
         # -PiosSimulatorDevice if the runner image changes.
         run: |
-          ./gradlew :shared:allTests -x :shared:iosX64Test --no-daemon --stacktrace
+          ./gradlew :shared:allTests :composeApp:allTests \
+                    -x :shared:iosX64Test -x :composeApp:iosX64Test \
+                    --no-daemon --stacktrace
+
+      - name: Build the iOS app itself
+        # Proves the Xcode project still links the Kotlin framework — a green Gradle build
+        # says nothing about whether the app target compiles against it.
+        run: |
+          DEVICE_ID=$(xcrun simctl list devices available \
+            | grep -Eo '\(([0-9A-F-]{36})\)' | tr -d '()' | head -1)
+          xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp \
+            -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE_ID" \
+            OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=NO build | tail -40
 
   # Exercises the real JNI codec path (encode/decode/alpha/lossless/maxSize) on an emulator.
   android-instrumented:

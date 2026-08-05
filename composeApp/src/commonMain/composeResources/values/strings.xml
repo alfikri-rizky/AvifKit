@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Default (English) copy for AVIF Studio.
+
+  Indonesian lives in values-id/. A Gradle task mirrors values-id into values-in before the
+  resources are converted, because Android reports Indonesian with the legacy ISO code "in" and
+  Compose Resources matches the qualifier against exactly what the platform reports.
+-->
+<resources>
+    <string name="app_name">AVIF Studio</string>
+    <string name="tagline">Shrink and convert images, right on your device</string>
+
+    <!-- Empty state -->
+    <string name="empty_title">Nothing to convert yet</string>
+    <string name="empty_body">Add photos or files, then pick what you need them for.</string>
+    <string name="privacy_note">Everything happens on this device. No uploads, no account, no ads.</string>
+
+    <!-- Actions -->
+    <string name="add_photos">Add photos</string>
+    <string name="add_files">Add files</string>
+    <string name="add_more">Add more</string>
+    <string name="clear_all">Clear all</string>
+    <string name="settings">Settings</string>
+    <string name="about">About</string>
+    <string name="close">Close</string>
+    <string name="cancel">Cancel</string>
+    <string name="retry">Try again</string>
+    <string name="remove">Remove</string>
+    <string name="share">Share</string>
+    <string name="save">Save</string>
+    <string name="done">Done</string>
+    <string name="back">Back</string>
+
+    <plurals name="convert_count">
+        <item quantity="one">Convert 1 image</item>
+        <item quantity="other">Convert %1$d images</item>
+    </plurals>
+    <plurals name="image_count">
+        <item quantity="one">1 image</item>
+        <item quantity="other">%1$d images</item>
+    </plurals>
+
+    <!-- Recipes -->
+    <string name="recipe_section_title">What do you need?</string>
+    <string name="recipe_web_ready">Web-ready</string>
+    <string name="recipe_web_ready_desc">AVIF at 1920 px — what most sites want</string>
+    <string name="recipe_fit_size">Fit a size limit</string>
+    <string name="recipe_fit_size_desc">Best quality that still fits your byte budget</string>
+    <string name="recipe_smallest">Smallest file</string>
+    <string name="recipe_smallest_desc">Push compression as far as it goes</string>
+    <string name="recipe_archive">Archive quality</string>
+    <string name="recipe_archive_desc">Near-original detail, full colour, no resizing</string>
+    <string name="recipe_to_jpeg">Convert to JPEG</string>
+    <string name="recipe_to_jpeg_desc">Opens anywhere — email, forms, older devices</string>
+    <string name="recipe_to_png">Convert to PNG</string>
+    <string name="recipe_to_png_desc">Lossless, keeps transparency</string>
+    <string name="recipe_custom">Custom</string>
+    <string name="recipe_custom_desc">Every setting, your call</string>
+
+    <!-- Advanced settings -->
+    <string name="advanced_title">Advanced settings</string>
+    <string name="output_format">Output format</string>
+    <string name="quality">Quality</string>
+    <string name="encode_speed">Encoding speed</string>
+    <string name="encode_speed_hint">Higher is faster but gives up some compression</string>
+    <string name="chroma_subsampling">Colour detail</string>
+    <string name="alpha_quality">Transparency quality</string>
+    <string name="lossless">Lossless</string>
+    <string name="lossless_hint">Perfect pixels, much larger files</string>
+    <string name="resize_longest_edge">Resize longest edge</string>
+    <string name="keep_original_size">Original size</string>
+    <string name="target_size">Target size</string>
+    <string name="strategy">Strategy</string>
+    <string name="strategy_smart">Best quality that fits</string>
+    <string name="strategy_smart_hint">Stops as soon as it meets your limit</string>
+    <string name="strategy_strict">As small as possible</string>
+    <string name="strategy_strict_hint">Keeps compressing past your limit</string>
+    <string name="skip_if_larger">Keep the original if it was smaller</string>
+    <string name="skip_if_larger_hint">Some images genuinely do not compress any further</string>
+
+    <!-- Progress and results -->
+    <string name="converting">Converting…</string>
+    <string name="progress_of">%1$d of %2$d</string>
+    <string name="results_title">Results</string>
+    <string name="total_saved">%1$s saved</string>
+    <string name="nothing_saved">No space saved this time</string>
+    <string name="count_converted">%1$d converted</string>
+    <string name="count_failed">%1$d failed</string>
+    <string name="count_kept">%1$d kept as-is</string>
+    <string name="status_pending">Waiting</string>
+    <string name="status_running">Converting</string>
+    <string name="status_cancelled">Cancelled</string>
+    <string name="skipped_reason">Kept your original — the converted file was not smaller</string>
+
+    <string name="failure_unreadable">Could not read this file</string>
+    <string name="failure_not_an_image">This is not an image we can read</string>
+    <string name="failure_encode">Conversion failed</string>
+    <string name="failure_out_of_memory">Too large for this device\'s memory — try it on a device with more RAM</string>
+    <string name="failure_unknown">Something went wrong</string>
+
+    <string name="savings_smaller">%1$d% smaller</string>
+    <string name="savings_larger">%1$d% larger</string>
+    <string name="savings_same">Same size</string>
+
+    <!-- Comparison -->
+    <string name="original">Original</string>
+    <string name="converted">Converted</string>
+    <string name="dimensions">Dimensions</string>
+    <string name="file_size">File size</string>
+    <string name="time_taken">Took</string>
+    <string name="view_full_screen">View full screen</string>
+
+    <!-- Export feedback -->
+    <string name="saved_to">Saved %1$d to %2$s</string>
+    <string name="export_cancelled">Save cancelled</string>
+    <string name="export_failed">Could not save: %1$s</string>
+    <string name="nothing_to_export">There is nothing to save yet</string>
+    <string name="already_added">Those images are already in the list</string>
+
+    <!-- Settings screen -->
+    <string name="language">Language</string>
+    <string name="appearance">Appearance</string>
+    <string name="follow_system">Follow system</string>
+    <string name="light">Light</string>
+    <string name="dark">Dark</string>
+    <string name="english">English</string>
+    <string name="indonesian">Bahasa Indonesia</string>
+    <string name="restart_hint">Reopen the app if some text is still in the previous language.</string>
+
+    <!-- About -->
+    <string name="about_body">AVIF is a modern image format that usually stores the same photo in about half the space of a JPEG. This app converts to it, and back out of it when whatever you are sending to cannot read it yet.</string>
+    <string name="about_offline">Works fully offline. Free, with no ads and nothing to buy.</string>
+    <string name="about_native_avif_yes">This device can already display AVIF on its own.</string>
+    <string name="about_native_avif_no">This device cannot display AVIF on its own — this app decodes it for you.</string>
+    <string name="powered_by">Powered by AvifKit (libavif + AOM)</string>
+
+    <!-- Viewer -->
+    <string name="viewer_hint">Pinch to zoom, double-tap to fit</string>
+    <string name="decoding">Decoding…</string>
+    <string name="cannot_decode">Could not open this image: %1$s</string>
+    <string name="github_repo">AvifKit on GitHub</string>
+    <string name="github_repo_desc">The open-source library that does the encoding</string>
+    <string name="open_source">Open source</string>
+</resources>

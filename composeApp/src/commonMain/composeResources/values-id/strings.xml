@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Terjemahan Bahasa Indonesia. Jangan menyunting values-in/ — folder itu disalin otomatis dari
+  sini oleh task Gradle generateLegacyLocales, karena Android melaporkan Bahasa Indonesia dengan
+  kode lama "in".
+-->
+<resources>
+    <string name="app_name">AVIF Studio</string>
+    <string name="tagline">Perkecil dan ubah format gambar, langsung di perangkatmu</string>
+
+    <string name="empty_title">Belum ada yang dikonversi</string>
+    <string name="empty_body">Tambahkan foto atau berkas, lalu pilih keperluanmu.</string>
+    <string name="privacy_note">Semua diproses di perangkat ini. Tanpa unggahan, tanpa akun, tanpa iklan.</string>
+
+    <string name="add_photos">Tambah foto</string>
+    <string name="add_files">Tambah berkas</string>
+    <string name="add_more">Tambah lagi</string>
+    <string name="clear_all">Hapus semua</string>
+    <string name="settings">Pengaturan</string>
+    <string name="about">Tentang</string>
+    <string name="close">Tutup</string>
+    <string name="cancel">Batal</string>
+    <string name="retry">Coba lagi</string>
+    <string name="remove">Hapus</string>
+    <string name="share">Bagikan</string>
+    <string name="save">Simpan</string>
+    <string name="done">Selesai</string>
+    <string name="back">Kembali</string>
+
+    <plurals name="convert_count">
+        <item quantity="other">Konversi %1$d gambar</item>
+    </plurals>
+    <plurals name="image_count">
+        <item quantity="other">%1$d gambar</item>
+    </plurals>
+
+    <string name="recipe_section_title">Untuk keperluan apa?</string>
+    <string name="recipe_web_ready">Siap untuk web</string>
+    <string name="recipe_web_ready_desc">AVIF 1920 px — ukuran yang diminta kebanyakan situs</string>
+    <string name="recipe_fit_size">Sesuaikan batas ukuran</string>
+    <string name="recipe_fit_size_desc">Kualitas terbaik yang masih muat di batas ukuranmu</string>
+    <string name="recipe_smallest">Sekecil mungkin</string>
+    <string name="recipe_smallest_desc">Kompresi semaksimal mungkin</string>
+    <string name="recipe_archive">Kualitas arsip</string>
+    <string name="recipe_archive_desc">Detail nyaris asli, warna penuh, tanpa ubah ukuran</string>
+    <string name="recipe_to_jpeg">Ubah ke JPEG</string>
+    <string name="recipe_to_jpeg_desc">Bisa dibuka di mana saja — email, formulir, perangkat lama</string>
+    <string name="recipe_to_png">Ubah ke PNG</string>
+    <string name="recipe_to_png_desc">Tanpa kehilangan detail, transparansi tetap terjaga</string>
+    <string name="recipe_custom">Kustom</string>
+    <string name="recipe_custom_desc">Semua pengaturan, terserah kamu</string>
+
+    <string name="advanced_title">Pengaturan lanjutan</string>
+    <string name="output_format">Format keluaran</string>
+    <string name="quality">Kualitas</string>
+    <string name="encode_speed">Kecepatan enkode</string>
+    <string name="encode_speed_hint">Makin cepat, makin berkurang tingkat kompresinya</string>
+    <string name="chroma_subsampling">Detail warna</string>
+    <string name="alpha_quality">Kualitas transparansi</string>
+    <string name="lossless">Tanpa kehilangan detail</string>
+    <string name="lossless_hint">Piksel persis sama, tetapi berkasnya jauh lebih besar</string>
+    <string name="resize_longest_edge">Batasi sisi terpanjang</string>
+    <string name="keep_original_size">Ukuran asli</string>
+    <string name="target_size">Target ukuran</string>
+    <string name="strategy">Strategi</string>
+    <string name="strategy_smart">Kualitas terbaik yang muat</string>
+    <string name="strategy_smart_hint">Berhenti begitu batasmu tercapai</string>
+    <string name="strategy_strict">Sekecil mungkin</string>
+    <string name="strategy_strict_hint">Terus dikompres melewati batasmu</string>
+    <string name="skip_if_larger">Pertahankan berkas asli jika lebih kecil</string>
+    <string name="skip_if_larger_hint">Ada gambar yang memang sudah tidak bisa dikecilkan lagi</string>
+
+    <string name="converting">Mengonversi…</string>
+    <string name="progress_of">%1$d dari %2$d</string>
+    <string name="results_title">Hasil</string>
+    <string name="total_saved">%1$s dihemat</string>
+    <string name="nothing_saved">Kali ini tidak ada ruang yang dihemat</string>
+    <string name="count_converted">%1$d berhasil</string>
+    <string name="count_failed">%1$d gagal</string>
+    <string name="count_kept">%1$d tetap seperti semula</string>
+    <string name="status_pending">Menunggu</string>
+    <string name="status_running">Mengonversi</string>
+    <string name="status_cancelled">Dibatalkan</string>
+    <string name="skipped_reason">Berkas asli dipertahankan — hasil konversinya tidak lebih kecil</string>
+
+    <string name="failure_unreadable">Berkas ini tidak bisa dibaca</string>
+    <string name="failure_not_an_image">Ini bukan gambar yang bisa kami baca</string>
+    <string name="failure_encode">Konversi gagal</string>
+    <string name="failure_out_of_memory">Terlalu besar untuk memori perangkat ini — coba di perangkat dengan RAM lebih besar</string>
+    <string name="failure_unknown">Terjadi kesalahan</string>
+
+    <string name="savings_smaller">%1$d% lebih kecil</string>
+    <string name="savings_larger">%1$d% lebih besar</string>
+    <string name="savings_same">Ukuran sama</string>
+
+    <string name="original">Asli</string>
+    <string name="converted">Hasil</string>
+    <string name="dimensions">Dimensi</string>
+    <string name="file_size">Ukuran berkas</string>
+    <string name="time_taken">Waktu</string>
+    <string name="view_full_screen">Lihat layar penuh</string>
+
+    <string name="saved_to">%1$d berkas disimpan ke %2$s</string>
+    <string name="export_cancelled">Penyimpanan dibatalkan</string>
+    <string name="export_failed">Gagal menyimpan: %1$s</string>
+    <string name="nothing_to_export">Belum ada yang bisa disimpan</string>
+    <string name="already_added">Gambar itu sudah ada di daftar</string>
+
+    <string name="language">Bahasa</string>
+    <string name="appearance">Tampilan</string>
+    <string name="follow_system">Ikuti sistem</string>
+    <string name="light">Terang</string>
+    <string name="dark">Gelap</string>
+    <string name="english">English</string>
+    <string name="indonesian">Bahasa Indonesia</string>
+    <string name="restart_hint">Buka ulang aplikasi kalau masih ada teks dalam bahasa sebelumnya.</string>
+
+    <string name="about_body">AVIF adalah format gambar modern yang umumnya menyimpan foto yang sama dengan ukuran sekitar setengah dari JPEG. Aplikasi ini mengubah gambar ke format tersebut, dan mengembalikannya lagi kalau aplikasi tujuanmu belum bisa membacanya.</string>
+    <string name="about_offline">Berfungsi penuh tanpa internet. Gratis, tanpa iklan, tanpa pembelian.</string>
+    <string name="about_native_avif_yes">Perangkat ini sudah bisa menampilkan AVIF sendiri.</string>
+    <string name="about_native_avif_no">Perangkat ini belum bisa menampilkan AVIF sendiri — aplikasi ini yang membukanya untukmu.</string>
+    <string name="powered_by">Ditenagai AvifKit (libavif + AOM)</string>
+
+    <string name="viewer_hint">Cubit untuk memperbesar, ketuk dua kali untuk menyesuaikan</string>
+    <string name="decoding">Membaca gambar…</string>
+    <string name="cannot_decode">Gambar ini tidak bisa dibuka: %1$s</string>
+    <string name="github_repo">AvifKit di GitHub</string>
+    <string name="github_repo_desc">Pustaka sumber terbuka yang melakukan enkodenya</string>
+    <string name="open_source">Sumber terbuka</string>
+</resources>

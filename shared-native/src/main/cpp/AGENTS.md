@@ -2,51 +2,59 @@
 
 ## OVERVIEW
 
-JNI wrapper bridging Kotlin to libavif. Conditional compilation supports both native AVIF and JPEG fallback modes.
+JNI wrapper bridging Kotlin to libavif.
+
+`HAVE_LIBAVIF` gates whether the codec is compiled in — it is **not** a fallback to another
+format. With `HAVE_LIBAVIF=0` the encode and decode entry points log an error and return
+`nullptr`, which surfaces in Kotlin as `AvifError.EncodingFailed` / `AvifError.DecodingFailed`.
+Returning fabricated or JPEG bytes from a function named `nativeEncode` would ship garbage to
+consumers who then write it to a `.avif` file, so the build fails loudly instead.
 
 ## STRUCTURE
 
 ```
 cpp/
 ├── CMakeLists.txt              # Build config (CRITICAL - 16KB alignment)
-├── avif_jni_wrapper.cpp        # Active JNI implementation
-├── avif_jni_wrapper_production.cpp  # Production variant
-├── avif_jni_wrapper.placeholder.cpp # Fallback (no libavif)
-└── libavif/                    # libavif submodule (cloned by setup script)
+├── avif_jni_wrapper.cpp        # The JNI implementation — there is only one
+└── libavif/                    # libavif + ext/aom, cloned by the setup script (git-ignored)
 ```
 
 ## CONDITIONAL COMPILATION
 
-```cmake
-# With libavif (default after setup)
-add_compile_definitions(HAVE_LIBAVIF=1)
+CMakeLists.txt picks one based on whether the libavif source is actually present:
 
-# Without libavif (fallback mode)
-add_compile_definitions(HAVE_LIBAVIF=0)
+```cmake
+add_compile_definitions(HAVE_LIBAVIF=1)   # source found — the real codec
+add_compile_definitions(HAVE_LIBAVIF=0)   # source missing — every entry point errors out
 ```
 
 ## JNI METHODS
 
+All four are on `com.alfikri.rizky.avifkit.AvifConverter`.
+
 | Native Method | Purpose |
 |---------------|---------|
-| `nativeEncode(pixels, w, h, quality, speed, subsample)` | Encode RGBA to AVIF |
-| `nativeDecode(avifData)` | Decode AVIF to DecodedImage |
-| `nativeIsAvif(data)` | Check AVIF signature |
-| `nativeGetVersion()` | Get libavif version string |
+| `nativeEncode(pixels, w, h, quality, alphaQuality, speed, subsample, lossless, hasAlpha)` | Encode RGBA to AVIF |
+| `nativeDecode(avifData)` | Decode AVIF to `DecodedImage` |
+| `nativeGetAvifInfo(data)` | Parse-only: width, height, alpha — no pixel decode, so it works below API 31 |
+| `nativeGetVersion()` | libavif version string |
+
+`nativeDecode` builds `DecodedImage` reflectively, so its primary constructor signature
+(`([IIIII)V` — pixels, width, height, irotAngle, imirAxis) must stay in sync with `Models.kt`.
 
 ## CRITICAL: 16KB PAGE ALIGNMENT
 
 ```cmake
-# CORRECT (line 98-103)
-if(ANDROID)
-    target_link_options(avif-android-wrapper PRIVATE
-        "-Wl,-z,max-page-size=16384"
-    )
-endif()
+# CORRECT — per-target, applied only to our own .so
+target_link_options(avif-android-wrapper PRIVATE "-Wl,-z,max-page-size=16384")
 
-# WRONG - causes memory corruption in libavif/AOM
+# WRONG — global flags leak into libavif/AOM and cause memory corruption.
+# Left commented out at the top of CMakeLists.txt so nobody re-adds them.
 set(CMAKE_SHARED_LINKER_FLAGS "... -Wl,-z,max-page-size=16384")
 ```
+
+Required by Google Play for Android 15+. NDK r28 emits 16 KB-aligned libraries by default; the
+explicit flag covers older toolchains.
 
 ## LIBAVIF SETUP
 
@@ -84,8 +92,12 @@ Kotlin passes RGBA (4 bytes/pixel):
 ## DEBUGGING
 
 ```bash
-# Check if library loads
-adb logcat | grep "AvifConverter"
+# The wrapper logs under LOG_TAG "AvifJNI", not the Kotlin class name
+adb logcat | grep AvifJNI
 
-# Look for "Native library loaded successfully" or error message
+# A healthy encode looks like:
+#   I AvifJNI: nativeEncode: 1920x1440, quality=75, alphaQuality=90, speed=6, ...
+#   I AvifJNI: Successfully encoded AVIF: 1920x1440, output size=19807 bytes
+# HAVE_LIBAVIF=0 looks like:
+#   E AvifJNI: libavif not compiled into this build (HAVE_LIBAVIF=0) ...
 ```

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      A bare splash/window theme only. Everything the user sees after the first frame is drawn by
+      Compose with its own Material 3 colour scheme, so this exists purely to avoid the white flash
+      and the default action bar before setContent runs.
+    -->
+    <style name="Theme.AvifStudio" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>
