@@ -99,12 +99,21 @@ data class BatchSummary(
   val inputWidth: Int? = null,
   val inputHeight: Int? = null,
   val outputBytes: Long,
+  /**
+   * What the batch was written as. Normally one entry — a run has a single output format — so the
+   * results header can say "3 converted to WebP" instead of leaving the user to guess.
+   */
+  val outputFormats: Set<OutputFormat> = emptySet(),
 ) {
   val savedBytes: Long
     get() = inputBytes - outputBytes
 
-  val savedPercent: Int
+  val savedPercent: Double
     get() = savingsPercent(inputBytes, outputBytes)
+
+  /** The one format everything was written as, or null if a batch somehow mixed them. */
+  val singleOutputFormat: OutputFormat?
+    get() = outputFormats.singleOrNull()
 
   companion object {
     fun of(jobs: List<ConversionJob>): BatchSummary {
@@ -113,6 +122,7 @@ data class BatchSummary(
       var skipped = 0
       var inputBytes = 0L
       var outputBytes = 0L
+      val formats = mutableSetOf<OutputFormat>()
       for (job in jobs) {
         when (val status = job.status) {
           is JobStatus.Done -> {
@@ -122,6 +132,7 @@ data class BatchSummary(
             // back-fills it — a coupling that would break silently.
             inputBytes += status.output.inputBytes
             outputBytes += status.output.sizeBytes
+            formats += status.output.format
           }
           is JobStatus.Failed -> failed++
           is JobStatus.Skipped -> skipped++
@@ -135,6 +146,7 @@ data class BatchSummary(
         skipped = skipped,
         inputBytes = inputBytes,
         outputBytes = outputBytes,
+        outputFormats = formats,
       )
     }
   }

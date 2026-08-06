@@ -80,6 +80,7 @@
     <string name="nothing_saved">Kali ini tidak ada ruang yang dihemat</string>
     <string name="count_converted">%1$d berhasil</string>
     <string name="count_failed">%1$d gagal</string>
+    <string name="count_converted_to">%1$d berhasil jadi %2$s</string>
     <string name="count_kept">%1$d tetap seperti semula</string>
     <string name="status_pending">Menunggu</string>
     <string name="status_running">Mengonversi</string>
@@ -92,8 +93,8 @@
     <string name="failure_out_of_memory">Terlalu besar untuk memori perangkat ini — coba di perangkat dengan RAM lebih besar</string>
     <string name="failure_unknown">Terjadi kesalahan</string>
 
-    <string name="savings_smaller">%1$d% lebih kecil</string>
-    <string name="savings_larger">%1$d% lebih besar</string>
+    <string name="savings_smaller">%1$s% lebih kecil</string>
+    <string name="savings_larger">%1$s% lebih besar</string>
     <string name="savings_same">Ukuran sama</string>
 
     <string name="original">Asli</string>

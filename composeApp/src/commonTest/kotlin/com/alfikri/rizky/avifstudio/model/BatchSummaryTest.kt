@@ -28,7 +28,7 @@ class BatchSummaryTest {
     assertEquals(3_000_000, summary.inputBytes)
     assertEquals(750_000, summary.outputBytes)
     assertEquals(2_250_000, summary.savedBytes)
-    assertEquals(75, summary.savedPercent)
+    assertEquals(75.0, summary.savedPercent)
   }
 
   @Test
@@ -36,7 +36,7 @@ class BatchSummaryTest {
     val summary = BatchSummary.of(emptyList())
     assertEquals(0, summary.total)
     assertEquals(0, summary.savedBytes)
-    assertEquals(0, summary.savedPercent)
+    assertEquals(0.0, summary.savedPercent)
   }
 
   /** A batch that grew is reported as negative savings rather than hidden. */
@@ -44,7 +44,7 @@ class BatchSummaryTest {
   fun reportsNegativeSavingsWhenOutputGrew() {
     val summary = BatchSummary.of(listOf(done(inputBytes = 100_000, outputBytes = 150_000)))
     assertEquals(-50_000, summary.savedBytes)
-    assertEquals(-50, summary.savedPercent)
+    assertEquals(-50.0, summary.savedPercent)
   }
 
   private var counter = 0

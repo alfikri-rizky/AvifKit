@@ -3,6 +3,7 @@ package com.alfikri.rizky.avifstudio.ui
 import androidx.compose.runtime.Composable
 import com.alfikri.rizky.avifstudio.model.FailureReason
 import com.alfikri.rizky.avifstudio.model.Recipe
+import com.alfikri.rizky.avifstudio.model.formatPercent
 import com.alfikri.rizky.avifstudio.model.savingsPercent
 import com.alfikri.rizky.avifstudio.resources.Res
 import com.alfikri.rizky.avifstudio.resources.appearance
@@ -37,6 +38,7 @@ import com.alfikri.rizky.avifstudio.resources.savings_same
 import com.alfikri.rizky.avifstudio.resources.savings_smaller
 import com.alfikri.rizky.avifstudio.settings.AppLanguage
 import com.alfikri.rizky.avifstudio.settings.ThemeMode
+import kotlin.math.abs
 import org.jetbrains.compose.resources.stringResource
 
 /**
@@ -105,14 +107,17 @@ fun ThemeMode.label(): String =
     }
   )
 
-/** `62% smaller`, `8% larger`, or `Same size` — the headline number on every result row. */
+/** `62% smaller`, `99.5% smaller`, `8% larger`, or `Same size` — the number on every result row. */
 @Composable
 fun savingsLabel(originalBytes: Long, newBytes: Long): String {
   val percent = savingsPercent(originalBytes, newBytes)
+  // Branch on the rounded text, not the raw value: a 0.02% difference formats as "0", and "0%
+  // smaller" is a worse way of saying "Same size".
+  val rounded = formatPercent(abs(percent))
   return when {
-    percent > 0 -> stringResource(Res.string.savings_smaller, percent)
-    percent < 0 -> stringResource(Res.string.savings_larger, -percent)
-    else -> stringResource(Res.string.savings_same)
+    rounded == "0" -> stringResource(Res.string.savings_same)
+    percent > 0 -> stringResource(Res.string.savings_smaller, rounded)
+    else -> stringResource(Res.string.savings_larger, rounded)
   }
 }
 

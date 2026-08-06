@@ -2,6 +2,7 @@ package com.alfikri.rizky.avifstudio.model
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class FormattingTest {
 
@@ -25,15 +26,41 @@ class FormattingTest {
 
   @Test
   fun reportsSavingsPositiveWhenSmallerAndNegativeWhenLarger() {
-    assertEquals(80, savingsPercent(originalBytes = 1000, newBytes = 200))
-    assertEquals(0, savingsPercent(originalBytes = 1000, newBytes = 1000))
-    assertEquals(-50, savingsPercent(originalBytes = 1000, newBytes = 1500))
+    assertEquals(80.0, savingsPercent(originalBytes = 1000, newBytes = 200))
+    assertEquals(0.0, savingsPercent(originalBytes = 1000, newBytes = 1000))
+    assertEquals(-50.0, savingsPercent(originalBytes = 1000, newBytes = 1500))
   }
 
   /** Guards the division: an unreadable source can legitimately report zero bytes. */
   @Test
   fun survivesZeroByteOriginal() {
-    assertEquals(0, savingsPercent(originalBytes = 0, newBytes = 500))
+    assertEquals(0.0, savingsPercent(originalBytes = 0, newBytes = 500))
+  }
+
+  /**
+   * The case that started this: 2.3 MB down to 11 KB rounded to a whole number and printed "100%
+   * smaller" on a file the user could plainly still see.
+   */
+  @Test
+  fun neverReportsAWrittenFileAsAHundredPercentSmaller() {
+    val percent = savingsPercent(originalBytes = 2_411_724, newBytes = 11_264)
+    assertTrue(percent < 100.0, "got $percent")
+    assertEquals("99.5", formatPercent(percent))
+  }
+
+  /** An output of nothing really is 100% smaller, so the cap must not apply there. */
+  @Test
+  fun allowsAHundredPercentForAnEmptyOutput() {
+    assertEquals(100.0, savingsPercent(originalBytes = 1000, newBytes = 0))
+  }
+
+  @Test
+  fun keepsTheDecimalOnlyWhenItSaysSomething() {
+    assertEquals("99", formatPercent(99.0))
+    assertEquals("99.8", formatPercent(99.78))
+    assertEquals("62", formatPercent(62.0))
+    assertEquals("0", formatPercent(0.02))
+    assertEquals("-8", formatPercent(-8.0))
   }
 
   @Test

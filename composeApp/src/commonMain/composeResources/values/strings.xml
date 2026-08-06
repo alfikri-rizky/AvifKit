@@ -89,6 +89,7 @@
     <string name="nothing_saved">No space saved this time</string>
     <string name="count_converted">%1$d converted</string>
     <string name="count_failed">%1$d failed</string>
+    <string name="count_converted_to">%1$d converted to %2$s</string>
     <string name="count_kept">%1$d kept as-is</string>
     <string name="status_pending">Waiting</string>
     <string name="status_running">Converting</string>
@@ -101,8 +102,8 @@
     <string name="failure_out_of_memory">Too large for this device's memory — try it on a device with more RAM</string>
     <string name="failure_unknown">Something went wrong</string>
 
-    <string name="savings_smaller">%1$d% smaller</string>
-    <string name="savings_larger">%1$d% larger</string>
+    <string name="savings_smaller">%1$s% smaller</string>
+    <string name="savings_larger">%1$s% larger</string>
     <string name="savings_same">Same size</string>
 
     <!-- Comparison -->
