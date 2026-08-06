@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -29,6 +30,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,6 +40,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -78,7 +81,21 @@ fun RecipePicker(
       style = MaterialTheme.typography.titleMedium,
     )
 
+    // The selected recipe is remembered across launches, so the row has to open on it — otherwise
+    // reopening the app on "Convert to WebP" shows a row of cards with the chosen one off-screen.
+    // Once, on first composition: re-running it on every selection would yank the row out from
+    // under the finger that just tapped a card.
+    val rowState = rememberLazyListState()
+    val leadIn = with(LocalDensity.current) { 48.dp.roundToPx() }
+    LaunchedEffect(Unit) {
+      val index = Recipe.displayOrder.indexOf(selected)
+      // A negative offset leaves the previous card peeking in, which is what tells the user the
+      // row scrolls at all.
+      if (index > 0) rowState.scrollToItem(index, -leadIn)
+    }
+
     LazyRow(
+      state = rowState,
       horizontalArrangement = Arrangement.spacedBy(10.dp),
       // The row bleeds past the screen edge; the fade tells the user that rather than leaving a
       // card looking as if it had been cut off by a bug.
