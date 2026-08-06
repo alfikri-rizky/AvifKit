@@ -63,6 +63,17 @@ data class ConversionSettings(
       compressionStrategy = strategy,
     )
 
+  /**
+   * Fills in [cap] for a preset that asked for the original size.
+   *
+   * "Original size" is the honest default for the format-changing recipes — the user wants the same
+   * picture in another format — but on a device whose whole heap is 48 MB, decoding a 12 MP photo
+   * at full resolution is a guaranteed failure rather than a faithful conversion. A preset that
+   * already names a size, and any size the user picked themselves, are left alone.
+   */
+  fun withDeviceLimit(cap: Int?): ConversionSettings =
+    if (cap == null || maxDimension != null) this else copy(maxDimension = cap)
+
   companion object {
     const val DEFAULT_QUALITY = 75
     const val DEFAULT_SPEED = 6

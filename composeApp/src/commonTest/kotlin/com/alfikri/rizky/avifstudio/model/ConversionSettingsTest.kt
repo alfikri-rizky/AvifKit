@@ -109,4 +109,29 @@ class ConversionSettingsTest {
     assertEquals(Recipe.entries.toSet(), Recipe.displayOrder.toSet())
     assertEquals(Recipe.entries.size, Recipe.displayOrder.size)
   }
+
+  /**
+   * The format-changing presets ask for the original size, which on a device with a 48 MB heap is a
+   * guaranteed OOM on any modern photo rather than a faithful conversion.
+   */
+  @Test
+  fun fillsInADimensionCapForPresetsThatAskedForOriginalSize() {
+    val capped = Recipe.TO_WEBP.defaultSettings().withDeviceLimit(1280)
+    assertEquals(1280, capped.maxDimension)
+  }
+
+  @Test
+  fun leavesAPresetThatAlreadyNamesASizeAlone() {
+    val webReady = Recipe.WEB_READY.defaultSettings()
+    assertEquals(1920, webReady.maxDimension)
+    assertEquals(webReady, webReady.withDeviceLimit(1280))
+  }
+
+  /** Devices with room to spare keep converting at full resolution. */
+  @Test
+  fun changesNothingWhereThereIsNoDeviceLimit() {
+    val settings = Recipe.TO_JPEG.defaultSettings()
+    assertEquals(settings, settings.withDeviceLimit(null))
+    assertNull(settings.withDeviceLimit(null).maxDimension)
+  }
 }

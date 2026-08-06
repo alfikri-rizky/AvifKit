@@ -18,6 +18,7 @@ import com.alfikri.rizky.avifstudio.platform.BatchLifecycle
 import com.alfikri.rizky.avifstudio.platform.ConversionSession
 import com.alfikri.rizky.avifstudio.platform.ResourceSessionCopy
 import com.alfikri.rizky.avifstudio.platform.SessionCopy
+import com.alfikri.rizky.avifstudio.platform.deviceImageDimensionCap
 import com.alfikri.rizky.avifstudio.platform.resolveMetadata
 import com.alfikri.rizky.avifstudio.settings.AppLanguage
 import com.alfikri.rizky.avifstudio.settings.AppSettings
@@ -131,7 +132,15 @@ class StudioViewModel(
     // fight the user every time they changed something mid-session.
     viewModelScope.launch {
       val stored = settingsStore.settings.first()
-      _state.update { it.copy(recipe = stored.lastRecipe, settings = stored.conversion) }
+      // Untouched presets pick up this device's decode limit; anything the user actually chose is
+      // restored exactly as they left it, "Original size" included.
+      val restored =
+        if (stored.conversion == stored.lastRecipe.defaultSettings()) {
+          stored.lastRecipe.deviceDefaults()
+        } else {
+          stored.conversion
+        }
+      _state.update { it.copy(recipe = stored.lastRecipe, settings = restored) }
     }
     viewModelScope.launch {
       // collectLatest + delay is debounce without the experimental annotation: each new value
@@ -239,7 +248,7 @@ class StudioViewModel(
       current.copy(
         recipe = recipe,
         // Custom keeps whatever the user had — that is the point of Custom.
-        settings = if (recipe == Recipe.CUSTOM) current.settings else recipe.defaultSettings(),
+        settings = if (recipe == Recipe.CUSTOM) current.settings else recipe.deviceDefaults(),
       )
     }
     // Persist the resulting settings too, so the next launch restores the preset *and* whatever
@@ -254,11 +263,19 @@ class StudioViewModel(
         // Once a knob is off the preset's own defaults, the preset is no longer what is being
         // applied. Leaving "Web-ready" selected would both misdescribe the encode and let one
         // tap on that still-selected card silently discard the edit.
-        recipe = if (settings == current.recipe.defaultSettings()) current.recipe else Recipe.CUSTOM,
+        recipe = if (settings == current.recipe.deviceDefaults()) current.recipe else Recipe.CUSTOM,
       )
     }
     pendingSettingsWrite.value = settings
   }
+
+  /**
+   * A preset's defaults with this device's decode limit filled in. Every path that turns a recipe
+   * into settings goes through here, including the equality check above — comparing against the
+   * uncapped defaults would flip the preset to Custom on exactly the devices that need the cap.
+   */
+  private fun Recipe.deviceDefaults(): ConversionSettings =
+    defaultSettings().withDeviceLimit(deviceImageDimensionCap())
 
   fun showNotice(notice: Notice) {
     _notice.value = notice
