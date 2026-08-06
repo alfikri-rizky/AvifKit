@@ -1,10 +1,13 @@
 package com.alfikri.rizky.avifstudio.ui
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -110,7 +113,12 @@ fun HomeScreen(
   var detailJob by remember { mutableStateOf<ConversionJob?>(null) }
 
   val running = state.phase == BatchPhase.RUNNING
-  val finished = state.phase == BatchPhase.FINISHED
+
+  // What the list renders, held at the last batch that had images in it. Removing the final image
+  // empties the list in the same frame the empty state appears, so without this the row and its
+  // header blink out first and the fade has nothing left to fade.
+  val lastBatch = remember { mutableStateOf(state) }
+  if (state.hasSources) lastBatch.value = state
 
   Column(Modifier.fillMaxSize().padding(contentPadding)) {
     AnimatedVisibility(visible = running, enter = fadeIn(), exit = fadeOut()) {
@@ -132,78 +140,30 @@ fun HomeScreen(
     // sibling in this Column it took a strip of layout height of its own, so it shaded the page
     // background instead of the list — a white band above the footer rather than a shadow.
     Box(Modifier.weight(1f).fillMaxWidth()) {
-      if (state.hasSources) {
-        LazyColumn(
-          modifier = Modifier.fillMaxSize(),
-          contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp),
-          verticalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-          if (finished) {
-            item { SummaryCard(state) }
-          } else {
-            item {
-              RecipePicker(
-                selected = state.recipe,
-                settings = state.settings,
-                enabled = !running,
-                onSelect = onSelectRecipe,
-                onUpdateSettings = onUpdateSettings,
-                onOpenAdvanced = { showAdvanced = true },
-              )
-            }
-          }
-
-          item {
-            Row(
-              Modifier.fillMaxWidth().padding(top = 6.dp),
-              horizontalArrangement = Arrangement.SpaceBetween,
-              verticalAlignment = Alignment.CenterVertically,
-            ) {
-              Text(
-                text =
-                  when {
-                    running ->
-                      stringResource(Res.string.progress_of, state.completedCount, state.jobs.size)
-                    finished -> stringResource(Res.string.results_title)
-                    else ->
-                      pluralStringResource(
-                        Res.plurals.image_count,
-                        state.jobs.size,
-                        state.jobs.size,
-                      )
-                  },
-                style = MaterialTheme.typography.titleMedium,
-              )
-              if (!running) {
-                TextButton(onClick = onClearAll) { Text(stringResource(Res.string.clear_all)) }
-              }
-            }
-          }
-
-          items(state.jobs, key = { it.source.id }) { job ->
-            JobRow(
-              job = job,
-              showRemove = !running,
-              onRemove = { onRemoveSource(job.source.id) },
-              onRetry = { onRetry(job.source.id) },
-              onOpenDetail = { detailJob = job },
-            )
-          }
-
-          if (!running) {
-            item {
-              OutlinedButton(onClick = pickers::pickImages, shape = MaterialTheme.shapes.small) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(Res.string.add_more))
-              }
-            }
-          }
+      // Removing the last image swaps the whole body for a different screen. A hard cut there
+      // reads as a glitch, so the two fade through each other.
+      AnimatedContent(
+        targetState = state.hasSources,
+        transitionSpec = { fadeThrough() },
+        label = "body",
+      ) { hasSources ->
+        if (hasSources) {
+          JobList(
+            state = lastBatch.value,
+            onSelectRecipe = onSelectRecipe,
+            onUpdateSettings = onUpdateSettings,
+            onOpenAdvanced = { showAdvanced = true },
+            onClearAll = onClearAll,
+            onRemoveSource = onRemoveSource,
+            onRetry = onRetry,
+            onOpenDetail = { detailJob = it },
+            onAddMore = pickers::pickImages,
+          )
+        } else {
+          // Outside the list so it centres in the space left over, rather than hugging the top of
+          // a scroll container with nothing else in it.
+          Box(Modifier.fillMaxSize().padding(horizontal = 20.dp), Alignment.Center) { EmptyState() }
         }
-      } else {
-        // Outside the list so it centres in the space left over, rather than hugging the top of a
-        // scroll container with nothing else in it.
-        Box(Modifier.fillMaxSize().padding(horizontal = 20.dp), Alignment.Center) { EmptyState() }
       }
 
       FooterScrim(Modifier.align(Alignment.BottomCenter))
@@ -234,6 +194,95 @@ fun HomeScreen(
       onDismiss = { detailJob = null },
       onShare = { onShare(listOf(it)) },
     )
+  }
+}
+
+/**
+ * The old content leaves before the new one arrives, rather than the two dissolving through each
+ * other. A plain crossfade double-exposes them — two headings and two buttons on top of each other
+ * for the length of the fade, which looks like a rendering fault rather than a transition.
+ */
+private fun fadeThrough(): ContentTransform =
+  fadeIn(tween(210, delayMillis = 90)) togetherWith fadeOut(tween(90))
+
+/** The recipe picker, the batch header and the images themselves — everything that scrolls. */
+@Composable
+private fun JobList(
+  state: StudioUiState,
+  onSelectRecipe: (Recipe) -> Unit,
+  onUpdateSettings: (ConversionSettings) -> Unit,
+  onOpenAdvanced: () -> Unit,
+  onClearAll: () -> Unit,
+  onRemoveSource: (String) -> Unit,
+  onRetry: (String) -> Unit,
+  onOpenDetail: (ConversionJob) -> Unit,
+  onAddMore: () -> Unit,
+) {
+  val running = state.phase == BatchPhase.RUNNING
+  val finished = state.phase == BatchPhase.FINISHED
+
+  LazyColumn(
+    modifier = Modifier.fillMaxSize(),
+    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp),
+    verticalArrangement = Arrangement.spacedBy(14.dp),
+  ) {
+    if (finished) {
+      item { SummaryCard(state) }
+    } else {
+      item {
+        RecipePicker(
+          selected = state.recipe,
+          settings = state.settings,
+          enabled = !running,
+          onSelect = onSelectRecipe,
+          onUpdateSettings = onUpdateSettings,
+          onOpenAdvanced = onOpenAdvanced,
+        )
+      }
+    }
+
+    item {
+      Row(
+        Modifier.fillMaxWidth().padding(top = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Text(
+          text =
+            when {
+              running ->
+                stringResource(Res.string.progress_of, state.completedCount, state.jobs.size)
+              finished -> stringResource(Res.string.results_title)
+              else ->
+                pluralStringResource(Res.plurals.image_count, state.jobs.size, state.jobs.size)
+            },
+          style = MaterialTheme.typography.titleMedium,
+        )
+        if (!running) {
+          TextButton(onClick = onClearAll) { Text(stringResource(Res.string.clear_all)) }
+        }
+      }
+    }
+
+    items(state.jobs, key = { it.source.id }) { job ->
+      JobRow(
+        job = job,
+        showRemove = !running,
+        onRemove = { onRemoveSource(job.source.id) },
+        onRetry = { onRetry(job.source.id) },
+        onOpenDetail = { onOpenDetail(job) },
+      )
+    }
+
+    if (!running) {
+      item {
+        OutlinedButton(onClick = onAddMore, shape = MaterialTheme.shapes.small) {
+          Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+          Spacer(Modifier.width(8.dp))
+          Text(stringResource(Res.string.add_more))
+        }
+      }
+    }
   }
 }
 
@@ -428,6 +477,14 @@ private fun FooterScrim(modifier: Modifier = Modifier) {
   }
 }
 
+/** Which set of buttons the footer is showing. Named so the fade has something to key on. */
+private enum class FooterAction {
+  PICK,
+  CONVERT,
+  CANCEL,
+  EXPORT,
+}
+
 @Composable
 private fun BottomBar(
   state: StudioUiState,
@@ -438,76 +495,105 @@ private fun BottomBar(
   onShare: () -> Unit,
   onExport: () -> Unit,
 ) {
+  // Keyed on "is there anything to act on?" before phase, so no state can strand the user without
+  // a way back to the pickers — an empty FINISHED batch used to show Save/Share only.
+  val action =
+    when {
+      !state.hasSources -> FooterAction.PICK
+      state.phase == BatchPhase.READY -> FooterAction.CONVERT
+      state.phase == BatchPhase.RUNNING -> FooterAction.CANCEL
+      else -> FooterAction.EXPORT
+    }
+
+  // Held for the same reason the list holds its batch: clearing the images empties the count in
+  // the frame the button starts fading, and "Convert 0 images" is what you would watch fade.
+  val lastCount = remember { mutableStateOf(state.jobs.size) }
+  if (state.hasSources) lastCount.value = state.jobs.size
+
   Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
-    Row(
-      modifier =
-        Modifier.fillMaxWidth()
-          .navigationBarsPadding()
-          .padding(horizontal = 20.dp, vertical = 14.dp),
-      horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      // Keyed on "is there anything to act on?" before phase, so no state can strand the user
-      // without a way back to the pickers — an empty FINISHED batch used to show Save/Share only.
-      when {
-        !state.hasSources -> {
-          Button(
-            onClick = onPickImages,
-            modifier = Modifier.weight(1f).height(54.dp),
-            shape = MaterialTheme.shapes.small,
-          ) {
-            // Emoji rather than a Material icon: material-icons-core has no picture or folder
-            // glyph, and the app already speaks emoji for recipes, themes and languages.
-            Text("\uD83D\uDDBC\uFE0F", fontSize = 17.sp)
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(Res.string.add_photos))
+    // The body behind this fades between the list and the empty state; the buttons snapping
+    // mid-fade is what gave that away as two animations instead of one.
+    AnimatedContent(targetState = action, transitionSpec = { fadeThrough() }, label = "footer") {
+      current ->
+      Row(
+        modifier =
+          Modifier.fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        when (current) {
+          FooterAction.PICK -> {
+            Button(
+              onClick = onPickImages,
+              modifier = Modifier.weight(1f).height(54.dp),
+              shape = MaterialTheme.shapes.small,
+            ) {
+              // Emoji rather than a Material icon: material-icons-core has no picture or folder
+              // glyph, and the app already speaks emoji for recipes, themes and languages.
+              Text("\uD83D\uDDBC\uFE0F", fontSize = 17.sp)
+              Spacer(Modifier.width(8.dp))
+              Text(stringResource(Res.string.add_photos))
+            }
+            OutlinedButton(
+              onClick = onPickFiles,
+              modifier = Modifier.weight(1f).height(54.dp),
+              shape = MaterialTheme.shapes.small,
+            ) {
+              Text("\uD83D\uDCC1", fontSize = 17.sp)
+              Spacer(Modifier.width(8.dp))
+              Text(stringResource(Res.string.add_files))
+            }
           }
-          OutlinedButton(
-            onClick = onPickFiles,
-            modifier = Modifier.weight(1f).height(54.dp),
-            shape = MaterialTheme.shapes.small,
-          ) {
-            Text("\uD83D\uDCC1", fontSize = 17.sp)
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(Res.string.add_files))
+          FooterAction.CONVERT -> {
+            Button(
+              onClick = onStart,
+              modifier = Modifier.weight(1f).height(54.dp),
+              shape = MaterialTheme.shapes.small,
+            ) {
+              Text(
+                pluralStringResource(Res.plurals.convert_count, lastCount.value, lastCount.value)
+              )
+            }
           }
-        }
-        state.phase == BatchPhase.READY -> {
-          Button(
-            onClick = onStart,
-            modifier = Modifier.weight(1f).height(54.dp),
-            shape = MaterialTheme.shapes.small,
-          ) {
-            Text(pluralStringResource(Res.plurals.convert_count, state.jobs.size, state.jobs.size))
+          FooterAction.CANCEL -> {
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+              Text(
+                stringResource(Res.string.converting),
+                style = MaterialTheme.typography.titleSmall,
+              )
+            }
+            // Same height as every other footer button, so the bar keeps one height across all
+            // four states and the crossfade has no size to resolve.
+            OutlinedButton(
+              onClick = onCancel,
+              modifier = Modifier.height(54.dp),
+              shape = MaterialTheme.shapes.small,
+            ) {
+              Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+              Spacer(Modifier.width(8.dp))
+              Text(stringResource(Res.string.cancel))
+            }
           }
-        }
-        state.phase == BatchPhase.RUNNING -> {
-          Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-            Text(stringResource(Res.string.converting), style = MaterialTheme.typography.titleSmall)
-          }
-          OutlinedButton(onClick = onCancel, shape = MaterialTheme.shapes.small) {
-            Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(Res.string.cancel))
-          }
-        }
-        else -> {
-          Button(
-            onClick = onExport,
-            modifier = Modifier.weight(1f).height(54.dp),
-            shape = MaterialTheme.shapes.small,
-          ) {
-            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(Res.string.save))
-          }
-          FilledTonalButton(
-            onClick = onShare,
-            modifier = Modifier.weight(1f).height(54.dp),
-            shape = MaterialTheme.shapes.small,
-          ) {
-            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(Res.string.share))
+          FooterAction.EXPORT -> {
+            Button(
+              onClick = onExport,
+              modifier = Modifier.weight(1f).height(54.dp),
+              shape = MaterialTheme.shapes.small,
+            ) {
+              Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+              Spacer(Modifier.width(8.dp))
+              Text(stringResource(Res.string.save))
+            }
+            FilledTonalButton(
+              onClick = onShare,
+              modifier = Modifier.weight(1f).height(54.dp),
+              shape = MaterialTheme.shapes.small,
+            ) {
+              Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+              Spacer(Modifier.width(8.dp))
+              Text(stringResource(Res.string.share))
+            }
           }
         }
       }
