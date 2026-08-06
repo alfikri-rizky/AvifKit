@@ -18,7 +18,8 @@
     <!-- Actions -->
     <string name="add_photos">Add photos</string>
     <string name="add_files">Add files</string>
-    <string name="add_more">Add more</string>
+    <string name="add_more_photos">Add more photos</string>
+    <string name="add_more_files">Add more files</string>
     <string name="clear_all">Clear all</string>
     <string name="settings">Settings</string>
     <string name="about">About</string>

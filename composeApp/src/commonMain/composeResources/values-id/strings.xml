@@ -14,7 +14,8 @@
 
     <string name="add_photos">Tambah foto</string>
     <string name="add_files">Tambah berkas</string>
-    <string name="add_more">Tambah lagi</string>
+    <string name="add_more_photos">Tambah foto lagi</string>
+    <string name="add_more_files">Tambah berkas lagi</string>
     <string name="clear_all">Hapus semua</string>
     <string name="settings">Pengaturan</string>
     <string name="about">Tentang</string>

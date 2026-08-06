@@ -45,6 +45,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,7 +63,8 @@ import com.alfikri.rizky.avifstudio.model.Recipe
 import com.alfikri.rizky.avifstudio.model.formatBytes
 import com.alfikri.rizky.avifstudio.resources.Res
 import com.alfikri.rizky.avifstudio.resources.add_files
-import com.alfikri.rizky.avifstudio.resources.add_more
+import com.alfikri.rizky.avifstudio.resources.add_more_files
+import com.alfikri.rizky.avifstudio.resources.add_more_photos
 import com.alfikri.rizky.avifstudio.resources.add_photos
 import com.alfikri.rizky.avifstudio.resources.cancel
 import com.alfikri.rizky.avifstudio.resources.clear_all
@@ -112,6 +114,11 @@ fun HomeScreen(
   var showAdvanced by remember { mutableStateOf(false) }
   var detailJob by remember { mutableStateOf<ConversionJob?>(null) }
 
+  // Which door the batch came through. "Add more" reopens that one — someone who reached for
+  // Files was after something the gallery does not show them (an .avif out of Downloads, say), and
+  // sending them back to the gallery hands them a picker their file is missing from.
+  var addedFromFiles by rememberSaveable { mutableStateOf(false) }
+
   val running = state.phase == BatchPhase.RUNNING
 
   // What the list renders, held at the last batch that had images in it. Removing the final image
@@ -157,7 +164,8 @@ fun HomeScreen(
             onRemoveSource = onRemoveSource,
             onRetry = onRetry,
             onOpenDetail = { detailJob = it },
-            onAddMore = pickers::pickImages,
+            onAddMore = { if (addedFromFiles) pickers.pickFiles() else pickers.pickImages() },
+            addMoreFromFiles = addedFromFiles,
           )
         } else {
           // Outside the list so it centres in the space left over, rather than hugging the top of
@@ -171,8 +179,14 @@ fun HomeScreen(
 
     BottomBar(
       state = state,
-      onPickImages = pickers::pickImages,
-      onPickFiles = pickers::pickFiles,
+      onPickImages = {
+        addedFromFiles = false
+        pickers.pickImages()
+      },
+      onPickFiles = {
+        addedFromFiles = true
+        pickers.pickFiles()
+      },
       onStart = onStart,
       onCancel = onCancel,
       onShare = { onShare(state.exportableFiles) },
@@ -217,6 +231,7 @@ private fun JobList(
   onRetry: (String) -> Unit,
   onOpenDetail: (ConversionJob) -> Unit,
   onAddMore: () -> Unit,
+  addMoreFromFiles: Boolean,
 ) {
   val running = state.phase == BatchPhase.RUNNING
   val finished = state.phase == BatchPhase.FINISHED
@@ -279,7 +294,12 @@ private fun JobList(
         OutlinedButton(onClick = onAddMore, shape = MaterialTheme.shapes.small) {
           Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
           Spacer(Modifier.width(8.dp))
-          Text(stringResource(Res.string.add_more))
+          // Says which picker it opens, because it is no longer always the gallery.
+          Text(
+            stringResource(
+              if (addMoreFromFiles) Res.string.add_more_files else Res.string.add_more_photos
+            )
+          )
         }
       }
     }
