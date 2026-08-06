@@ -13,8 +13,12 @@ import java.util.Date
 import java.util.Locale
 
 actual fun PlatformFile.resolveMetadata(): FileMetadata {
-  val fallbackName = name
-  val fallbackSize = size()
+  // Both of these query the content provider, and both throw SecurityException when the grant on a
+  // shared URI has lapsed — which killed the app on an API 24 emulator the moment such a URI
+  // arrived. Naming a file is never worth a crash: fall back, and let the conversion itself fail
+  // with a message on the row if the bytes really are unreadable.
+  val fallbackName = runCatching { name }.getOrDefault(DEFAULT_NAME)
+  val fallbackSize = runCatching { size() }.getOrDefault(-1L)
   val uri = (androidFile as? AndroidFile.UriWrapper)?.uri
   val context = AppContext.applicationContext
   if (uri == null || context == null) {
@@ -53,6 +57,9 @@ actual fun PlatformFile.resolveMetadata(): FileMetadata {
     sizeBytes = size,
   )
 }
+
+/** Used only when the provider will not even tell us what the file is called. */
+private const val DEFAULT_NAME = "image"
 
 /**
  * The Android photo picker deliberately withholds the real filename and hands back the MediaStore
@@ -103,7 +110,7 @@ private fun String.deredact(uri: Uri, context: Context): String {
 private fun String.withExtension(uri: Uri, context: Context): String {
   if (substringAfterLast('.', "").isNotEmpty()) return this
   val extension =
-    when (context.contentResolver.getType(uri)?.lowercase()) {
+    when (runCatching { context.contentResolver.getType(uri) }.getOrNull()?.lowercase()) {
       "image/jpeg" -> "jpg"
       "image/png" -> "png"
       "image/webp" -> "webp"
