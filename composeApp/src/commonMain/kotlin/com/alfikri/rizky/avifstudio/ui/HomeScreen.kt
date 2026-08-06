@@ -47,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -405,7 +406,21 @@ private fun BottomBar(
   onShare: () -> Unit,
   onExport: () -> Unit,
 ) {
-  Surface(color = MaterialTheme.colorScheme.background, tonalElevation = 3.dp) {
+  // An explicit gradient rather than Surface(shadowElevation): a rectangular elevation shadow
+  // against a near-white background renders almost invisibly here, and this has to read the same
+  // on both platforms. Drawn as a sibling above the bar so it always separates the footer from
+  // whatever is scrolling underneath it.
+  Box(
+    Modifier.fillMaxWidth()
+      .height(10.dp)
+      .background(
+        Brush.verticalGradient(
+          listOf(Color.Transparent, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f))
+        )
+      )
+  )
+
+  Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
     Row(
       modifier =
         Modifier.fillMaxWidth()
