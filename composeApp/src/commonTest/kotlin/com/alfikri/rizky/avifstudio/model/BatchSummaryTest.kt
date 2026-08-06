@@ -59,8 +59,14 @@ class BatchSummaryTest {
     )
   }
 
+  /**
+   * The source is deliberately given a *different* advertised size from what the converter read.
+   * Content providers routinely lie about size (or report -1), and the summary has to add up the
+   * measured bytes. With both set to the same number this fixture could not tell the two apart, so
+   * it passed just as happily when the wrong one was being summed.
+   */
   private fun done(inputBytes: Long, outputBytes: Long): ConversionJob {
-    val src = source(inputBytes)
+    val src = source(inputBytes = inputBytes / 2)
     return ConversionJob(
       source = src,
       status =

@@ -48,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -410,15 +411,20 @@ private fun BottomBar(
   // against a near-white background renders almost invisibly here, and this has to read the same
   // on both platforms. Drawn as a sibling above the bar so it always separates the footer from
   // whatever is scrolling underneath it.
-  Box(
-    Modifier.fillMaxWidth()
-      .height(10.dp)
-      .background(
-        Brush.verticalGradient(
-          listOf(Color.Transparent, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f))
+  //
+  // Black, not onSurface. A scrim must always darken, and onSurface is a *content* token that
+  // flips with the theme — in dark mode it is near-white, so this drew a white glow instead of a
+  // shadow. Dark mode gets no scrim at all: there the bar is already lighter than the page thanks
+  // to the tonal elevation below, which is how Material separates surfaces without shadows.
+  if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) {
+    Box(
+      Modifier.fillMaxWidth()
+        .height(10.dp)
+        .background(
+          Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.07f)))
         )
-      )
-  )
+    )
+  }
 
   Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
     Row(

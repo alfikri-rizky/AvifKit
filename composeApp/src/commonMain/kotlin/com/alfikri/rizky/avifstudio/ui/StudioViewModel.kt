@@ -14,6 +14,10 @@ import com.alfikri.rizky.avifstudio.model.FileNaming
 import com.alfikri.rizky.avifstudio.model.JobStatus
 import com.alfikri.rizky.avifstudio.model.Recipe
 import com.alfikri.rizky.avifstudio.model.SourceImage
+import com.alfikri.rizky.avifstudio.platform.BatchLifecycle
+import com.alfikri.rizky.avifstudio.platform.ConversionSession
+import com.alfikri.rizky.avifstudio.platform.ResourceSessionCopy
+import com.alfikri.rizky.avifstudio.platform.SessionCopy
 import com.alfikri.rizky.avifstudio.platform.resolveMetadata
 import com.alfikri.rizky.avifstudio.settings.AppLanguage
 import com.alfikri.rizky.avifstudio.settings.AppSettings
@@ -81,6 +85,8 @@ data class StudioUiState(
 class StudioViewModel(
   private val engine: ConversionRunner = ConversionEngine(),
   private val settingsStore: SettingsRepository = SettingsStore(),
+  private val session: BatchLifecycle = ConversionSession(),
+  private val sessionCopy: SessionCopy = ResourceSessionCopy(),
 ) : ViewModel() {
 
   private val _state = MutableStateFlow(StudioUiState())
@@ -98,6 +104,17 @@ class StudioViewModel(
   /** One-shot user-facing notices (duplicate pick, export outcome). */
   private val _notice = MutableStateFlow<Notice?>(null)
   val notice: StateFlow<Notice?> = _notice.asStateFlow()
+
+  /**
+   * Output names already handed out, keyed by source id.
+   *
+   * A name has to be reserved when it is *assigned*, not when its file appears. A retry runs in its
+   * own coroutine alongside the batch and holds no output while it is in flight, so a name derived
+   * only from finished outputs handed the same filename to both — and the second encode overwrote
+   * the first in the cache directory. Plain mutable state is safe here: every writer runs on the
+   * main dispatcher, and the name is chosen before anything suspends.
+   */
+  private val claimedNames = mutableMapOf<String, String>()
 
   private var runJob: Job? = null
   private val retryJobs = mutableListOf<Job>()
@@ -144,18 +161,32 @@ class StudioViewModel(
    */
   fun addSources(files: List<PlatformFile>) {
     if (files.isEmpty()) return
-    val existingKeys = _state.value.jobs.mapTo(mutableSetOf()) { it.source.file.identityKey() }
+    // Adding to a finished batch starts a fresh one, so nothing carries over from it — not the
+    // already-added check, not the names in use. Re-picking a photo from the batch just finished is
+    // an ordinary way to start again, and refusing it as a duplicate left the user tapping Add
+    // photos with nothing happening but an "already added" message.
+    val carried = if (_state.value.phase == BatchPhase.FINISHED) emptyList() else _state.value.jobs
+    val existingKeys = carried.mapTo(mutableSetOf()) { it.source.file.identityKey() }
+    // Display names are routinely not unique. The Android photo picker redacts the real filename
+    // and hands back one synthesised from the file's date, so an album imported in one go comes
+    // back as twenty rows all called IMG_20260806_135818.jpg — the user cannot tell which row is
+    // which, or which of the exported files came from where. Two folders each holding IMG_0042.jpg
+    // do the same thing. Disambiguate once here so the list, the results and the saved files all
+    // agree on a name.
+    val usedNames = carried.mapTo(mutableSetOf()) { it.source.displayName }
     val additions =
       files
         .filter { it.identityKey() !in existingKeys }
         .map { file ->
           val metadata = file.resolveMetadata()
+          val displayName = FileNaming.uniqueName(metadata.name, usedNames)
+          usedNames += displayName
           ConversionJob(
             source =
               SourceImage(
                 id = "src-${nextId++}",
                 file = file,
-                displayName = metadata.name,
+                displayName = displayName,
                 sizeBytes = metadata.sizeBytes,
               )
           )
@@ -181,6 +212,7 @@ class StudioViewModel(
   }
 
   fun removeSource(id: String) {
+    claimedNames.remove(id)
     _state.update { current ->
       val remaining = current.jobs.filterNot { it.source.id == id }
       current.copy(
@@ -195,6 +227,7 @@ class StudioViewModel(
     runJob = null
     retryJobs.forEach { it.cancel() }
     retryJobs.clear()
+    claimedNames.clear()
     val keep = _state.value
     _state.value = StudioUiState(recipe = keep.recipe, settings = keep.settings)
     viewModelScope.launch { runCatching { engine.clearOutputs() } }
@@ -251,6 +284,7 @@ class StudioViewModel(
     }
 
     val job = viewModelScope.launch {
+      startSession()
       try {
         // Drains the live list rather than a snapshot, so anything shared into the app while
         // this is running still gets converted instead of sitting on Pending forever.
@@ -259,8 +293,10 @@ class StudioViewModel(
             _state.value.jobs.firstOrNull { it.status == JobStatus.Pending }?.source ?: break
           updateStatus(next.id, JobStatus.Running)
           updateStatus(next.id, runOne(next, settings, outputNameFor(next, settings)))
+          updateSession()
         }
         _state.update { it.copy(phase = BatchPhase.FINISHED) }
+        finishSession(cancelled = false)
       } catch (_: CancellationException) {
         // Anything still queued when the user hit cancel is reported as cancelled rather than
         // left spinning forever.
@@ -268,7 +304,12 @@ class StudioViewModel(
         // Only the run that is still current may write this. clearAll() cancels the job and
         // then empties the state; without this guard the cancellation handler lands afterwards
         // and revives an empty batch into FINISHED, which has no way back to the pickers.
-        if (runJob !== coroutineContext[Job]) return@launch
+        if (runJob !== coroutineContext[Job]) {
+          // clearAll() already emptied the batch. Nothing to report on work the user just wiped —
+          // tear the ongoing notification down without posting a replacement.
+          runCatching { session.finish(null) }
+          return@launch
+        }
         _state.update { current ->
           current.copy(
             phase = BatchPhase.FINISHED,
@@ -278,6 +319,7 @@ class StudioViewModel(
               },
           )
         }
+        finishSession(cancelled = true)
       }
     }
     runJob = job
@@ -311,6 +353,55 @@ class StudioViewModel(
   }
 
   /**
+   * Starts the platform's keep-alive as the batch starts, and stops it when the batch ends — driven
+   * from here rather than from composition, because a batch and a composition have different
+   * lifetimes. Swiping the app away used to leave the Android service running with an undismissable
+   * notification, and a batch that finished while the app was backgrounded never posted its "done"
+   * notification at all, because recomposition was paused.
+   *
+   * Every call is guarded: a notification is worth strictly less than the conversion it describes,
+   * so nothing here is allowed to abort a batch.
+   */
+  private suspend fun startSession() {
+    runCatching {
+      session.start(
+        text = sessionCopy.running(0, _state.value.jobs.size),
+        channel = sessionCopy.channel(),
+      )
+    }
+  }
+
+  private suspend fun updateSession() {
+    val current = _state.value
+    runCatching {
+      session.update(
+        completed = current.completedCount,
+        total = current.jobs.size,
+        text = sessionCopy.running(current.completedCount, current.jobs.size),
+      )
+    }
+  }
+
+  /**
+   * Announces the result, unless there is nothing worth announcing. A cancelled batch says it
+   * stopped rather than claiming success, and a batch where nothing succeeded posts nothing at all
+   * — the failures are already on the screen the user is looking at.
+   */
+  private suspend fun finishSession(cancelled: Boolean) {
+    val current = _state.value
+    val summary = current.summary
+    runCatching {
+      val completion =
+        when {
+          cancelled -> sessionCopy.cancelled(current.completedCount, current.jobs.size)
+          summary.succeeded == 0 -> null
+          else -> sessionCopy.finished(summary.succeeded, summary.savedBytes)
+        }
+      session.finish(completion)
+    }
+  }
+
+  /**
    * A unique output name for [source], measured against the names every other job has already
    * claimed. Computed per item rather than for the batch up front, because the queue can grow
    * mid-run when something is shared into the app.
@@ -320,10 +411,11 @@ class StudioViewModel(
       _state.value.jobs.mapNotNullTo(mutableSetOf()) {
         if (it.source.id == source.id) null else it.outputOrNull?.displayName
       }
-    return FileNaming.uniqueName(
-      FileNaming.outputName(source.displayName, settings.outputFormat),
-      taken,
-    )
+    claimedNames.forEach { (id, name) -> if (id != source.id) taken += name }
+    val name =
+      FileNaming.uniqueName(FileNaming.outputName(source.displayName, settings.outputFormat), taken)
+    claimedNames[source.id] = name
+    return name
   }
 
   private suspend fun runOne(

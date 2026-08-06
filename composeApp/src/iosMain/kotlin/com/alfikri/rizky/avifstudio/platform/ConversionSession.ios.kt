@@ -22,11 +22,11 @@ import platform.UserNotifications.UNUserNotificationCenter
  * would be worse than showing nothing. What the user gets is: the batch keeps going for a while
  * after they switch away, and a notification when it finishes.
  */
-actual class ConversionSession {
+actual class ConversionSession : BatchLifecycle {
 
   private var task: UIBackgroundTaskIdentifier = UIBackgroundTaskInvalid
 
-  actual fun start(text: SessionText) {
+  override fun start(text: SessionText, channel: SessionChannel) {
     if (task != UIBackgroundTaskInvalid) return
     task =
       UIApplication.sharedApplication.beginBackgroundTaskWithName("avif-conversion") {
@@ -36,9 +36,9 @@ actual class ConversionSession {
   }
 
   /** No-op: iOS cannot show ongoing progress without a Live Activity. */
-  actual fun update(completed: Int, total: Int, text: SessionText) = Unit
+  override fun update(completed: Int, total: Int, text: SessionText) = Unit
 
-  actual fun finish(completion: SessionText?) {
+  override fun finish(completion: SessionText?) {
     if (completion != null) postNotification(completion)
     endTask()
   }
@@ -67,9 +67,6 @@ actual class ConversionSession {
     UNUserNotificationCenter.currentNotificationCenter().addNotificationRequest(request, null)
   }
 }
-
-@Composable
-actual fun rememberConversionSession(): ConversionSession = remember { ConversionSession() }
 
 @Composable
 actual fun rememberNotificationPermissionRequest(): () -> Unit = remember {

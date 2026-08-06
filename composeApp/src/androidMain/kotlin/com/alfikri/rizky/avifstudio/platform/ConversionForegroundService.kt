@@ -93,11 +93,32 @@ class ConversionForegroundService : Service() {
       // Foreground services may only be started while the app itself is in the foreground on
       // Android 12+, which is exactly when a batch begins.
       runCatching {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-          context.startForegroundService(intent)
-        } else {
-          context.startService(intent)
+          if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            context.startForegroundService(intent)
+          } else {
+            context.startService(intent)
+          }
         }
+        .onFailure(ConversionSession::logStartFailure)
+    }
+
+    /**
+     * Redraws the ongoing notification without touching the service. Denied POST_NOTIFICATIONS
+     * makes this a silent no-op, which is the correct outcome — the conversion is unaffected.
+     */
+    fun updateProgress(
+      context: Context,
+      title: String,
+      body: String,
+      completed: Int,
+      total: Int,
+      channelName: String,
+      channelDescription: String,
+    ) {
+      ensureChannel(context, channelName, channelDescription)
+      runCatching {
+        NotificationManagerCompat.from(context)
+          .notify(NOTIFICATION_ID, buildNotification(context, title, body, completed, total))
       }
     }
 
@@ -112,7 +133,9 @@ class ConversionForegroundService : Service() {
     fun ensureChannel(context: Context, name: String, description: String) {
       if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
       val manager = context.getSystemService(NotificationManager::class.java) ?: return
-      if (manager.getNotificationChannel(CHANNEL_ID) != null) return
+      // Unconditional: creating an existing channel id updates its name and description, which is
+      // how the channel follows an in-app language change. Returning early froze it at whatever
+      // locale happened to be active the first time a batch ran.
       manager.createNotificationChannel(
         // LOW: a progress bar that never makes a sound. This is ambient status, not an alert.
         NotificationChannel(

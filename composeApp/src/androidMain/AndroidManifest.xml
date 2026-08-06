@@ -16,10 +16,16 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application>
+        <!--
+          stopWithTask: swiping the app off recents destroys the Activity and the batch with it,
+          but the service kept the process alive at foreground priority, leaving an undismissable
+          "Converting 1 of 6" notification for work that had already stopped.
+        -->
         <service
             android:name="com.alfikri.rizky.avifstudio.platform.ConversionForegroundService"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="dataSync"
+            android:stopWithTask="true" />
     </application>
 
 </manifest>

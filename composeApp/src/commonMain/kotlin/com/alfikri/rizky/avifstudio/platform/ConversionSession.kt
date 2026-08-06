@@ -1,50 +1,55 @@
 package com.alfikri.rizky.avifstudio.platform
 
-import androidx.compose.runtime.Composable
-
-/** Already-localised text for a notification. Resolved in composition, shown by platform code. */
+/** Already-localised text for a notification. */
 data class SessionText(val title: String, val body: String)
+
+/** Localised notification-channel copy. Android only; ignored elsewhere. */
+data class SessionChannel(val name: String, val description: String)
 
 /**
  * Keeps a running batch alive while the user is elsewhere, and tells them when it is done.
  *
- * The two platforms can promise very different things here, and the API deliberately does not
- * pretend otherwise:
+ * Driven from the batch coroutine, never from composition. Those are different lifetimes on both
+ * platforms and tying them together was wrong in two directions: on Android the composition dies
+ * when the task is swiped away while the service lives on, leaving an undismissable notification
+ * for work that stopped; on iOS recomposition pauses in the background, so the batch finished but
+ * `finish()` never ran and the completion notification arrived only once the user reopened the app,
+ * where the system drops it.
  *
- * - **Android** starts a `dataSync` foreground service with an ongoing progress notification. The
- *   batch survives the user leaving the app, and the notification is what buys that — a foreground
- *   service without one is not a thing the OS allows.
- * - **iOS** has no equivalent. There is no foreground service and no ongoing progress notification
- *   outside a Live Activity. The best available is `beginBackgroundTask`, which asks the system for
- *   a short grace period to finish what is already in flight; a long batch will still be suspended.
- *   A local notification is delivered when the work completes.
- *
- * So on Android this is "your batch keeps running", and on iOS it is "your batch gets a little
- * longer to finish, and you get told when it does".
+ * What each platform can promise differs, and this does not pretend otherwise:
+ * - **Android** runs a `dataSync` foreground service with an ongoing progress notification. The
+ *   batch genuinely survives the user leaving the app.
+ * - **iOS** has no equivalent — no foreground service, and ongoing progress needs a Live Activity
+ *   with its own extension and entitlement. `beginBackgroundTask` buys a short grace period, so
+ *   [update] is deliberately a no-op and the user gets a notification when the work lands.
  */
-expect class ConversionSession {
+expect class ConversionSession() : BatchLifecycle
 
-  /** Called when a batch starts, while the app is still in the foreground. */
-  fun start(text: SessionText)
+/**
+ * What the ViewModel needs from a session, so the batch state machine stays testable off-device —
+ * constructing the real one in a host test would reach for an Android Context or UIApplication.
+ */
+interface BatchLifecycle {
 
-  /** Progress for the ongoing notification. Ignored where there is nothing to update. */
+  /** Called as a batch starts. Safe to call twice. */
+  fun start(text: SessionText, channel: SessionChannel)
+
+  /** Ongoing progress. A no-op where the platform cannot show any. */
   fun update(completed: Int, total: Int, text: SessionText)
 
   /**
-   * The batch ended. [completion] is `null` when it was cancelled or nothing succeeded, in which
-   * case no "finished" notification is posted — a notification for work the user themselves stopped
-   * is noise.
+   * The batch ended. [completion] is `null` when nothing worth announcing happened — the user
+   * cancelled, or nothing succeeded — in which case the ongoing notification is torn down without
+   * posting a replacement.
    */
   fun finish(completion: SessionText?)
 }
 
-@Composable expect fun rememberConversionSession(): ConversionSession
-
 /**
- * Asks for notification permission if the platform needs it and has not been asked.
+ * Asks for notification permission if the platform needs it.
  *
- * Android 13+ gates notifications behind a runtime permission, and a foreground service without a
- * visible notification is much easier for the system to kill. iOS gates local notifications the
- * same way.
+ * Requested when the first images are added rather than when Convert is tapped: a short batch can
+ * finish while the system dialog is still up, and the completion notification is then posted before
+ * authorization exists and silently dropped.
  */
-@Composable expect fun rememberNotificationPermissionRequest(): () -> Unit
+@androidx.compose.runtime.Composable expect fun rememberNotificationPermissionRequest(): () -> Unit

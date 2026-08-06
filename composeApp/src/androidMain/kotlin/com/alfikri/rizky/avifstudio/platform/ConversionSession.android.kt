@@ -1,69 +1,79 @@
 package com.alfikri.rizky.avifstudio.platform
 
 import android.Manifest
-import android.content.Context
 import android.os.Build
+import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
-import com.alfikri.rizky.avifstudio.resources.Res
-import com.alfikri.rizky.avifstudio.resources.notif_channel_desc
-import com.alfikri.rizky.avifstudio.resources.notif_channel_name
-import org.jetbrains.compose.resources.stringResource
 
-actual class ConversionSession(
-  private val context: Context,
-  private val channelName: String,
-  private val channelDescription: String,
-) {
+actual class ConversionSession : BatchLifecycle {
 
-  actual fun start(text: SessionText) {
+  private var channel: SessionChannel? = null
+  private var started = false
+
+  override fun start(text: SessionText, channel: SessionChannel) {
+    this.channel = channel
+    val context = AppContext.applicationContext ?: return
+    started = true
     ConversionForegroundService.start(
       context = context,
       title = text.title,
       body = text.body,
       completed = 0,
       total = 0,
-      channelName = channelName,
-      channelDescription = channelDescription,
+      channelName = channel.name,
+      channelDescription = channel.description,
     )
   }
 
-  actual fun update(completed: Int, total: Int, text: SessionText) {
-    ConversionForegroundService.start(
+  /**
+   * Updates the existing notification rather than restarting the service. The previous version
+   * called startForegroundService once per converted image — a full ActivityManager round-trip for
+   * something NotificationManager can do directly.
+   */
+  override fun update(completed: Int, total: Int, text: SessionText) {
+    if (!started) return
+    val context = AppContext.applicationContext ?: return
+    val channel = channel ?: return
+    ConversionForegroundService.updateProgress(
       context = context,
       title = text.title,
       body = text.body,
       completed = completed,
       total = total,
-      channelName = channelName,
-      channelDescription = channelDescription,
+      channelName = channel.name,
+      channelDescription = channel.description,
     )
   }
 
-  actual fun finish(completion: SessionText?) {
+  override fun finish(completion: SessionText?) {
+    val context = AppContext.applicationContext ?: return
+    // Nothing to tear down if we never started; stopping anyway spun up a Service on every cold
+    // launch just to shut it down again.
+    if (!started) return
+    started = false
     ConversionForegroundService.stop(context)
+    val channel = channel ?: return
     if (completion != null) {
       ConversionForegroundService.notifyDone(
         context = context,
         title = completion.title,
         body = completion.body,
-        channelName = channelName,
-        channelDescription = channelDescription,
+        channelName = channel.name,
+        channelDescription = channel.description,
       )
     }
   }
-}
 
-@Composable
-actual fun rememberConversionSession(): ConversionSession {
-  val context = LocalContext.current
-  val channelName = stringResource(Res.string.notif_channel_name)
-  val channelDescription = stringResource(Res.string.notif_channel_desc)
-  return remember(context, channelName, channelDescription) {
-    ConversionSession(context, channelName, channelDescription)
+  internal companion object {
+    const val TAG = "AvifStudio"
+
+    /** A refused foreground service is the one failure that must not be silent. */
+    fun logStartFailure(error: Throwable) {
+      Log.w(TAG, "Foreground service refused; the batch will run unprotected", error)
+    }
   }
 }
 
