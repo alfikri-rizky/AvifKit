@@ -51,6 +51,8 @@
     <string name="recipe_smallest_desc">Push compression as far as it goes</string>
     <string name="recipe_archive">Archive quality</string>
     <string name="recipe_archive_desc">Near-original detail, full colour, no resizing</string>
+    <string name="recipe_to_webp">Convert to WebP</string>
+    <string name="recipe_to_webp_desc">Much smaller than JPEG, opens everywhere</string>
     <string name="recipe_to_jpeg">Convert to JPEG</string>
     <string name="recipe_to_jpeg_desc">Opens anywhere — email, forms, older devices</string>
     <string name="recipe_to_png">Convert to PNG</string>

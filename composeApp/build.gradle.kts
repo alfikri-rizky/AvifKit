@@ -9,6 +9,14 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 // :shared uses.
 plugins {
   alias(libs.plugins.kotlinMultiplatform)
+  // Only here to bind the WebP encoder: iOS has no system WebP *writer* (verified — WebP is
+  // missing from CGImageDestinationCopyTypeIdentifiers()), so the pods below supply one and this
+  // plugin generates the Kotlin bindings for them. The app framework still reaches Xcode through
+  // embedAndSignAppleFrameworkForXcode exactly as before; see the cocoapods block.
+  // Version-less on purpose: the plugin ships inside the Kotlin Gradle plugin that is already on
+  // the build classpath, and asking for it by version makes Gradle look for a marker artifact that
+  // is not published separately.
+  kotlin("native.cocoapods")
   alias(libs.plugins.androidKotlinMultiplatformLibrary)
   alias(libs.plugins.composeMultiplatform)
   alias(libs.plugins.composeCompiler)
@@ -35,13 +43,49 @@ kotlin {
     withHostTest {}
   }
 
-  listOf(iosArm64(), iosX64(), iosSimulatorArm64()).forEach { iosTarget ->
-    iosTarget.binaries.framework {
+  iosArm64()
+  iosX64()
+  iosSimulatorArm64()
+
+  // WebP encoding on iOS, and nothing else.
+  //
+  // UIKit and ImageIO can *read* WebP but not write it — `CGImageDestinationCopyTypeIdentifiers()`
+  // on iOS lists heic and avif, never `org.webmproject.webp` — so the encoder has to come from
+  // somewhere. These are the same two pods the Tracive app uses for exactly this;
+  // SDWebImageWebPCoder pulls libwebp in transitively.
+  //
+  // Declaring pods here forces the whole framework integration through CocoaPods: the Kotlin
+  // Gradle plugin refuses to run `embedAndSignAppleFrameworkForXcode` in a module that has pod
+  // dependencies ("Incompatible 'embedAndSign' Task with CocoaPods Dependencies"), and the flag
+  // that suppresses that is already deprecated. So iosApp now depends on `pod 'composeApp'`, and
+  // the podspec's own script phase builds the framework. See iosApp/AGENTS.md.
+  cocoapods {
+    summary = "AVIF Studio shared UI"
+    homepage = "https://github.com/alfikri-rizky/AvifKit"
+    version = "1.0"
+    // Matches Package.swift and the iosApp deployment target.
+    ios.deploymentTarget = "15.0"
+    // Keeps iosApp/Podfile in sync: Gradle runs `pod install` for it when the pods change.
+    podfile = project.file("../iosApp/Podfile")
+
+    framework {
       baseName = "ComposeApp"
       // Static: the iOS app links exactly one Kotlin framework, which statically contains both
       // this module and :shared (including the libavif/AOM archives embedded in :shared's
-      // cinterop klib). Nothing has to be embedded or code-signed separately.
+      // cinterop klib).
       isStatic = true
+    }
+
+    // SDWebImage core is declared explicitly because the encode call needs its symbols
+    // (SDImageFormatWebP, SDImageCoderEncodeCompressionQuality), which do not come with the coder.
+    pod("SDWebImage") {
+      version = "~> 5.0"
+      extraOpts += listOf("-compiler-option", "-fmodules")
+    }
+
+    pod("SDWebImageWebPCoder") {
+      version = "~> 0.14"
+      extraOpts += listOf("-compiler-option", "-fmodules")
     }
   }
 

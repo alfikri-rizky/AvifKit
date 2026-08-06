@@ -28,6 +28,8 @@ import com.alfikri.rizky.avifstudio.resources.recipe_to_jpeg
 import com.alfikri.rizky.avifstudio.resources.recipe_to_jpeg_desc
 import com.alfikri.rizky.avifstudio.resources.recipe_to_png
 import com.alfikri.rizky.avifstudio.resources.recipe_to_png_desc
+import com.alfikri.rizky.avifstudio.resources.recipe_to_webp
+import com.alfikri.rizky.avifstudio.resources.recipe_to_webp_desc
 import com.alfikri.rizky.avifstudio.resources.recipe_web_ready
 import com.alfikri.rizky.avifstudio.resources.recipe_web_ready_desc
 import com.alfikri.rizky.avifstudio.resources.savings_larger
@@ -49,6 +51,7 @@ fun Recipe.title(): String =
       Recipe.FIT_SIZE_LIMIT -> Res.string.recipe_fit_size
       Recipe.SMALLEST -> Res.string.recipe_smallest
       Recipe.ARCHIVE -> Res.string.recipe_archive
+      Recipe.TO_WEBP -> Res.string.recipe_to_webp
       Recipe.TO_JPEG -> Res.string.recipe_to_jpeg
       Recipe.TO_PNG -> Res.string.recipe_to_png
       Recipe.CUSTOM -> Res.string.recipe_custom
@@ -63,6 +66,7 @@ fun Recipe.description(): String =
       Recipe.FIT_SIZE_LIMIT -> Res.string.recipe_fit_size_desc
       Recipe.SMALLEST -> Res.string.recipe_smallest_desc
       Recipe.ARCHIVE -> Res.string.recipe_archive_desc
+      Recipe.TO_WEBP -> Res.string.recipe_to_webp_desc
       Recipe.TO_JPEG -> Res.string.recipe_to_jpeg_desc
       Recipe.TO_PNG -> Res.string.recipe_to_png_desc
       Recipe.CUSTOM -> Res.string.recipe_custom_desc

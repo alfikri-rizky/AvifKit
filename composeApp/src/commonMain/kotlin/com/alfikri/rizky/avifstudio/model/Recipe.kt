@@ -15,6 +15,7 @@ enum class Recipe(val glyph: String) {
   FIT_SIZE_LIMIT("\uD83C\uDFAF"),
   SMALLEST("\uD83E\uDEB6"),
   ARCHIVE("\uD83D\uDC8E"),
+  TO_WEBP("\uD83D\uDD78\uFE0F"),
   TO_JPEG("\uD83D\uDD04"),
   TO_PNG("\uD83E\uDDCA"),
   CUSTOM("\uD83C\uDF9B\uFE0F");
@@ -60,9 +61,16 @@ enum class Recipe(val glyph: String) {
           alphaQuality = 98,
           maxDimension = null,
         )
-      // The two format-changing recipes deliberately keep their output even when it is larger:
-      // the user asked for a JPEG/PNG because something downstream cannot read AVIF, and handing
-      // back the original "because it was smaller" would defeat the whole request.
+      // The format-changing recipes deliberately keep their output even when it is larger:
+      // the user asked for WebP/JPEG/PNG because something downstream cannot read AVIF, and
+      // handing back the original "because it was smaller" would defeat the whole request.
+      TO_WEBP ->
+        ConversionSettings(
+          outputFormat = OutputFormat.WEBP,
+          quality = 80,
+          maxDimension = null,
+          skipIfLarger = false,
+        )
       TO_JPEG ->
         ConversionSettings(
           outputFormat = OutputFormat.JPEG,
@@ -86,6 +94,6 @@ enum class Recipe(val glyph: String) {
   companion object {
     /** Order shown in the picker — the two most common jobs first. */
     val displayOrder: List<Recipe> =
-      listOf(WEB_READY, FIT_SIZE_LIMIT, SMALLEST, ARCHIVE, TO_JPEG, TO_PNG, CUSTOM)
+      listOf(WEB_READY, FIT_SIZE_LIMIT, SMALLEST, ARCHIVE, TO_WEBP, TO_JPEG, TO_PNG, CUSTOM)
   }
 }

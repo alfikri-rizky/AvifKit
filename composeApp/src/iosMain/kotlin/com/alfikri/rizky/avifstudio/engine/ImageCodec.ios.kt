@@ -4,6 +4,9 @@ package com.alfikri.rizky.avifstudio.engine
 
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import cocoapods.SDWebImage.SDImageCoderEncodeCompressionQuality
+import cocoapods.SDWebImage.SDImageFormatWebP
+import cocoapods.SDWebImageWebPCoder.SDImageWebPCoder
 import com.alfikri.rizky.avifkit.PlatformBitmap
 import com.alfikri.rizky.avifstudio.model.OutputFormat
 import kotlin.math.max
@@ -97,6 +100,17 @@ actual class ImageCodec {
           // UIKit takes 0.0..1.0 where Android and our UI use 0..100.
           OutputFormat.JPEG -> UIImageJPEGRepresentation(bitmap, quality.coerceIn(0, 100) / 100.0)
           OutputFormat.PNG -> UIImagePNGRepresentation(bitmap)
+          // No UIKit or ImageIO equivalent: iOS reads WebP but does not write it, so this is the
+          // one format whose encoder comes from a pod. See the cocoapods block in build.gradle.kts.
+          OutputFormat.WEBP ->
+            SDImageWebPCoder.sharedCoder.encodedDataWithImage(
+              image = bitmap,
+              format = SDImageFormatWebP,
+              options =
+                mapOf<Any?, Any?>(
+                  SDImageCoderEncodeCompressionQuality to quality.coerceIn(0, 100) / 100.0
+                ),
+            )
           OutputFormat.AVIF ->
             throw IllegalArgumentException(
               "AVIF encoding goes through AvifKit, not the platform codec"

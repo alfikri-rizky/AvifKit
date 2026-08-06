@@ -40,13 +40,26 @@ struct ComposeView: UIViewControllerRepresentable {
 The framework comes from `:composeApp`, not `:shared`. `:composeApp` links `:shared` statically, so
 exactly one Kotlin framework is embedded — linking both would duplicate the Kotlin runtime.
 
-Three pbxproj settings make that work, and all three are load-bearing:
+**It arrives through CocoaPods.** `iosApp/Podfile` depends on `pod 'composeApp', :path =>
+'../composeApp'`, and that podspec's own script phase builds the framework during the Xcode build.
 
-| Setting | Value |
-|---|---|
-| Run Script phase (before Sources) | `./gradlew :composeApp:embedAndSignAppleFrameworkForXcode` |
-| `FRAMEWORK_SEARCH_PATHS` | `$(SRCROOT)/../composeApp/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)` |
-| `OTHER_LDFLAGS` | `-framework ComposeApp` |
+> **Open `iosApp.xcworkspace`, not `iosApp.xcodeproj`.** The project alone has no framework and no
+> pods, and fails to link.
+
+Fresh clone, in order — the podspec is generated, so `pod install` cannot run before it exists:
+
+```sh
+./gradlew :composeApp:generateDummyFramework   # also writes composeApp/composeApp.podspec
+cd iosApp && pod install
+open iosApp.xcworkspace
+```
+
+This replaced a manual `embedAndSignAppleFrameworkForXcode` Run Script phase (plus
+`FRAMEWORK_SEARCH_PATHS` and `-framework ComposeApp`), all three of which are now gone from the
+pbxproj. The switch was not cosmetic: `:composeApp` needs `SDWebImageWebPCoder` for WebP encoding
+(iOS has no system WebP *writer*), and the Kotlin Gradle plugin hard-errors — *"Incompatible
+'embedAndSign' Task with CocoaPods Dependencies"* — in any module that has pod dependencies. The
+property that suppresses it is already deprecated, so pods own the integration now.
 
 `ENABLE_USER_SCRIPT_SANDBOXING` must stay `NO` — the Gradle script phase writes outside the
 sandbox and KGP fails the build otherwise.

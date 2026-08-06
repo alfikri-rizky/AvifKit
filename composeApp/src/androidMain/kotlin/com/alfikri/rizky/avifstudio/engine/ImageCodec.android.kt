@@ -3,6 +3,7 @@ package com.alfikri.rizky.avifstudio.engine
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.os.Build
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.exifinterface.media.ExifInterface
@@ -68,6 +69,14 @@ actual class ImageCodec {
         when (format) {
           OutputFormat.JPEG -> Bitmap.CompressFormat.JPEG
           OutputFormat.PNG -> Bitmap.CompressFormat.PNG
+          // WEBP_LOSSY only exists from API 30. The deprecated WEBP below it is the same lossy
+          // encoder — on those releases it is lossy for any quality under 100.
+          OutputFormat.WEBP ->
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+              Bitmap.CompressFormat.WEBP_LOSSY
+            } else {
+              @Suppress("DEPRECATION") Bitmap.CompressFormat.WEBP
+            }
           OutputFormat.AVIF ->
             throw IllegalArgumentException(
               "AVIF encoding goes through AvifKit, not the platform codec"

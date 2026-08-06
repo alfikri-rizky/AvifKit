@@ -44,6 +44,8 @@
     <string name="recipe_smallest_desc">Kompresi semaksimal mungkin</string>
     <string name="recipe_archive">Kualitas arsip</string>
     <string name="recipe_archive_desc">Detail nyaris asli, warna penuh, tanpa ubah ukuran</string>
+    <string name="recipe_to_webp">Ubah ke WebP</string>
+    <string name="recipe_to_webp_desc">Jauh lebih kecil dari JPEG, bisa dibuka di mana saja</string>
     <string name="recipe_to_jpeg">Ubah ke JPEG</string>
     <string name="recipe_to_jpeg_desc">Bisa dibuka di mana saja — email, formulir, perangkat lama</string>
     <string name="recipe_to_png">Ubah ke PNG</string>

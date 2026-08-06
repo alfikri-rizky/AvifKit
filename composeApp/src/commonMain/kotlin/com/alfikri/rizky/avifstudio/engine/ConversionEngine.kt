@@ -67,6 +67,7 @@ class ConversionEngine(
     val encoded = encodeGate.withPermit {
       when (settings.outputFormat) {
         OutputFormat.AVIF -> encodeAvif(sourceBytes, settings)
+        OutputFormat.WEBP,
         OutputFormat.JPEG,
         OutputFormat.PNG -> encodeViaBitmap(sourceBytes, settings)
       }
