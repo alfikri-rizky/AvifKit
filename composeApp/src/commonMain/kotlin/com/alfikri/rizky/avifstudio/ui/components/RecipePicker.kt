@@ -149,7 +149,12 @@ private fun RecipeCard(recipe: Recipe, selected: Boolean, enabled: Boolean, onCl
     color = container,
     tonalElevation = if (selected) 3.dp else 0.dp,
     shadowElevation = elevation,
-    border = if (selected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary) else null,
+    // The unselected cards are surface-on-surface, so in light mode only the drop shadow gives
+    // them an edge — and a drop shadow is invisible against a dark background. An outline is what
+    // holds in both themes.
+    border =
+      if (selected) BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+      else BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
   ) {
     Box(Modifier.padding(14.dp)) {
       Column(modifier = Modifier.fillMaxHeight(), verticalArrangement = Arrangement.SpaceBetween) {
