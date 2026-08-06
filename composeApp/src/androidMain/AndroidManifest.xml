@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      A batch of large photos takes longer than the few seconds Android gives a backgrounded app.
+      Without a foreground service the process is a prime candidate for being killed mid-encode,
+      and the user comes back to a half-finished batch with no explanation.
+
+      dataSync is the right type: this is local processing of user-selected files, not media
+      playback and not a location or camera use. Android 15 caps dataSync at 6 hours per 24, which
+      no realistic batch approaches.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Android 13+. Denied simply means no progress notification; the work still runs. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application>
+        <service
+            android:name="com.alfikri.rizky.avifstudio.platform.ConversionForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+    </application>
+
+</manifest>

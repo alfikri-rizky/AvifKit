@@ -126,4 +126,13 @@
     <string name="cannot_decode">Gambar ini tidak bisa dibuka: %1$s</string>
     <string name="github_repo">AvifKit di GitHub</string>
     <string name="github_repo_desc">Pustaka sumber terbuka yang melakukan enkodenya</string>
+
+    <!-- Background conversion notifications -->
+    <string name="notif_channel_name">Konversi</string>
+    <string name="notif_channel_desc">Menampilkan progres saat gambar sedang dikonversi</string>
+    <string name="notif_running_title">Mengonversi gambar</string>
+    <string name="notif_done_title">Konversi selesai</string>
+    <string name="notif_done_body">%1$d berhasil · %2$s dihemat</string>
+    <string name="notif_done_body_plain">%1$d berhasil</string>
+    <string name="notif_cancelled_title">Konversi dihentikan</string>
 </resources>

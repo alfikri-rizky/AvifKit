@@ -164,6 +164,9 @@ internal fun NSData.toByteArray(): ByteArray {
   val size = length.toInt()
   if (size == 0) return ByteArray(0)
   val result = ByteArray(size)
-  result.usePinned { pinned -> memcpy(pinned.addressOf(0), this.bytes, length) }
+  // Copy exactly what was allocated. `length` is NSUInteger and `size` is the Int the array was
+  // sized from; handing memcpy the former would let the copy outrun the buffer if they ever
+  // disagreed.
+  result.usePinned { pinned -> memcpy(pinned.addressOf(0), this.bytes, size.toULong()) }
   return result
 }

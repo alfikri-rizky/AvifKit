@@ -71,14 +71,14 @@ fun ResultDetailSheet(job: ConversionJob, onDismiss: () -> Unit, onShare: (Platf
       )
 
       Text(
-        text = savingsLabel(job.source.sizeBytes, output.sizeBytes),
+        text = savingsLabel(output.inputBytes, output.sizeBytes),
         style = MaterialTheme.typography.headlineSmall,
         color = MaterialTheme.colorScheme.primary,
       )
 
       DetailRow(
         label = stringResource(Res.string.file_size),
-        before = formatBytes(job.source.sizeBytes),
+        before = formatBytes(output.inputBytes),
         after = formatBytes(output.sizeBytes),
       )
       DetailRow(

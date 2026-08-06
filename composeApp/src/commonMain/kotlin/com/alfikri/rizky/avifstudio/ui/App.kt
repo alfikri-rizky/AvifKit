@@ -38,8 +38,12 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.backhandler.BackHandler
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.alfikri.rizky.avifstudio.model.formatBytes
 import com.alfikri.rizky.avifstudio.platform.ExportResult
 import com.alfikri.rizky.avifstudio.platform.IncomingFiles
+import com.alfikri.rizky.avifstudio.platform.SessionText
+import com.alfikri.rizky.avifstudio.platform.rememberConversionSession
+import com.alfikri.rizky.avifstudio.platform.rememberNotificationPermissionRequest
 import com.alfikri.rizky.avifstudio.platform.rememberPlatformActions
 import com.alfikri.rizky.avifstudio.resources.Res
 import com.alfikri.rizky.avifstudio.resources.already_added
@@ -48,6 +52,11 @@ import com.alfikri.rizky.avifstudio.resources.back
 import com.alfikri.rizky.avifstudio.resources.export_cancelled
 import com.alfikri.rizky.avifstudio.resources.export_failed
 import com.alfikri.rizky.avifstudio.resources.nothing_to_export
+import com.alfikri.rizky.avifstudio.resources.notif_done_body
+import com.alfikri.rizky.avifstudio.resources.notif_done_body_plain
+import com.alfikri.rizky.avifstudio.resources.notif_done_title
+import com.alfikri.rizky.avifstudio.resources.notif_running_title
+import com.alfikri.rizky.avifstudio.resources.progress_of
 import com.alfikri.rizky.avifstudio.resources.saved_to
 import com.alfikri.rizky.avifstudio.resources.settings
 import com.alfikri.rizky.avifstudio.ui.theme.AvifStudioTheme
@@ -79,6 +88,7 @@ private fun AppContent(viewModel: StudioViewModel) {
   val incoming by IncomingFiles.pending.collectAsState()
 
   var screen by rememberSaveable { mutableStateOf(Screen.HOME) }
+  val requestNotificationPermission = rememberNotificationPermissionRequest()
   val snackbarHostState = remember { SnackbarHostState() }
 
   val actions = rememberPlatformActions { result ->
@@ -105,6 +115,8 @@ private fun AppContent(viewModel: StudioViewModel) {
     snackbarHostState.showSnackbar(message)
     viewModel.dismissNotice()
   }
+
+  KeepBatchAlive(state)
 
   BackHandler(enabled = screen != Screen.HOME) { screen = Screen.HOME }
 
@@ -174,7 +186,12 @@ private fun AppContent(viewModel: StudioViewModel) {
             onClearAll = viewModel::clearAll,
             onSelectRecipe = viewModel::selectRecipe,
             onUpdateSettings = viewModel::updateSettings,
-            onStart = viewModel::start,
+            onStart = {
+              // Asked at the moment it becomes useful, not on first launch: the permission only
+              // buys a progress notification, and that only matters once there is a batch.
+              requestNotificationPermission()
+              viewModel.start()
+            },
             onCancel = viewModel::cancel,
             onRetry = viewModel::retry,
             onShare = { files ->
@@ -208,3 +225,50 @@ private fun noticeMessage(notice: Notice): String =
     Notice.ExportCancelled -> stringResource(Res.string.export_cancelled)
     is Notice.ExportFailed -> stringResource(Res.string.export_failed, notice.message)
   }
+
+/**
+ * Ties the platform's "keep this alive" mechanism to the batch lifecycle.
+ *
+ * It lives in composition rather than the ViewModel because every string it needs is localised, and
+ * because what it can promise is platform-specific — see [ConversionSession]. On Android it starts
+ * a foreground service so leaving the app does not kill a half-finished batch; on iOS it asks for
+ * the short grace period that is all the platform offers.
+ */
+@Composable
+private fun KeepBatchAlive(state: StudioUiState) {
+  val session = rememberConversionSession()
+  val runningTitle = stringResource(Res.string.notif_running_title)
+  val doneTitle = stringResource(Res.string.notif_done_title)
+
+  val summary = state.summary
+  val doneBody =
+    if (summary.savedBytes > 0) {
+      stringResource(Res.string.notif_done_body, summary.succeeded, formatBytes(summary.savedBytes))
+    } else {
+      stringResource(Res.string.notif_done_body_plain, summary.succeeded)
+    }
+  // Resolved here, not inside the effects: stringResource is a composable call and LaunchedEffect
+  // is not a composable context.
+  val progressBody = stringResource(Res.string.progress_of, state.completedCount, state.jobs.size)
+  val startingBody = stringResource(Res.string.progress_of, 0, state.jobs.size)
+
+  LaunchedEffect(state.phase) {
+    when (state.phase) {
+      BatchPhase.RUNNING -> session.start(SessionText(runningTitle, startingBody))
+      // Nothing succeeded means the user cancelled or everything failed; a "finished" notification
+      // for that is noise, and the failures are already on screen.
+      BatchPhase.FINISHED ->
+        session.finish(if (summary.succeeded > 0) SessionText(doneTitle, doneBody) else null)
+      BatchPhase.READY -> session.finish(null)
+    }
+  }
+
+  LaunchedEffect(state.completedCount, state.phase) {
+    if (state.phase != BatchPhase.RUNNING) return@LaunchedEffect
+    session.update(
+      completed = state.completedCount,
+      total = state.jobs.size,
+      text = SessionText(runningTitle, progressBody),
+    )
+  }
+}

@@ -117,7 +117,10 @@ data class BatchSummary(
         when (val status = job.status) {
           is JobStatus.Done -> {
             succeeded++
-            inputBytes += job.source.sizeBytes
+            // Straight off the output: this is the size actually read from the stream. Going via
+            // job.source.sizeBytes happened to give the same number, but only because updateStatus
+            // back-fills it — a coupling that would break silently.
+            inputBytes += status.output.inputBytes
             outputBytes += status.output.sizeBytes
           }
           is JobStatus.Failed -> failed++

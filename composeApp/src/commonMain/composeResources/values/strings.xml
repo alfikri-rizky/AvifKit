@@ -140,4 +140,13 @@
     <string name="cannot_decode">Could not open this image: %1$s</string>
     <string name="github_repo">AvifKit on GitHub</string>
     <string name="github_repo_desc">The open-source library that does the encoding</string>
+
+    <!-- Background conversion notifications -->
+    <string name="notif_channel_name">Conversions</string>
+    <string name="notif_channel_desc">Shows progress while images are being converted</string>
+    <string name="notif_running_title">Converting images</string>
+    <string name="notif_done_title">Conversion finished</string>
+    <string name="notif_done_body">%1$d converted · %2$s saved</string>
+    <string name="notif_done_body_plain">%1$d converted</string>
+    <string name="notif_cancelled_title">Conversion stopped</string>
 </resources>

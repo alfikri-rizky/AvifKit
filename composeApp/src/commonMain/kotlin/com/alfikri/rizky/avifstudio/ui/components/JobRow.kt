@@ -112,8 +112,8 @@ private fun StatusLine(job: ConversionJob) {
       Muted("${formatBytes(job.source.sizeBytes)} · ${stringResource(Res.string.status_pending)}")
     JobStatus.Running -> Muted(stringResource(Res.string.status_running))
     is JobStatus.Done -> {
-      Muted("${formatBytes(job.source.sizeBytes)}  →  ${formatBytes(status.output.sizeBytes)}")
-      SavingsPill(job.source.sizeBytes, status.output.sizeBytes)
+      Muted("${formatBytes(status.output.inputBytes)}  →  ${formatBytes(status.output.sizeBytes)}")
+      SavingsPill(status.output.inputBytes, status.output.sizeBytes)
     }
     is JobStatus.Failed -> {
       Text(
