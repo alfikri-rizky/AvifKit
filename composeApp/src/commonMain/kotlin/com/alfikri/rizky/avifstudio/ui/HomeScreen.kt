@@ -11,6 +11,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -24,8 +25,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
@@ -71,6 +74,7 @@ import com.alfikri.rizky.avifstudio.resources.clear_all
 import com.alfikri.rizky.avifstudio.resources.convert_count
 import com.alfikri.rizky.avifstudio.resources.converting
 import com.alfikri.rizky.avifstudio.resources.count_converted
+import com.alfikri.rizky.avifstudio.resources.count_converted_to
 import com.alfikri.rizky.avifstudio.resources.count_failed
 import com.alfikri.rizky.avifstudio.resources.count_kept
 import com.alfikri.rizky.avifstudio.resources.empty_body
@@ -89,6 +93,7 @@ import com.alfikri.rizky.avifstudio.ui.components.AdvancedSettingsSheet
 import com.alfikri.rizky.avifstudio.ui.components.JobRow
 import com.alfikri.rizky.avifstudio.ui.components.RecipePicker
 import com.alfikri.rizky.avifstudio.ui.components.ResultDetailSheet
+import com.alfikri.rizky.avifstudio.ui.components.isPhotoPickerAvailable
 import com.alfikri.rizky.avifstudio.ui.components.rememberImagePickers
 import com.alfikri.rizky.avifstudio.ui.theme.heroNumberStyle
 import org.jetbrains.compose.resources.pluralStringResource
@@ -118,6 +123,9 @@ fun HomeScreen(
   // Files was after something the gallery does not show them (an .avif out of Downloads, say), and
   // sending them back to the gallery hands them a picker their file is missing from.
   var addedFromFiles by rememberSaveable { mutableStateOf(false) }
+  // Without a photo picker there is only one door, so every path leads through Files.
+  val hasPhotoPicker = isPhotoPickerAvailable()
+  val useFilePicker = addedFromFiles || !hasPhotoPicker
 
   val running = state.phase == BatchPhase.RUNNING
 
@@ -164,13 +172,27 @@ fun HomeScreen(
             onRemoveSource = onRemoveSource,
             onRetry = onRetry,
             onOpenDetail = { detailJob = it },
-            onAddMore = { if (addedFromFiles) pickers.pickFiles() else pickers.pickImages() },
-            addMoreFromFiles = addedFromFiles,
+            onAddMore = { if (useFilePicker) pickers.pickFiles() else pickers.pickImages() },
+            addMoreFromFiles = useFilePicker,
           )
         } else {
-          // Outside the list so it centres in the space left over, rather than hugging the top of
-          // a scroll container with nothing else in it.
-          Box(Modifier.fillMaxSize().padding(horizontal = 20.dp), Alignment.Center) { EmptyState() }
+          // Centred in the space left over, but scrollable: on a 360x640 dp screen the hero, the
+          // headline and the privacy note together are taller than the gap between the app bar and
+          // the footer, and the note was being cut in half. fillMaxSize ahead of the scroll keeps
+          // the minimum height at one screen, so centring still applies wherever it does fit.
+          BoxWithConstraints(Modifier.fillMaxSize()) {
+            val compact = maxHeight < 560.dp
+            Column(
+              modifier =
+                Modifier.fillMaxSize()
+                  .verticalScroll(rememberScrollState())
+                  .padding(horizontal = 20.dp, vertical = 8.dp),
+              verticalArrangement = Arrangement.Center,
+              horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+              EmptyState(compact = compact)
+            }
+          }
         }
       }
 
@@ -179,6 +201,7 @@ fun HomeScreen(
 
     BottomBar(
       state = state,
+      hasPhotoPicker = hasPhotoPicker,
       onPickImages = {
         addedFromFiles = false
         pickers.pickImages()
@@ -307,17 +330,17 @@ private fun JobList(
 }
 
 @Composable
-private fun EmptyState() {
+private fun EmptyState(compact: Boolean) {
   Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-    HeroMark()
-    Spacer(Modifier.height(28.dp))
+    HeroMark(compact = compact)
+    Spacer(Modifier.height(if (compact) 16.dp else 28.dp))
     Text(
       text = stringResource(Res.string.tagline),
       style = MaterialTheme.typography.headlineSmall,
       textAlign = TextAlign.Center,
       color = MaterialTheme.colorScheme.onBackground,
     )
-    Spacer(Modifier.height(20.dp))
+    Spacer(Modifier.height(if (compact) 12.dp else 20.dp))
     Text(
       text = stringResource(Res.string.empty_title),
       style = MaterialTheme.typography.titleMedium,
@@ -330,7 +353,7 @@ private fun EmptyState() {
       color = MaterialTheme.colorScheme.onSurfaceVariant,
       textAlign = TextAlign.Center,
     )
-    Spacer(Modifier.height(24.dp))
+    Spacer(Modifier.height(if (compact) 16.dp else 24.dp))
     Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer) {
       Text(
         text = stringResource(Res.string.privacy_note),
@@ -348,11 +371,14 @@ private fun EmptyState() {
  * the theme's colours, needs no localisation, and adds nothing to the download.
  */
 @Composable
-private fun HeroMark() {
-  Box(Modifier.size(160.dp), contentAlignment = Alignment.Center) {
+private fun HeroMark(compact: Boolean) {
+  // Roughly 70% on a short screen, which is what keeps the privacy note above the footer on a
+  // 360x640 dp device instead of half-cut behind it.
+  val scale = if (compact) 0.7f else 1f
+  Box(Modifier.size(160.dp * scale), contentAlignment = Alignment.Center) {
     Box(
-      Modifier.size(132.dp)
-        .clip(RoundedCornerShape(36.dp))
+      Modifier.size(132.dp * scale)
+        .clip(RoundedCornerShape(36.dp * scale))
         .background(
           Brush.linearGradient(
             listOf(
@@ -363,8 +389,8 @@ private fun HeroMark() {
         )
     )
     Surface(
-      modifier = Modifier.align(Alignment.BottomEnd).size(72.dp),
-      shape = RoundedCornerShape(24.dp),
+      modifier = Modifier.align(Alignment.BottomEnd).size(72.dp * scale),
+      shape = RoundedCornerShape(24.dp * scale),
       color = MaterialTheme.colorScheme.primary,
       shadowElevation = 8.dp,
     ) {
@@ -419,8 +445,18 @@ private fun SummaryCard(state: StudioUiState) {
       }
 
       val parts = buildList {
-        if (summary.succeeded > 0)
-          add(stringResource(Res.string.count_converted, summary.succeeded))
+        if (summary.succeeded > 0) {
+          // Naming the format matters now that a batch can be AVIF, WebP, JPEG or PNG — "3
+          // converted" alone leaves the user to remember which recipe they picked.
+          val format = summary.singleOutputFormat
+          add(
+            if (format != null) {
+              stringResource(Res.string.count_converted_to, summary.succeeded, format.label)
+            } else {
+              stringResource(Res.string.count_converted, summary.succeeded)
+            }
+          )
+        }
         if (summary.skipped > 0) add(stringResource(Res.string.count_kept, summary.skipped))
         if (summary.failed > 0) add(stringResource(Res.string.count_failed, summary.failed))
       }
@@ -508,6 +544,7 @@ private enum class FooterAction {
 @Composable
 private fun BottomBar(
   state: StudioUiState,
+  hasPhotoPicker: Boolean,
   onPickImages: () -> Unit,
   onPickFiles: () -> Unit,
   onStart: () -> Unit,
@@ -544,25 +581,42 @@ private fun BottomBar(
       ) {
         when (current) {
           FooterAction.PICK -> {
-            Button(
-              onClick = onPickImages,
-              modifier = Modifier.weight(1f).height(54.dp),
-              shape = MaterialTheme.shapes.small,
-            ) {
-              // Emoji rather than a Material icon: material-icons-core has no picture or folder
-              // glyph, and the app already speaks emoji for recipes, themes and languages.
-              Text("\uD83D\uDDBC\uFE0F", fontSize = 17.sp)
-              Spacer(Modifier.width(8.dp))
-              Text(stringResource(Res.string.add_photos))
+            // One button where there is no photo picker: the platform sends both to the same
+            // document picker there, and two buttons that open one screen is a false choice.
+            if (hasPhotoPicker) {
+              Button(
+                onClick = onPickImages,
+                modifier = Modifier.weight(1f).height(54.dp),
+                shape = MaterialTheme.shapes.small,
+              ) {
+                // Emoji rather than a Material icon: material-icons-core has no picture or folder
+                // glyph, and the app already speaks emoji for recipes, themes and languages.
+                Text("\uD83D\uDDBC\uFE0F", fontSize = 17.sp)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(Res.string.add_photos))
+              }
             }
-            OutlinedButton(
-              onClick = onPickFiles,
-              modifier = Modifier.weight(1f).height(54.dp),
-              shape = MaterialTheme.shapes.small,
-            ) {
+            val filesButton: @Composable () -> Unit = {
               Text("\uD83D\uDCC1", fontSize = 17.sp)
               Spacer(Modifier.width(8.dp))
               Text(stringResource(Res.string.add_files))
+            }
+            if (hasPhotoPicker) {
+              OutlinedButton(
+                onClick = onPickFiles,
+                modifier = Modifier.weight(1f).height(54.dp),
+                shape = MaterialTheme.shapes.small,
+              ) {
+                filesButton()
+              }
+            } else {
+              Button(
+                onClick = onPickFiles,
+                modifier = Modifier.weight(1f).height(54.dp),
+                shape = MaterialTheme.shapes.small,
+              ) {
+                filesButton()
+              }
             }
           }
           FooterAction.CONVERT -> {

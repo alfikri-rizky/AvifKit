@@ -7,6 +7,15 @@ import io.github.vinceglb.filekit.dialogs.FileKitMode
 import io.github.vinceglb.filekit.dialogs.FileKitType
 import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
 
+/**
+ * Whether this OS has a photo picker at all.
+ *
+ * Where it does not, the gallery door is not simply worse — it is the same door: the platform falls
+ * back to the document picker, so "Add photos" and "Add files" open one identical screen. The UI
+ * drops to a single button rather than offering the same thing twice.
+ */
+@Composable expect fun isPhotoPickerAvailable(): Boolean
+
 /** The two ways images get into the app, wrapped so screens do not repeat the launcher plumbing. */
 class ImagePickers(internal val images: () -> Unit, internal val files: () -> Unit) {
   fun pickImages() = images()
