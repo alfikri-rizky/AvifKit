@@ -128,81 +128,85 @@ fun HomeScreen(
       )
     }
 
-    if (!state.hasSources) {
-      // Outside the list so it can centre in the space left over, instead of hugging the top of a
-      // scroll container that has nothing else in it.
-      Box(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 20.dp), Alignment.Center) {
-        EmptyState()
-      }
-    }
-
-    LazyColumn(
-      modifier =
-        if (state.hasSources) Modifier.weight(1f).fillMaxWidth() else Modifier.fillMaxWidth(),
-      contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp),
-      verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-      if (state.hasSources && finished) {
-        item { SummaryCard(state) }
-      }
-
-      if (state.hasSources && !finished) {
-        item {
-          RecipePicker(
-            selected = state.recipe,
-            settings = state.settings,
-            enabled = !running,
-            onSelect = onSelectRecipe,
-            onUpdateSettings = onUpdateSettings,
-            onOpenAdvanced = { showAdvanced = true },
-          )
-        }
-      }
-
+    // The body and the footer's scrim share a Box so the scrim is drawn *over* the content. As a
+    // sibling in this Column it took a strip of layout height of its own, so it shaded the page
+    // background instead of the list — a white band above the footer rather than a shadow.
+    Box(Modifier.weight(1f).fillMaxWidth()) {
       if (state.hasSources) {
-        item {
-          Row(
-            Modifier.fillMaxWidth().padding(top = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-          ) {
-            Text(
-              text =
-                when {
-                  running ->
-                    stringResource(Res.string.progress_of, state.completedCount, state.jobs.size)
-                  finished -> stringResource(Res.string.results_title)
-                  else ->
-                    pluralStringResource(Res.plurals.image_count, state.jobs.size, state.jobs.size)
-                },
-              style = MaterialTheme.typography.titleMedium,
+        LazyColumn(
+          modifier = Modifier.fillMaxSize(),
+          contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp),
+          verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+          if (finished) {
+            item { SummaryCard(state) }
+          } else {
+            item {
+              RecipePicker(
+                selected = state.recipe,
+                settings = state.settings,
+                enabled = !running,
+                onSelect = onSelectRecipe,
+                onUpdateSettings = onUpdateSettings,
+                onOpenAdvanced = { showAdvanced = true },
+              )
+            }
+          }
+
+          item {
+            Row(
+              Modifier.fillMaxWidth().padding(top = 6.dp),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Text(
+                text =
+                  when {
+                    running ->
+                      stringResource(Res.string.progress_of, state.completedCount, state.jobs.size)
+                    finished -> stringResource(Res.string.results_title)
+                    else ->
+                      pluralStringResource(
+                        Res.plurals.image_count,
+                        state.jobs.size,
+                        state.jobs.size,
+                      )
+                  },
+                style = MaterialTheme.typography.titleMedium,
+              )
+              if (!running) {
+                TextButton(onClick = onClearAll) { Text(stringResource(Res.string.clear_all)) }
+              }
+            }
+          }
+
+          items(state.jobs, key = { it.source.id }) { job ->
+            JobRow(
+              job = job,
+              showRemove = !running,
+              onRemove = { onRemoveSource(job.source.id) },
+              onRetry = { onRetry(job.source.id) },
+              onOpenDetail = { detailJob = job },
             )
-            if (!running) {
-              TextButton(onClick = onClearAll) { Text(stringResource(Res.string.clear_all)) }
+          }
+
+          if (!running) {
+            item {
+              OutlinedButton(onClick = pickers::pickImages, shape = MaterialTheme.shapes.small) {
+                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(Res.string.add_more))
+              }
             }
           }
         }
+      } else {
+        // Outside the list so it centres in the space left over, rather than hugging the top of a
+        // scroll container with nothing else in it.
+        Box(Modifier.fillMaxSize().padding(horizontal = 20.dp), Alignment.Center) { EmptyState() }
       }
 
-      items(state.jobs, key = { it.source.id }) { job ->
-        JobRow(
-          job = job,
-          showRemove = !running,
-          onRemove = { onRemoveSource(job.source.id) },
-          onRetry = { onRetry(job.source.id) },
-          onOpenDetail = { detailJob = job },
-        )
-      }
-
-      if (state.hasSources && !running) {
-        item {
-          OutlinedButton(onClick = pickers::pickImages, shape = MaterialTheme.shapes.small) {
-            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(Res.string.add_more))
-          }
-        }
-      }
+      FooterScrim(Modifier.align(Alignment.BottomCenter))
     }
 
     BottomBar(
@@ -397,6 +401,33 @@ private fun SavingsBar(inputBytes: Long, outputBytes: Long) {
   }
 }
 
+/**
+ * The edge the footer casts onto the content behind it.
+ *
+ * An explicit gradient rather than Surface(shadowElevation): a rectangular elevation shadow against
+ * a near-white background renders almost invisibly here, and this has to read the same on both
+ * platforms. It only works overlaid on the scrolling content — give it a strip of layout height of
+ * its own and it shades the empty page background, which reads as a white band, not a shadow.
+ *
+ * Black, not onSurface. A scrim must always darken, and onSurface is a *content* token that flips
+ * with the theme — in dark mode it is near-white, so this drew a white glow instead of a shadow.
+ * Dark mode gets no scrim at all: there the bar is already lighter than the page thanks to the
+ * tonal elevation below, which is how Material separates surfaces without shadows.
+ */
+@Composable
+private fun FooterScrim(modifier: Modifier = Modifier) {
+  if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) {
+    Box(
+      modifier
+        .fillMaxWidth()
+        .height(10.dp)
+        .background(
+          Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.07f)))
+        )
+    )
+  }
+}
+
 @Composable
 private fun BottomBar(
   state: StudioUiState,
@@ -407,25 +438,6 @@ private fun BottomBar(
   onShare: () -> Unit,
   onExport: () -> Unit,
 ) {
-  // An explicit gradient rather than Surface(shadowElevation): a rectangular elevation shadow
-  // against a near-white background renders almost invisibly here, and this has to read the same
-  // on both platforms. Drawn as a sibling above the bar so it always separates the footer from
-  // whatever is scrolling underneath it.
-  //
-  // Black, not onSurface. A scrim must always darken, and onSurface is a *content* token that
-  // flips with the theme — in dark mode it is near-white, so this drew a white glow instead of a
-  // shadow. Dark mode gets no scrim at all: there the bar is already lighter than the page thanks
-  // to the tonal elevation below, which is how Material separates surfaces without shadows.
-  if (MaterialTheme.colorScheme.surface.luminance() > 0.5f) {
-    Box(
-      Modifier.fillMaxWidth()
-        .height(10.dp)
-        .background(
-          Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.07f)))
-        )
-    )
-  }
-
   Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
     Row(
       modifier =
