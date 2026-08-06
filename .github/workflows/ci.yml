@@ -87,10 +87,12 @@ jobs:
         run: ./gradlew :shared:build -x :shared:iosX64Test --no-daemon --stacktrace
 
       - name: Build AVIF Studio (Android APK + iOS framework)
+        # linkPod*, not link*: :composeApp declares CocoaPods dependencies (SDWebImageWebPCoder,
+        # for WebP encoding), and the Kotlin CocoaPods plugin renames the framework binaries.
         run: |
           ./gradlew :androidApp:assembleDebug \
-                    :composeApp:linkDebugFrameworkIosSimulatorArm64 \
-                    :composeApp:linkDebugFrameworkIosArm64 \
+                    :composeApp:linkPodDebugFrameworkIosSimulatorArm64 \
+                    :composeApp:linkPodDebugFrameworkIosArm64 \
                     --no-daemon --stacktrace
 
       - name: Run tests (host + iOS simulator)
@@ -110,11 +112,15 @@ jobs:
         # status and this step could never fail.
         shell: bash
         run: |
+          # The framework reaches Xcode through `pod 'composeApp'` now, and its podspec is
+          # generated rather than committed — so it has to exist before `pod install` runs.
+          ./gradlew :composeApp:generateDummyFramework --no-daemon
+          (cd iosApp && pod install)
           DEVICE_ID=$(xcrun simctl list devices available \
             | grep -Eo '\(([0-9A-F-]{36})\)' | tr -d '()' | head -1)
-          xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp \
+          xcodebuild -workspace iosApp/iosApp.xcworkspace -scheme iosApp \
             -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE_ID" \
-            OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=NO build | tail -40
+            build | tail -40
 
   # Exercises the real JNI codec path (encode/decode/alpha/lossless/maxSize) on an emulator.
   android-instrumented:
