@@ -23,7 +23,15 @@ data class SessionChannel(val name: String, val description: String)
  *   with its own extension and entitlement. `beginBackgroundTask` buys a short grace period, so
  *   [update] is deliberately a no-op and the user gets a notification when the work lands.
  */
-expect class ConversionSession() : BatchLifecycle
+// The members are repeated here because an expect class does not inherit its supertype's abstract
+// members — without them the common metadata compilation rejects the class as unimplemented.
+expect class ConversionSession() : BatchLifecycle {
+  override fun start(text: SessionText, channel: SessionChannel)
+
+  override fun update(completed: Int, total: Int, text: SessionText)
+
+  override fun finish(completion: SessionText?)
+}
 
 /**
  * What the ViewModel needs from a session, so the batch state machine stays testable off-device —

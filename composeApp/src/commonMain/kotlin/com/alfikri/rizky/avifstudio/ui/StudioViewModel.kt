@@ -505,9 +505,6 @@ private fun Throwable.toFailure(): JobStatus.Failed {
   val detail = message?.trim()?.takeIf { it.isNotEmpty() }?.take(160)
   val reason =
     when (this) {
-      // OutOfMemoryError is an Error, not an Exception — worth catching here precisely because the
-      // one-at-a-time gate means the memory is released before the next image starts.
-      is OutOfMemoryError -> FailureReason.OUT_OF_MEMORY
       is AvifError.OutOfMemory -> FailureReason.OUT_OF_MEMORY
       is AvifError.UnsupportedFormat,
       is AvifError.InvalidInput -> FailureReason.NOT_AN_IMAGE
@@ -516,11 +513,23 @@ private fun Throwable.toFailure(): JobStatus.Failed {
       is AvifError.DecodingFailed -> FailureReason.ENCODE_FAILED
       is IllegalArgumentException -> FailureReason.NOT_AN_IMAGE
       is IllegalStateException -> FailureReason.UNREADABLE
-      // A revoked or never-granted URI permission — the file is there, we just cannot open it.
-      else -> if (isPermissionDenial()) FailureReason.UNREADABLE else FailureReason.UNKNOWN
+      else ->
+        when {
+          isOutOfMemory() -> FailureReason.OUT_OF_MEMORY
+          // A revoked or never-granted URI permission — the file is there, we just cannot open it.
+          isPermissionDenial() -> FailureReason.UNREADABLE
+          else -> FailureReason.UNKNOWN
+        }
     }
   return JobStatus.Failed(reason, detail)
 }
+
+/**
+ * `OutOfMemoryError` exists on both platforms but not in the common stdlib, so it is matched by
+ * name like the check below. Worth classifying at all because the one-at-a-time gate means the
+ * memory is released before the next image starts, so the batch can carry on.
+ */
+private fun Throwable.isOutOfMemory(): Boolean = this::class.simpleName == "OutOfMemoryError"
 
 /**
  * Security failures arrive as platform-specific types (SecurityException on Android, an NSError

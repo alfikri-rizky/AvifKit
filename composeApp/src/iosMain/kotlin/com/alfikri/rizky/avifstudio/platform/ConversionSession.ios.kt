@@ -26,7 +26,7 @@ actual class ConversionSession : BatchLifecycle {
 
   private var task: UIBackgroundTaskIdentifier = UIBackgroundTaskInvalid
 
-  override fun start(text: SessionText, channel: SessionChannel) {
+  actual override fun start(text: SessionText, channel: SessionChannel) {
     if (task != UIBackgroundTaskInvalid) return
     task =
       UIApplication.sharedApplication.beginBackgroundTaskWithName("avif-conversion") {
@@ -36,9 +36,9 @@ actual class ConversionSession : BatchLifecycle {
   }
 
   /** No-op: iOS cannot show ongoing progress without a Live Activity. */
-  override fun update(completed: Int, total: Int, text: SessionText) = Unit
+  actual override fun update(completed: Int, total: Int, text: SessionText) = Unit
 
-  override fun finish(completion: SessionText?) {
+  actual override fun finish(completion: SessionText?) {
     if (completion != null) postNotification(completion)
     endTask()
   }

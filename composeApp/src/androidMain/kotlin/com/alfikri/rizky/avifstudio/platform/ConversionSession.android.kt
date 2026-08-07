@@ -13,7 +13,7 @@ actual class ConversionSession : BatchLifecycle {
   private var channel: SessionChannel? = null
   private var started = false
 
-  override fun start(text: SessionText, channel: SessionChannel) {
+  actual override fun start(text: SessionText, channel: SessionChannel) {
     this.channel = channel
     val context = AppContext.applicationContext ?: return
     started = true
@@ -33,7 +33,7 @@ actual class ConversionSession : BatchLifecycle {
    * called startForegroundService once per converted image — a full ActivityManager round-trip for
    * something NotificationManager can do directly.
    */
-  override fun update(completed: Int, total: Int, text: SessionText) {
+  actual override fun update(completed: Int, total: Int, text: SessionText) {
     if (!started) return
     val context = AppContext.applicationContext ?: return
     val channel = channel ?: return
@@ -48,7 +48,7 @@ actual class ConversionSession : BatchLifecycle {
     )
   }
 
-  override fun finish(completion: SessionText?) {
+  actual override fun finish(completion: SessionText?) {
     val context = AppContext.applicationContext ?: return
     // Nothing to tear down if we never started; stopping anyway spun up a Service on every cold
     // launch just to shut it down again.
