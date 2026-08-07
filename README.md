@@ -235,6 +235,9 @@ EncodingOptions(
 
 AvifKit is published as a Kotlin Multiplatform library with seamless integration for both Android and iOS platforms.
 
+> **Toolchain:** built with Kotlin 2.3.21, so the klibs carry ABI version 2.3.0 — KMP consumers
+> need Kotlin 2.3 or newer. Android bytecode targets Java 11.
+
 > **Pick ONE iOS channel — do not mix.**
 > - **KMP / Compose Multiplatform apps → Gradle only.** Add the `commonMain`
 >   Gradle dependency below. The iOS AVIF codec (libavif + AOM) is embedded in the
@@ -409,8 +412,15 @@ If you want to build the library from source or contribute to development:
 
 #### Prerequisites
 - **Android:** NDK, CMake 3.18.1+
-- **iOS:** Xcode, CocoaPods or SPM
-- **Both:** JDK 11+, Kotlin 1.9+
+- **iOS:** Xcode (verified on 26.1), CocoaPods or SPM
+- **Both:** JDK 17 — what CI builds on. Kotlin comes from the version catalog, so there is nothing
+  to install separately.
+
+> **Do not pair a new Xcode with an old Kotlin.** cinterop is generated from the SDK headers you
+> have installed, while `platform.*` klibs ship prebuilt inside the Kotlin/Native distribution. If
+> Xcode is newer than the SDK that distribution was built against, cinterop references types those
+> klibs do not contain and `commonizeCInterop` dies on `Unresolved classifier: platform/...`. Xcode
+> 26 needs Kotlin 2.2.21 or newer for this reason.
 
 #### Setup Development Environment
 

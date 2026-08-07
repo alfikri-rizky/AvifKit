@@ -20,9 +20,13 @@ composeMultiplatform = "1.9.3"
 datastore = "1.2.1"
 # FileKit is pinned in one place: :shared publishes filekit-core as an api() dependency, so the
 # app and the library must never drift onto different versions.
-filekit = "0.12.0"
+filekit = "0.14.1"
 junit = "4.13.2"
-kotlin = "2.2.20"
+# Never go below 2.2.21 — the first Kotlin/Native distribution built against the iOS 26 SDK.
+# Under an older one the SDWebImage cinterop, generated from the installed Xcode 26 headers,
+# references Metal 4 types that the bundled platform.Metal klib lacks, and commonizeCInterop
+# dies on "Unresolved classifier: platform/Metal/MTL...".
+kotlin = "2.3.21"
 kotlinx-coroutines = "1.11.0"
 mavenPublish = "0.36.0"
 
@@ -32,7 +36,7 @@ kotlin-testJunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinx-coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
-kotlinx-io-core = { module = "org.jetbrains.kotlinx:kotlinx-io-core", version = "0.8.2" }
+kotlinx-io-core = { module = "org.jetbrains.kotlinx:kotlinx-io-core", version = "0.9.1" }
 datastore-preferences-core = { module = "androidx.datastore:datastore-preferences-core", version.ref = "datastore" }
 filekit-core = { module = "io.github.vinceglb:filekit-core", version.ref = "filekit" }
 filekit-dialogs = { module = "io.github.vinceglb:filekit-dialogs", version.ref = "filekit" }
