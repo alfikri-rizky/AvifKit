@@ -112,9 +112,11 @@ jobs:
         # status and this step could never fail.
         shell: bash
         run: |
-          # The framework reaches Xcode through `pod 'composeApp'` now, and its podspec is
-          # generated rather than committed — so it has to exist before `pod install` runs.
-          ./gradlew :composeApp:generateDummyFramework --no-daemon
+          # The framework reaches Xcode through `pod 'composeApp'` now. Its podspec is generated
+          # and git-ignored, so `podspec` has to run before `pod install` or CocoaPods aborts with
+          # "No podspec found for `composeApp`"; generateDummyFramework only supplies the framework
+          # the podspec points at.
+          ./gradlew :composeApp:podspec :composeApp:generateDummyFramework --no-daemon
           (cd iosApp && pod install)
           DEVICE_ID=$(xcrun simctl list devices available \
             | grep -Eo '\(([0-9A-F-]{36})\)' | tr -d '()' | head -1)
