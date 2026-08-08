@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">AVIF Studio</string>
+    <string name="open_with_label">Open in AVIF Studio</string>
+    <string name="share_to_label">Convert with AVIF Studio</string>
+</resources>

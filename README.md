@@ -3,7 +3,8 @@ Plugin 9.2** (requires Gradle 9.4.1+ and JDK 17+).
 
 * [/shared](shared/src) — the AvifKit library itself. The cross-platform API lives in
   [commonMain](shared/src/commonMain/kotlin); platform code is in `androidMain` (Kotlin JNI
-  bindings) and `iosMain` (Swift bridge). Published to Maven Central as
+  bindings) and `iosMain` (Kotlin/Native cinterop straight to libavif's C API — no Swift).
+  Published to Maven Central as
   `io.github.alfikri-rizky:avifkit`. Uses the AGP 9 KMP library plugin
   (`com.android.kotlin.multiplatform.library`).
 
@@ -12,10 +13,53 @@ Plugin 9.2** (requires Gradle 9.4.1+ and JDK 17+).
   can't build native code. Published as the companion artifact `avifkit-native`, which `:shared`
   pulls in transitively — so consumers only ever depend on `avifkit`.
 
-* [/composeApp](composeApp/src) — the Android demo app, a plain `com.android.application` module
-  with Compose Multiplatform UI. Not published.
+* [/composeApp](composeApp/src) — **AVIF Studio**, the shared Compose Multiplatform UI for the
+  Android and iOS apps. A KMP *library* module (AGP 9 forbids the KMP plugin alongside
+  `com.android.application` in one module), producing the `ComposeApp` framework for iOS.
+  Not published.
 
-* [/iosApp](iosApp/iosApp) — the iOS demo app (SwiftUI entry point). Not published.
+* [/androidApp](androidApp/src) — the Android application shell: one Activity, a manifest and
+  launcher resources. Everything the user sees comes from `:composeApp`. Not published.
+
+* [/iosApp](iosApp/iosApp) — the iOS application shell: a SwiftUI `@main` that hosts
+  `MainViewController()` from the `ComposeApp` framework. Not published.
+
+---
+
+## AVIF Studio (the app)
+
+A free, offline image converter built on AvifKit — the reference app for the library, and a real
+app in its own right. No ads, no accounts, no network permission.
+
+* **Batch convert** photos to AVIF, or back out of AVIF to JPEG/PNG when the other end cannot read
+  it (Android 11 and below cannot display AVIF at all).
+* **Job-shaped presets** — "Web-ready", "Fit a size limit", "Smallest file", "Archive quality" —
+  rather than a wall of codec settings, with every knob still available under Advanced settings.
+* **Fit a byte budget** using AvifKit's adaptive compression (100 KB … 2 MB, SMART or STRICT).
+* **One image at a time**, gated by a single-permit semaphore. Twenty 12 MP photos decoded
+  concurrently is an OOM on a mid-range phone; this caps peak memory at one in-flight image no
+  matter how many callers arrive at once.
+* **Keeps the original** when the conversion came out no smaller, instead of quietly handing back
+  a bigger file.
+* **English and Bahasa Indonesia**, light/dark/system theme, both persisted in DataStore along with
+  the last preset used.
+* **Share to** and **Open with** integration on both platforms, so an `.avif` from a browser
+  download opens here.
+
+Run it with `./gradlew :androidApp:installDebug`, or open `iosApp/iosApp.xcodeproj` in Xcode.
+Both build the same UI from `:composeApp`.
+
+| Home | Pick a recipe | Converting |
+|---|---|---|
+| ![Home](art/screenshots/android-01-home.webp) | ![Queue](art/screenshots/android-02-queue.webp) | ![Running](art/screenshots/android-06-running.webp) |
+
+| Results | Settings | Bahasa Indonesia + dark |
+|---|---|---|
+| ![Results](art/screenshots/android-03-results.webp) | ![Settings](art/screenshots/android-04-settings.webp) | ![Dark](art/screenshots/android-05-settings-dark-id.webp) |
+
+The same Compose UI on iOS, from the same `:composeApp` module:
+
+<img src="art/screenshots/ios-01-home.webp" width="300" alt="AVIF Studio on iOS" />
 
 ### Build and Run Android Application
 
@@ -23,11 +67,11 @@ To build and run the development version of the Android app, use the run configu
 in your IDE’s toolbar or build it directly from the terminal:
 - on macOS/Linux
   ```shell
-  ./gradlew :composeApp:assembleDebug
+  ./gradlew :androidApp:assembleDebug
   ```
 - on Windows
   ```shell
-  .\gradlew.bat :composeApp:assembleDebug
+  .\gradlew.bat :androidApp:assembleDebug
   ```
 
 ### Build and Run iOS Application
@@ -191,6 +235,9 @@ EncodingOptions(
 
 AvifKit is published as a Kotlin Multiplatform library with seamless integration for both Android and iOS platforms.
 
+> **Toolchain:** built with Kotlin 2.3.21, so the klibs carry ABI version 2.3.0 — KMP consumers
+> need Kotlin 2.3 or newer. Android bytecode targets Java 11.
+
 > **Pick ONE iOS channel — do not mix.**
 > - **KMP / Compose Multiplatform apps → Gradle only.** Add the `commonMain`
 >   Gradle dependency below. The iOS AVIF codec (libavif + AOM) is embedded in the
@@ -311,7 +358,7 @@ pod 'AvifKit', '~> 0.3.2'
 |-----------|--------|----------|-------|
 | **Core Library** | ✅ Complete | `shared/src/commonMain/` | Cross-platform API |
 | **Android Native** | ✅ Complete | `shared-native/src/main/cpp/` | JNI + libavif (`:shared-native` module) |
-| **iOS Native** | ✅ Complete | `shared/src/iosMain/swift/` | Swift + libavif |
+| **iOS Native** | ✅ Complete | `shared/src/iosMain/kotlin/` + `shared/src/nativeInterop/` | cinterop + libavif (no Swift) |
 | **Adaptive Compression** | ✅ Complete | Both platforms | SMART & STRICT strategies |
 | **Orientation Support** | ✅ Complete | Both platforms | EXIF (Android), UIImage (iOS) |
 | **Fallback Mode** | ❌ Removed | Both platforms | Replaced with explicit `AvifError` exceptions |
@@ -323,7 +370,7 @@ pod 'AvifKit', '~> 0.3.2'
 1. **Library Size:**
    - Including libavif increases app size (~2-3MB per architecture on Android, ~1-2MB on iOS)
    - This is standard for any AVIF library and necessary for native performance
-   - Fallback mode available if size is critical
+   - There is no smaller build to fall back to: the codec is the library
 
 2. **No Fallback Mode (v0.2.3+):**
    - Library no longer silently falls back to JPEG
@@ -365,8 +412,15 @@ If you want to build the library from source or contribute to development:
 
 #### Prerequisites
 - **Android:** NDK, CMake 3.18.1+
-- **iOS:** Xcode, CocoaPods or SPM
-- **Both:** JDK 11+, Kotlin 1.9+
+- **iOS:** Xcode (verified on 26.1), CocoaPods or SPM
+- **Both:** JDK 17 — what CI builds on. Kotlin comes from the version catalog, so there is nothing
+  to install separately.
+
+> **Do not pair a new Xcode with an old Kotlin.** cinterop is generated from the SDK headers you
+> have installed, while `platform.*` klibs ship prebuilt inside the Kotlin/Native distribution. If
+> Xcode is newer than the SDK that distribution was built against, cinterop references types those
+> klibs do not contain and `commonizeCInterop` dies on `Unresolved classifier: platform/...`. Xcode
+> 26 needs Kotlin 2.2.21 or newer for this reason.
 
 #### Setup Development Environment
 

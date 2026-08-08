@@ -2,13 +2,33 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleDisplayName</key>
+	<string>AVIF Studio</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
-	<key>NSCameraUsageDescription</key>
-	<string>This app needs access to your camera to take photos for AVIF conversion.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>This app needs access to your photo library to select and save images for AVIF conversion.</string>
+	<string>AVIF Studio reads the photos you pick so it can convert them. Nothing is uploaded anywhere.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>This app needs permission to save converted AVIF images to your photo library.</string>
+	<string>Lets AVIF Studio save a converted image back to your photo library.</string>
+	<!--
+	  Puts AVIF Studio in the "Open with" list for .avif files. public.avif is a system-declared
+	  UTI, so no UTImportedTypeDeclarations block is needed. Alternate rank: on iOS 16+ the OS can
+	  display AVIF itself, and this app should offer rather than insist.
+	-->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>AVIF image</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.avif</string>
+			</array>
+		</dict>
+	</array>
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<true/>
 </dict>
 </plist>

@@ -68,8 +68,10 @@ jobs:
         run: |
           cat > gradle.properties << 'EOF'
           android.useAndroidX=true
+          android.enableJetifier=false
           org.gradle.parallel=true
           org.gradle.caching=true
+          org.gradle.configureondemand=false
           org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m
           kotlin.code.style=official
           kotlin.mpp.stability.nowarn=true
@@ -77,18 +79,50 @@ jobs:
           EOF
 
       - name: Check formatting
-        run: ./gradlew :shared:ktfmtCheck --no-daemon
+        run: ./gradlew :shared:ktfmtCheck :composeApp:ktfmtCheck :androidApp:ktfmtCheck --no-daemon
 
-      - name: Build
+      - name: Build library
         # iosX64Test is excluded here and below: GitHub's arm64 macOS runners can't
         # launch x86_64 simulators reliably (the x64 klib/framework still builds).
         run: ./gradlew :shared:build -x :shared:iosX64Test --no-daemon --stacktrace
+
+      - name: Build AVIF Studio (Android APK + iOS framework)
+        # linkPod*, not link*: :composeApp declares CocoaPods dependencies (SDWebImageWebPCoder,
+        # for WebP encoding), and the Kotlin CocoaPods plugin renames the framework binaries.
+        run: |
+          ./gradlew :androidApp:assembleDebug \
+                    :composeApp:linkPodDebugFrameworkIosSimulatorArm64 \
+                    :composeApp:linkPodDebugFrameworkIosArm64 \
+                    --no-daemon --stacktrace
 
       - name: Run tests (host + iOS simulator)
         # The simulator device name must exist in the runner's Xcode — override with
         # -PiosSimulatorDevice if the runner image changes.
         run: |
-          ./gradlew :shared:allTests -x :shared:iosX64Test --no-daemon --stacktrace
+          ./gradlew :shared:allTests :composeApp:allTests \
+                    -x :shared:iosX64Test -x :composeApp:iosX64Test \
+                    --no-daemon --stacktrace
+
+      - name: Build the iOS app itself
+        # Proves the Xcode project still links the Kotlin framework — a green Gradle build
+        # says nothing about whether the app target compiles against it.
+        #
+        # `shell: bash` is load-bearing: it turns on pipefail. GitHub's implicit default is
+        # `bash -e {0}` with no pipefail, so `xcodebuild ... | tail` would report tail's exit
+        # status and this step could never fail.
+        shell: bash
+        run: |
+          # The framework reaches Xcode through `pod 'composeApp'` now. Its podspec is generated
+          # and git-ignored, so `podspec` has to run before `pod install` or CocoaPods aborts with
+          # "No podspec found for `composeApp`"; generateDummyFramework only supplies the framework
+          # the podspec points at.
+          ./gradlew :composeApp:podspec :composeApp:generateDummyFramework --no-daemon
+          (cd iosApp && pod install)
+          DEVICE_ID=$(xcrun simctl list devices available \
+            | grep -Eo '\(([0-9A-F-]{36})\)' | tr -d '()' | head -1)
+          xcodebuild -workspace iosApp/iosApp.xcworkspace -scheme iosApp \
+            -configuration Debug -destination "platform=iOS Simulator,id=$DEVICE_ID" \
+            build | tail -40
 
   # Exercises the real JNI codec path (encode/decode/alpha/lossless/maxSize) on an emulator.
   android-instrumented:
@@ -137,8 +171,10 @@ jobs:
         run: |
           cat > gradle.properties << 'EOF'
           android.useAndroidX=true
+          android.enableJetifier=false
           org.gradle.parallel=true
           org.gradle.caching=true
+          org.gradle.configureondemand=false
           org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m
           kotlin.code.style=official
           kotlin.mpp.stability.nowarn=true
