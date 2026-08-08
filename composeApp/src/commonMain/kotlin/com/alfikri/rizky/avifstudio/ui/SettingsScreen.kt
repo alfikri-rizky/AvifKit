@@ -46,8 +46,9 @@ import com.alfikri.rizky.avifstudio.platform.openUrl
 import com.alfikri.rizky.avifstudio.resources.Res
 import com.alfikri.rizky.avifstudio.resources.about
 import com.alfikri.rizky.avifstudio.resources.about_body
-import com.alfikri.rizky.avifstudio.resources.about_native_avif_no
-import com.alfikri.rizky.avifstudio.resources.about_native_avif_yes
+import com.alfikri.rizky.avifstudio.resources.about_native_avif_none
+import com.alfikri.rizky.avifstudio.resources.about_native_avif_read_only
+import com.alfikri.rizky.avifstudio.resources.about_native_avif_read_write
 import com.alfikri.rizky.avifstudio.resources.about_offline
 import com.alfikri.rizky.avifstudio.resources.github_repo
 import com.alfikri.rizky.avifstudio.resources.github_repo_desc
@@ -65,6 +66,7 @@ fun SettingsScreen(
   settings: AppSettings,
   contentPadding: PaddingValues,
   supportsNativeAvifDecoding: Boolean,
+  supportsNativeAvifEncoding: Boolean,
   onLanguageChange: (AppLanguage) -> Unit,
   onThemeChange: (ThemeMode) -> Unit,
 ) {
@@ -101,7 +103,7 @@ fun SettingsScreen(
       }
     }
 
-    AboutCard(supportsNativeAvifDecoding)
+    AboutCard(supportsNativeAvifDecoding, supportsNativeAvifEncoding)
   }
 }
 
@@ -184,7 +186,7 @@ private fun LanguageDropdown(selected: AppLanguage, onSelect: (AppLanguage) -> U
 }
 
 @Composable
-private fun AboutCard(supportsNativeAvifDecoding: Boolean) {
+private fun AboutCard(supportsNativeAvifDecoding: Boolean, supportsNativeAvifEncoding: Boolean) {
   Surface(
     modifier = Modifier.fillMaxWidth(),
     shape = MaterialTheme.shapes.large,
@@ -213,10 +215,13 @@ private fun AboutCard(supportsNativeAvifDecoding: Boolean) {
       Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer) {
         Text(
           text =
-            if (supportsNativeAvifDecoding) {
-              stringResource(Res.string.about_native_avif_yes)
-            } else {
-              stringResource(Res.string.about_native_avif_no)
+            when {
+              // Encoding without decoding is not a shape any current OS takes, so it falls in with
+              // the "cannot display" copy rather than earning a fourth sentence.
+              supportsNativeAvifDecoding && supportsNativeAvifEncoding ->
+                stringResource(Res.string.about_native_avif_read_write)
+              supportsNativeAvifDecoding -> stringResource(Res.string.about_native_avif_read_only)
+              else -> stringResource(Res.string.about_native_avif_none)
             },
           modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
           style = MaterialTheme.typography.bodySmall,

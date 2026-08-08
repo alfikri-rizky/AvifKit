@@ -121,8 +121,9 @@
 
     <string name="about_body">AVIF adalah format gambar modern yang umumnya menyimpan foto yang sama dengan ukuran sekitar setengah dari JPEG. Aplikasi ini mengubah gambar ke format tersebut, dan mengembalikannya lagi kalau aplikasi tujuanmu belum bisa membacanya.</string>
     <string name="about_offline">Berfungsi penuh tanpa internet. Gratis, tanpa iklan, tanpa pembelian.</string>
-    <string name="about_native_avif_yes">Perangkat ini sudah bisa menampilkan AVIF sendiri.</string>
-    <string name="about_native_avif_no">Perangkat ini belum bisa menampilkan AVIF sendiri — aplikasi ini yang membukanya untukmu.</string>
+    <string name="about_native_avif_read_write">Perangkat ini sudah menangani AVIF sendiri — menampilkan sekaligus menyimpannya.</string>
+    <string name="about_native_avif_read_only">Perangkat ini sudah bisa menampilkan AVIF sendiri, tapi membuatnya tetap butuh aplikasi ini.</string>
+    <string name="about_native_avif_none">Perangkat ini belum bisa menampilkan AVIF sendiri — aplikasi ini yang membukanya untukmu.</string>
     <string name="powered_by">Ditenagai AvifKit (libavif + AOM)</string>
 
     <string name="viewer_hint">Cubit untuk memperbesar, ketuk dua kali untuk menyesuaikan</string>

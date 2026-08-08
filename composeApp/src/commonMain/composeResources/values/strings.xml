@@ -134,8 +134,9 @@
     <!-- About -->
     <string name="about_body">AVIF is a modern image format that usually stores the same photo in about half the space of a JPEG. This app converts to it, and back out of it when whatever you are sending to cannot read it yet.</string>
     <string name="about_offline">Works fully offline. Free, with no ads and nothing to buy.</string>
-    <string name="about_native_avif_yes">This device can already display AVIF on its own.</string>
-    <string name="about_native_avif_no">This device cannot display AVIF on its own — this app decodes it for you.</string>
+    <string name="about_native_avif_read_write">This device already handles AVIF on its own — displaying it and saving it.</string>
+    <string name="about_native_avif_read_only">This device can display AVIF on its own, but creating one still needs this app.</string>
+    <string name="about_native_avif_none">This device cannot display AVIF on its own — this app decodes it for you.</string>
     <string name="powered_by">Powered by AvifKit (libavif + AOM)</string>
 
     <!-- Viewer -->
