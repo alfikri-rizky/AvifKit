@@ -41,15 +41,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-/** Which stage of the flow the screen is in. */
 enum class BatchPhase {
-  /** Nothing picked, or picked but not started. */
   READY,
-
-  /** A batch is being converted right now. */
   RUNNING,
-
-  /** The batch finished (or was cancelled) and results are on screen. */
   FINISHED,
 }
 
@@ -65,7 +59,7 @@ data class StudioUiState(
   val hasSources: Boolean
     get() = jobs.isNotEmpty()
 
-  /** 0f..1f across the whole batch, for the progress bar. */
+  /** 0f..1f across the whole batch. */
   val progress: Float
     get() = if (jobs.isEmpty()) 0f else completedCount.toFloat() / jobs.size
 
@@ -285,7 +279,7 @@ class StudioViewModel(
     _notice.value = null
   }
 
-  /** Runs the whole batch. A second call while one is running is ignored. */
+  /** A second call while one is running is ignored. */
   fun start() {
     if (runJob?.isActive == true) return
     val snapshot = _state.value
@@ -497,10 +491,6 @@ sealed interface Notice {
  */
 private fun PlatformFile.identityKey(): String = toString()
 
-/**
- * Classifies whatever the codec threw into something the UI can translate, keeping the raw text as
- * a secondary detail. Native encoder failures are not sentences, so they are never the headline.
- */
 private fun Throwable.toFailure(): JobStatus.Failed {
   val detail = message?.trim()?.takeIf { it.isNotEmpty() }?.take(160)
   val reason =

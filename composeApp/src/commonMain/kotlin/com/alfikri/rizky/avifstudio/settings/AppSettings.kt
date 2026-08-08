@@ -37,7 +37,6 @@ enum class AppLanguage(val tag: String, val flag: String) {
   }
 }
 
-/** Light, dark, or whatever the OS is doing. */
 enum class ThemeMode(val tag: String, val glyph: String) {
   SYSTEM("system", "\uD83C\uDF13"),
   LIGHT("light", "\u2600\uFE0F"),
@@ -49,7 +48,6 @@ enum class ThemeMode(val tag: String, val glyph: String) {
   }
 }
 
-/** Everything the user can change that outlives a single run. */
 data class AppSettings(
   val language: AppLanguage = AppLanguage.SYSTEM,
   val themeMode: ThemeMode = ThemeMode.SYSTEM,

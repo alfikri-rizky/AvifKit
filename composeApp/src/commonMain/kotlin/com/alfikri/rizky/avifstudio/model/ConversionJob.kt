@@ -2,7 +2,6 @@ package com.alfikri.rizky.avifstudio.model
 
 import com.alfikri.rizky.avifkit.PlatformFile
 
-/** One image the user picked, before anything has been done to it. */
 data class SourceImage(
   /** Stable across recompositions and list reorders; the file path is not (SAF URIs repeat). */
   val id: String,
@@ -11,7 +10,6 @@ data class SourceImage(
   val sizeBytes: Long,
 )
 
-/** What came out the other end. */
 data class ConversionOutput(
   val file: PlatformFile,
   val displayName: String,
@@ -22,7 +20,7 @@ data class ConversionOutput(
    * win; this is the number the summary uses.
    */
   val inputBytes: Long,
-  /** Source dimensions, read from the header before encoding. Null if the header was unreadable. */
+  /** Read from the header before encoding. Null if the header was unreadable. */
   val inputWidth: Int? = null,
   val inputHeight: Int? = null,
   val width: Int,
@@ -32,11 +30,8 @@ data class ConversionOutput(
 )
 
 /**
- * Why a conversion failed, as a code rather than a sentence, so the UI can translate it.
- *
- * The raw exception text is carried alongside in [JobStatus.Failed.detail] for the cases where a
- * developer or a curious user wants the specifics — but it is never the primary message, because
- * native codec errors are not sentences.
+ * A code rather than a sentence, so the UI can translate it. Native codec errors are not sentences,
+ * so the raw text rides along in [JobStatus.Failed.detail] and is never the primary message.
  */
 enum class FailureReason {
   /** The file could not be read at all — revoked URI permission, deleted, empty. */
@@ -48,7 +43,7 @@ enum class FailureReason {
   /** Decoded fine, but the encoder refused or produced nothing. */
   ENCODE_FAILED,
 
-  /** Ran out of memory — almost always a very large source image. */
+  /** Almost always a very large source image. */
   OUT_OF_MEMORY,
   UNKNOWN,
 }
@@ -77,7 +72,7 @@ sealed interface JobStatus {
     get() = this !is Pending && this !is Running
 }
 
-/** A source paired with its current status. The list of these *is* the batch. */
+/** The list of these *is* the batch. */
 data class ConversionJob(val source: SourceImage, val status: JobStatus = JobStatus.Pending) {
   val outputOrNull: ConversionOutput?
     get() = (status as? JobStatus.Done)?.output
@@ -95,7 +90,6 @@ data class BatchSummary(
   val failed: Int,
   val skipped: Int,
   val inputBytes: Long,
-  /** Source dimensions, read from the header before encoding. Null if the header was unreadable. */
   val inputWidth: Int? = null,
   val inputHeight: Int? = null,
   val outputBytes: Long,
@@ -111,7 +105,6 @@ data class BatchSummary(
   val savedPercent: Double
     get() = savingsPercent(inputBytes, outputBytes)
 
-  /** The one format everything was written as, or null if a batch somehow mixed them. */
   val singleOutputFormat: OutputFormat?
     get() = outputFormats.singleOrNull()
 

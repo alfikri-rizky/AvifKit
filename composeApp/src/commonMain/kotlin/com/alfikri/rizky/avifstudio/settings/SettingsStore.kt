@@ -117,7 +117,6 @@ class SettingsStore(private val dataStore: DataStore<Preferences> = settingsData
   }
 }
 
-/** The app's single Preferences DataStore. */
 expect fun settingsDataStore(): DataStore<Preferences>
 
 /** File name shared by both platforms so the store is found in the same place on each. */

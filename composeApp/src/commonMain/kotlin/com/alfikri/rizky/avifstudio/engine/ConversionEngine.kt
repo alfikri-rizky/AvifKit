@@ -39,7 +39,6 @@ class ConversionEngine(
   private val codec: ImageCodec = ImageCodec(),
 ) : ConversionRunner {
 
-  /** Where converted files land before the user exports them. */
   private val outputDir: PlatformFile
     get() = FileKit.cacheDir / OUTPUT_DIR_NAME
 
@@ -123,7 +122,6 @@ class ConversionEngine(
     return encodeGate.withPermit { decodeAny(bytes, maxDimension) }
   }
 
-  /** Removes everything this engine has written. Called when the user clears a batch. */
   override suspend fun clearOutputs() {
     val dir = outputDir
     if (dir.exists()) dir.delete(mustExist = false)

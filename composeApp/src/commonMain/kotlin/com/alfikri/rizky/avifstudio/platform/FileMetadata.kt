@@ -2,7 +2,6 @@ package com.alfikri.rizky.avifstudio.platform
 
 import com.alfikri.rizky.avifkit.PlatformFile
 
-/** What the app needs to know about a picked file before it opens it. */
 data class FileMetadata(val name: String, val sizeBytes: Long)
 
 /**

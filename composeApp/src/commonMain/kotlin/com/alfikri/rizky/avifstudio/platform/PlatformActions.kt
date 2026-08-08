@@ -3,7 +3,6 @@ package com.alfikri.rizky.avifstudio.platform
 import androidx.compose.runtime.Composable
 import com.alfikri.rizky.avifkit.PlatformFile
 
-/** Outcome of a "Save" action, reported back so the UI can say something concrete. */
 sealed interface ExportResult {
   data class Saved(val count: Int, val location: String) : ExportResult
 
@@ -13,16 +12,12 @@ sealed interface ExportResult {
 }
 
 /**
- * The two ways a converted file leaves the app, plus one capability question.
- *
- * Both are permission-free by design: sharing goes through a FileProvider grant on Android and the
- * activity sheet on iOS, and saving asks the user to point at a destination rather than claiming
- * broad storage access. A converter that demands photo-library permission to hand back a file it
- * just made is asking for trust it does not need.
+ * Both exits are permission-free by design: sharing goes through a FileProvider grant on Android
+ * and the activity sheet on iOS, and saving asks the user to point at a destination rather than
+ * claiming broad storage access.
  */
 expect class PlatformActions {
 
-  /** Hands [files] to the system share sheet. */
   fun share(files: List<PlatformFile>, mimeType: String)
 
   /**

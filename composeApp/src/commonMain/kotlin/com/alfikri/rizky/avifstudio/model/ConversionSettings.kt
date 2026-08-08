@@ -32,15 +32,13 @@ data class ConversionSettings(
   val skipIfLarger: Boolean = true,
 ) {
 
-  /** True when the encoder is aiming at a byte budget rather than a fixed quality. */
+  /** AVIF only — no other encoder here can target a byte budget. */
   val hasSizeTarget: Boolean
     get() = outputFormat == OutputFormat.AVIF && (targetSizeBytes ?: 0L) > 0L
 
-  /** The effective longest-edge cap, or `null` to keep the original size. */
   val effectiveMaxDimension: Int?
     get() = maxDimension?.takeIf { it > 0 }
 
-  /** The effective JPEG/PNG encoder quality, clamped to the 0..100 the platform encoders accept. */
   val effectiveQuality: Int
     get() = quality.coerceIn(0, 100)
 
@@ -64,12 +62,9 @@ data class ConversionSettings(
     )
 
   /**
-   * Fills in [cap] for a preset that asked for the original size.
-   *
-   * "Original size" is the honest default for the format-changing recipes — the user wants the same
-   * picture in another format — but on a device whose whole heap is 48 MB, decoding a 12 MP photo
-   * at full resolution is a guaranteed failure rather than a faithful conversion. A preset that
-   * already names a size, and any size the user picked themselves, are left alone.
+   * "Original size" is the honest default for the format-changing recipes, but on a device whose
+   * whole heap is 48 MB, decoding a 12 MP photo at full resolution fails rather than converts. A
+   * preset that already names a size, and any size the user picked, are left alone.
    */
   fun withDeviceLimit(cap: Int?): ConversionSettings =
     if (cap == null || maxDimension != null) this else copy(maxDimension = cap)
@@ -82,7 +77,6 @@ data class ConversionSettings(
     /** Longest-edge caps offered in the UI. `null` means "keep original size". */
     val DIMENSION_CHOICES: List<Int?> = listOf(null, 4096, 2560, 1920, 1280, 1024, 720)
 
-    /** Byte budgets offered by [Recipe.FIT_SIZE_LIMIT]. */
     val SIZE_TARGET_CHOICES: List<Long> =
       listOf(100L * 1024, 200L * 1024, 500L * 1024, 1024L * 1024, 2048L * 1024)
   }

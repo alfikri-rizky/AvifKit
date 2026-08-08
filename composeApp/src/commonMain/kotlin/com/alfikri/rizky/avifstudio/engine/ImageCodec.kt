@@ -4,7 +4,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import com.alfikri.rizky.avifkit.PlatformBitmap
 import com.alfikri.rizky.avifstudio.model.OutputFormat
 
-/** Pixel dimensions of a decoded image. */
 data class PixelSize(val width: Int, val height: Int)
 
 /**

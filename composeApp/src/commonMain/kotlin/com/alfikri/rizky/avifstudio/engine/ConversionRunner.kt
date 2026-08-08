@@ -20,6 +20,5 @@ interface ConversionRunner {
     outputName: String,
   ): ConversionOutput?
 
-  /** Discards everything previously written. */
   suspend fun clearOutputs()
 }

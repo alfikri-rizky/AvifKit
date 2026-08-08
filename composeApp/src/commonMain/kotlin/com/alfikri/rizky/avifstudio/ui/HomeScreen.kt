@@ -242,7 +242,6 @@ fun HomeScreen(
 private fun fadeThrough(): ContentTransform =
   fadeIn(tween(210, delayMillis = 90)) togetherWith fadeOut(tween(90))
 
-/** The recipe picker, the batch header and the images themselves — everything that scrolls. */
 @Composable
 private fun JobList(
   state: StudioUiState,
