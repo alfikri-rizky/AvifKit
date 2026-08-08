@@ -8,11 +8,9 @@ import io.github.vinceglb.filekit.dialogs.FileKitType
 import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
 
 /**
- * Whether this OS has a photo picker at all.
- *
- * Where it does not, the gallery door is not simply worse — it is the same door: the platform falls
- * back to the document picker, so "Add photos" and "Add files" open one identical screen. The UI
- * drops to a single button rather than offering the same thing twice.
+ * Where this OS has no photo picker, the gallery door is not simply worse — it is the same door:
+ * the platform falls back to the document picker, so "Add photos" and "Add files" open one
+ * identical screen. The UI drops to a single button rather than offering the same thing twice.
  */
 @Composable expect fun isPhotoPickerAvailable(): Boolean
 
@@ -24,8 +22,6 @@ class ImagePickers(internal val images: () -> Unit, internal val files: () -> Un
 }
 
 /**
- * A photo picker and a file picker.
- *
  * Both exist because they are genuinely different doors: the photo picker reaches the gallery,
  * which is where the images people want to shrink actually live, while the file picker reaches
  * Downloads and cloud providers — the only way to get at an `.avif` that arrived from the web,

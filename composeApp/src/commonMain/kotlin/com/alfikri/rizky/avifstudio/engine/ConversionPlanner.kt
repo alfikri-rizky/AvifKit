@@ -11,12 +11,7 @@ import com.alfikri.rizky.avifstudio.model.SourceImage
  */
 object ConversionPlanner {
 
-  /**
-   * Output names for a whole batch, deduplicated in list order.
-   *
-   * Picking `IMG_0042.jpg` from two different folders is routine, and without this the second
-   * output silently overwrites the first.
-   */
+  /** Deduplicated in list order; see [FileNaming] for why that matters. */
   fun outputNames(sources: List<SourceImage>, format: OutputFormat): List<String> {
     val taken = mutableSetOf<String>()
     return sources.map { source ->
@@ -26,14 +21,7 @@ object ConversionPlanner {
     }
   }
 
-  /**
-   * Whether to throw away a conversion and keep the original file instead.
-   *
-   * An app that promises smaller files must not hand back a bigger one without saying so.
-   * Re-encoding an already-optimised JPEG, or turning a flat-colour PNG into AVIF, genuinely can
-   * grow the file. Format-changing recipes opt out, because there the point is the format, not the
-   * size.
-   */
+  /** The [ConversionSettings.skipIfLarger] decision, kept here so it can be tested on its own. */
   fun shouldKeepOriginal(
     inputBytes: Long,
     outputBytes: Long,

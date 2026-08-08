@@ -204,10 +204,9 @@ private fun RecipeCard(recipe: Recipe, selected: Boolean, enabled: Boolean, onCl
 }
 
 /**
- * Fades the leading and trailing few dp of a horizontally scrolling row to transparent.
- *
- * Drawn as an alpha mask rather than a gradient overlay so it works on any background — an overlay
- * painted in the surface colour would show as a pale smear the moment the theme changed.
+ * Fades both ends of a horizontally scrolling row. Drawn as an alpha mask rather than a gradient
+ * overlay so it works on any background — an overlay painted in the surface colour would show as a
+ * pale smear the moment the theme changed.
  */
 private fun Modifier.fadingEdges(width: Dp = 24.dp): Modifier =
   this.graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen).drawWithContent {

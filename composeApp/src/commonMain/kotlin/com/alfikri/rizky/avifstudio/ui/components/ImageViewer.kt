@@ -45,7 +45,6 @@ import com.alfikri.rizky.avifstudio.resources.viewer_hint
 import kotlinx.coroutines.CancellationException
 import org.jetbrains.compose.resources.stringResource
 
-/** Decode outcome for a preview. */
 sealed interface DecodeState {
   data object Loading : DecodeState
 
@@ -55,8 +54,6 @@ sealed interface DecodeState {
 }
 
 /**
- * Decodes [file] for display, downscaled to [maxDimension].
- *
  * Goes through [ConversionEngine] rather than a platform image loader on purpose: the whole point
  * of this app on Android 11 and below is that nothing else on the device can draw an AVIF, so the
  * preview has to come from AvifKit too. The engine's one-at-a-time gate also applies here, which is
@@ -82,7 +79,6 @@ fun rememberDecodedImage(file: PlatformFile, maxDimension: Int): DecodeState {
   return state
 }
 
-/** A preview that fills its box, with spinner and error states. */
 @Composable
 fun ImagePreview(file: PlatformFile, maxDimension: Int, modifier: Modifier = Modifier) {
   val state = rememberDecodedImage(file, maxDimension)

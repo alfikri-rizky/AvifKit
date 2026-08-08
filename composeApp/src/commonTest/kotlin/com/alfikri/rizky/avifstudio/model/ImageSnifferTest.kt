@@ -66,7 +66,6 @@ class ImageSnifferTest {
     assertTrue(ImageSniffer.isAvif(full))
   }
 
-  /** Builds a real `ftyp` box: size, "ftyp", major brand, minor version, compatible brands. */
   private fun ftyp(majorBrand: String, vararg compatibleBrands: String): ByteArray {
     val size = 16 + compatibleBrands.size * 4
     val out = ByteArray(size)

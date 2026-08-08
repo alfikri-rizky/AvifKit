@@ -40,7 +40,6 @@ import com.alfikri.rizky.avifstudio.resources.view_full_screen
 import com.alfikri.rizky.avifstudio.ui.savingsLabel
 import org.jetbrains.compose.resources.stringResource
 
-/** Before-and-after detail for one finished conversion. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ResultDetailSheet(job: ConversionJob, onDismiss: () -> Unit, onShare: (PlatformFile) -> Unit) {

@@ -31,7 +31,6 @@ interface SessionCopy {
   suspend fun cancelled(completed: Int, total: Int): SessionText
 }
 
-/** The real copy, read from `strings.xml` in whatever language the app is currently in. */
 class ResourceSessionCopy : SessionCopy {
 
   override suspend fun channel() =

@@ -35,7 +35,6 @@ class AppSettingsTest {
     assertEquals(AppLanguage.SYSTEM, AppLanguage.fromTag("fr"))
   }
 
-  /** Round-trips through the tag that gets written to DataStore. */
   @Test
   fun everyLanguageSurvivesBeingStoredAndReadBack() {
     AppLanguage.entries.forEach { assertEquals(it, AppLanguage.fromTag(it.tag)) }

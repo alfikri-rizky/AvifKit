@@ -30,8 +30,6 @@ import io.github.vinceglb.filekit.size
 import kotlinx.coroutines.CancellationException
 
 /**
- * Small preview for a list row.
- *
  * Decoding goes through [ConversionEngine], which means it queues behind the same one-at-a-time
  * permit the conversions use. That is deliberate: an AVIF thumbnail is a full decode, and letting a
  * screenful of them run alongside a batch is exactly how a phone runs out of memory. The trade-off

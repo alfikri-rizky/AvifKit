@@ -121,5 +121,5 @@ fun savingsLabel(originalBytes: Long, newBytes: Long): String {
   }
 }
 
-/** Title for the appearance section; exposed here so screens do not import Res directly. */
+/** Exposed here so screens do not import Res directly. */
 @Composable fun appearanceTitle(): String = stringResource(Res.string.appearance)

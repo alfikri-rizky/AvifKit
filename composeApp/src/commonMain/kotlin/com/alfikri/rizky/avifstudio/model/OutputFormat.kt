@@ -1,8 +1,6 @@
 package com.alfikri.rizky.avifstudio.model
 
 /**
- * The image format a job writes out.
- *
  * AVIF is what AvifKit encodes natively. JPEG and PNG exist because the reverse direction is the
  * other half of the real-world problem: an `.avif` downloaded from the web opens nowhere on Android
  * 11 and below, and plenty of upload forms still reject anything that isn't JPEG or PNG.

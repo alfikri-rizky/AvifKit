@@ -78,7 +78,6 @@ actual class PlatformActions(
   actual val supportsNativeAvifRendering: Boolean
     get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
-  /** Copies everything the user asked to save into the folder they picked. */
   internal fun writePendingInto(treeUri: Uri?) {
     val files = pending.toList()
     pending.clear()

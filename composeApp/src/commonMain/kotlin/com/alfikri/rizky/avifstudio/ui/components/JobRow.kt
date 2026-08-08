@@ -40,7 +40,6 @@ import com.alfikri.rizky.avifstudio.ui.label
 import com.alfikri.rizky.avifstudio.ui.savingsLabel
 import org.jetbrains.compose.resources.stringResource
 
-/** One row per picked image: a preview, its name, where it is up to, and what it became. */
 @Composable
 fun JobRow(
   job: ConversionJob,
