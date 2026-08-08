@@ -130,67 +130,69 @@ jobs:
           git push origin "$VERSION"
           echo "✅ Tagged $VERSION on the checksum commit"
 
+      # Every release up to v0.3.2 shipped an identical hardcoded feature list, so the notes said
+      # nothing about what actually changed. The per-version file is the highlights; the footer
+      # below is the only part worth templating.
+      - name: Compose release notes
+        run: |
+          VERSION="${{ steps.get_version.outputs.VERSION }}"
+          NOTES=".github/release-notes/${VERSION}.md"
+          OUT="$RUNNER_TEMP/release-body.md"
+
+          if [ -f "$NOTES" ]; then
+            cat "$NOTES" > "$OUT"
+          else
+            echo "::warning::$NOTES not found — release will have no hand-written highlights."
+            : > "$OUT"
+          fi
+
+          # Quoted delimiter: no expansion, so backticks and ``` survive verbatim.
+          cat >> "$OUT" <<'TEMPLATE'
+
+          ---
+
+          <details>
+          <summary><b>📦 Install</b></summary>
+
+          **Gradle — Android / KMP**
+
+          ```kotlin
+          implementation("io.github.alfikri-rizky:avifkit:__VERSION__")
+          ```
+
+          **Swift Package Manager**
+
+          ```swift
+          .package(url: "https://github.com/alfikri-rizky/AvifKit.git", from: "__VERSION__")
+          ```
+
+          **CocoaPods**
+
+          ```ruby
+          pod 'AvifKit', '~> __VERSION__'
+          ```
+
+          </details>
+
+          **`Shared.xcframework.zip` SHA-256** — `__CHECKSUM__`
+
+          [Maven Central](https://central.sonatype.com/artifact/io.github.alfikri-rizky/avifkit/__VERSION__) · [README](https://github.com/alfikri-rizky/AvifKit/blob/main/README.md)
+          TEMPLATE
+
+          sed -i '' "s|__VERSION__|$VERSION|g" "$OUT"
+          sed -i '' "s|__CHECKSUM__|${{ steps.checksum.outputs.CHECKSUM }}|g" "$OUT"
+          echo "📝 Release body:"; cat "$OUT"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           # Explicit tag (workflow_dispatch has no tag ref); attaches to the tag created above.
           tag_name: v${{ steps.get_version.outputs.VERSION }}
+          name: v${{ steps.get_version.outputs.VERSION }}
           files: build/release/Shared.xcframework.zip
-          body: |
-            ## AvifKit v${{ steps.get_version.outputs.VERSION }}
-
-            ### 📦 Installation
-
-            #### Kotlin Multiplatform (Recommended)
-            ```kotlin
-            kotlin {
-                sourceSets {
-                    commonMain.dependencies {
-                        implementation("io.github.alfikri-rizky:avifkit:${{ steps.get_version.outputs.VERSION }}")
-                    }
-                }
-            }
-            ```
-
-            #### Android Only
-            ```kotlin
-            dependencies {
-                implementation("io.github.alfikri-rizky:avifkit:${{ steps.get_version.outputs.VERSION }}")
-            }
-            ```
-
-            #### iOS - Swift Package Manager
-            ```swift
-            dependencies: [
-                .package(url: "https://github.com/alfikri-rizky/AvifKit.git", from: "${{ steps.get_version.outputs.VERSION }}")
-            ]
-            ```
-
-            #### iOS - CocoaPods
-            ```ruby
-            pod 'AvifKit', '~> ${{ steps.get_version.outputs.VERSION }}'
-            ```
-
-            ### ✨ Features
-            - 🖼️ AVIF encoding/decoding for iOS and Android
-            - 🎯 Adaptive compression strategies (SMART/STRICT)
-            - ⚡ Quality presets (SPEED/BALANCED/QUALITY/STORAGE)
-            - 📱 Native performance using libavif
-            - 🔄 Kotlin Multiplatform shared code
-            - 📂 PlatformFile API for cross-platform file operations
-            - ✅ Android: libavif bundled in the AAR automatically
-            - ✅ iOS: libavif embedded in the self-contained XCFramework (no extra codec dependency)
-
-            ### 🔐 XCFramework Checksum
-            ```
-            ${{ steps.checksum.outputs.CHECKSUM }}
-            ```
-
-            ### 📚 Links
-            - [README](https://github.com/alfikri-rizky/AvifKit/blob/main/README.md)
-            - [Shared Module README](https://github.com/alfikri-rizky/AvifKit/blob/main/shared/README.md)
-            - [Maven Central](https://central.sonatype.com/artifact/io.github.alfikri-rizky/avifkit/${{ steps.get_version.outputs.VERSION }})
-            - [Publishing Guide](https://github.com/alfikri-rizky/AvifKit/blob/main/PUBLISH_V0.1.1.md)
+          body_path: ${{ runner.temp }}/release-body.md
+          # Appends GitHub's commit/PR list beneath the hand-written notes.
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
