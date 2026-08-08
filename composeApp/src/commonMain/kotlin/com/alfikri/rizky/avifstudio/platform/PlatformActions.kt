@@ -35,10 +35,17 @@ expect class PlatformActions {
   fun export(files: List<PlatformFile>)
 
   /**
-   * Whether the OS itself can display AVIF — Android 12+ and iOS 16+. False means this app is the
-   * only way to look at those files on this device, which is worth telling the user.
+   * Whether the OS itself can read AVIF — Android 12+ and iOS 16+. False means this app is the only
+   * way to look at those files on this device, which is worth telling the user.
    */
-  val supportsNativeAvifRendering: Boolean
+  val supportsNativeAvifDecoding: Boolean
+
+  /**
+   * Whether the OS itself can write AVIF. Separate from [supportsNativeAvifDecoding] because the
+   * two directions genuinely diverge: a current iOS does both, while Android reads AVIF from 12 and
+   * still has no encoder for it at all.
+   */
+  val supportsNativeAvifEncoding: Boolean
 }
 
 @Composable

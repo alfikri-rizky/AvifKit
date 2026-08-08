@@ -197,7 +197,7 @@ private fun AppContent(viewModel: StudioViewModel) {
           SettingsScreen(
             settings = appSettings,
             contentPadding = padding,
-            supportsNativeAvif = actions.supportsNativeAvifRendering,
+            supportsNativeAvifDecoding = actions.supportsNativeAvifDecoding,
             onLanguageChange = viewModel::setLanguage,
             onThemeChange = viewModel::setThemeMode,
           )

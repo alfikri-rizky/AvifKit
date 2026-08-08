@@ -64,7 +64,7 @@ import org.jetbrains.compose.resources.stringResource
 fun SettingsScreen(
   settings: AppSettings,
   contentPadding: PaddingValues,
-  supportsNativeAvif: Boolean,
+  supportsNativeAvifDecoding: Boolean,
   onLanguageChange: (AppLanguage) -> Unit,
   onThemeChange: (ThemeMode) -> Unit,
 ) {
@@ -101,7 +101,7 @@ fun SettingsScreen(
       }
     }
 
-    AboutCard(supportsNativeAvif)
+    AboutCard(supportsNativeAvifDecoding)
   }
 }
 
@@ -184,7 +184,7 @@ private fun LanguageDropdown(selected: AppLanguage, onSelect: (AppLanguage) -> U
 }
 
 @Composable
-private fun AboutCard(supportsNativeAvif: Boolean) {
+private fun AboutCard(supportsNativeAvifDecoding: Boolean) {
   Surface(
     modifier = Modifier.fillMaxWidth(),
     shape = MaterialTheme.shapes.large,
@@ -213,7 +213,7 @@ private fun AboutCard(supportsNativeAvif: Boolean) {
       Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer) {
         Text(
           text =
-            if (supportsNativeAvif) {
+            if (supportsNativeAvifDecoding) {
               stringResource(Res.string.about_native_avif_yes)
             } else {
               stringResource(Res.string.about_native_avif_no)

@@ -7,8 +7,10 @@ import androidx.compose.runtime.remember
 import com.alfikri.rizky.avifkit.PlatformFile
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
+import platform.Foundation.CFBridgingRelease
 import platform.Foundation.NSProcessInfo
 import platform.Foundation.NSURL
+import platform.ImageIO.CGImageDestinationCopyTypeIdentifiers
 import platform.UIKit.UIActivityViewController
 import platform.UIKit.UIApplication
 import platform.UIKit.UIDocumentPickerDelegateProtocol
@@ -67,8 +69,19 @@ actual class PlatformActions(private val onExportResult: (ExportResult) -> Unit)
   }
 
   /** AVIF decoding arrived in iOS 16; the app's minimum is lower, so this is a real question. */
-  actual val supportsNativeAvifRendering: Boolean
+  actual val supportsNativeAvifDecoding: Boolean
     get() = isAtLeastIos16()
+
+  /**
+   * Asked of ImageIO rather than pinned to an OS version. A current iOS does list `public.avif`
+   * here (measured on the iOS 26 simulator), but the read and write sides did not arrive together
+   * and an older one need not, so the honest answer is whatever ImageIO reports today.
+   */
+  actual val supportsNativeAvifEncoding: Boolean
+    get() =
+      (CFBridgingRelease(CGImageDestinationCopyTypeIdentifiers()) as? List<*>)?.contains(
+        AVIF_UTI
+      ) == true
 }
 
 @Composable
@@ -114,6 +127,8 @@ private fun rootViewController(): UIViewController? {
 /** Presenting from a controller that already has something on top of it silently does nothing. */
 private fun UIViewController.topMost(): UIViewController =
   presentedViewController?.topMost() ?: this
+
+private const val AVIF_UTI = "public.avif"
 
 private fun isAtLeastIos16(): Boolean {
   val version = NSProcessInfo.processInfo.operatingSystemVersion

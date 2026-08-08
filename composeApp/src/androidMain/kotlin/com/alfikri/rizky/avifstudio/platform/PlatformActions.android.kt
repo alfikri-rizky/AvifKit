@@ -75,8 +75,13 @@ actual class PlatformActions(
     launchTreePicker()
   }
 
-  actual val supportsNativeAvifRendering: Boolean
+  actual val supportsNativeAvifDecoding: Boolean
     get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+  // Bitmap.CompressFormat is JPEG/PNG/WEBP* only, still through compileSdk 36 — there is no
+  // still-image AVIF encoder on this platform to query for.
+  actual val supportsNativeAvifEncoding: Boolean
+    get() = false
 
   internal fun writePendingInto(treeUri: Uri?) {
     val files = pending.toList()
