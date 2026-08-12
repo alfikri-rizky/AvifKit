@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -220,7 +219,12 @@ private fun AboutCard(supportsNativeAvifDecoding: Boolean, supportsNativeAvifEnc
       Text(stringResource(Res.string.about_body), style = MaterialTheme.typography.bodyMedium)
       Text(stringResource(Res.string.about_offline), style = MaterialTheme.typography.bodyMedium)
 
-      Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer) {
+      // Matches the folder row and the GitHub button on this screen, and stays a badge rather than
+      // a blob when the sentence runs to three lines.
+      Surface(
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+      ) {
         Text(
           text =
             when {

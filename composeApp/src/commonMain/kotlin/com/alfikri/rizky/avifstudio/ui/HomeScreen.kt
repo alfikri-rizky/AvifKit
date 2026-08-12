@@ -28,6 +28,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -39,6 +41,8 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -57,8 +61,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.takeOrElse
 import com.alfikri.rizky.avifkit.PlatformFile
 import com.alfikri.rizky.avifstudio.model.ConversionJob
 import com.alfikri.rizky.avifstudio.model.ConversionSettings
@@ -353,7 +359,12 @@ private fun EmptyState(compact: Boolean) {
       textAlign = TextAlign.Center,
     )
     Spacer(Modifier.height(if (compact) 16.dp else 24.dp))
-    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer) {
+    // Not a pill: this note wraps to two or three lines on a narrow screen or a large font scale,
+    // and a fully rounded block that tall reads as a stray blob rather than a badge.
+    Surface(
+      shape = MaterialTheme.shapes.small,
+      color = MaterialTheme.colorScheme.secondaryContainer,
+    ) {
       Text(
         text = stringResource(Res.string.privacy_note),
         modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
@@ -540,6 +551,30 @@ private enum class FooterAction {
   EXPORT,
 }
 
+/**
+ * A footer button label that shrinks to fit rather than wrapping.
+ *
+ * The buttons are pinned to one height so the four footer states can crossfade without a size to
+ * resolve, and 54.dp does not hold two lines — so a label that wraps loses its second line to the
+ * clip rather than growing. Reported on a Samsung at a large display size, where "Tambah foto"
+ * wrapped and rendered as "Tambah" over the sheared-off top of "foto".
+ *
+ * The floor is in sp, so it still tracks the device's font scale: this shrinks a label that does
+ * not fit, it does not overrule someone who asked for large text.
+ */
+@Composable
+private fun FooterLabel(text: String) {
+  val style = LocalTextStyle.current
+  BasicText(
+    text = text,
+    style = style.copy(color = LocalContentColor.current),
+    maxLines = 1,
+    overflow = TextOverflow.Ellipsis,
+    autoSize =
+      TextAutoSize.StepBased(minFontSize = 11.sp, maxFontSize = style.fontSize.takeOrElse { 14.sp }),
+  )
+}
+
 @Composable
 private fun BottomBar(
   state: StudioUiState,
@@ -592,13 +627,13 @@ private fun BottomBar(
                 // glyph, and the app already speaks emoji for recipes, themes and languages.
                 Text("\uD83D\uDDBC\uFE0F", fontSize = 17.sp)
                 Spacer(Modifier.width(8.dp))
-                Text(stringResource(Res.string.add_photos))
+                FooterLabel(stringResource(Res.string.add_photos))
               }
             }
             val filesButton: @Composable () -> Unit = {
               Text("\uD83D\uDCC1", fontSize = 17.sp)
               Spacer(Modifier.width(8.dp))
-              Text(stringResource(Res.string.add_files))
+              FooterLabel(stringResource(Res.string.add_files))
             }
             if (hasPhotoPicker) {
               OutlinedButton(
@@ -624,7 +659,7 @@ private fun BottomBar(
               modifier = Modifier.weight(1f).height(54.dp),
               shape = MaterialTheme.shapes.small,
             ) {
-              Text(
+              FooterLabel(
                 pluralStringResource(Res.plurals.convert_count, lastCount.value, lastCount.value)
               )
             }
@@ -645,7 +680,7 @@ private fun BottomBar(
             ) {
               Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
               Spacer(Modifier.width(8.dp))
-              Text(stringResource(Res.string.cancel))
+              FooterLabel(stringResource(Res.string.cancel))
             }
           }
           FooterAction.EXPORT -> {
@@ -656,7 +691,7 @@ private fun BottomBar(
             ) {
               Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
               Spacer(Modifier.width(8.dp))
-              Text(stringResource(Res.string.save))
+              FooterLabel(stringResource(Res.string.save))
             }
             FilledTonalButton(
               onClick = onShare,
@@ -665,7 +700,7 @@ private fun BottomBar(
             ) {
               Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
               Spacer(Modifier.width(8.dp))
-              Text(stringResource(Res.string.share))
+              FooterLabel(stringResource(Res.string.share))
             }
           }
         }
