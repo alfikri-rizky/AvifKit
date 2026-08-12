@@ -16,7 +16,14 @@ androidx-core = "1.17.0"
 androidx-espresso = "3.7.0"
 androidx-lifecycle = "2.9.5"
 androidx-testExt = "1.3.0"
-composeMultiplatform = "1.9.3"
+# Must match whatever the dependency graph actually resolves to, not merely what we would like.
+# filekit-dialogs-compose 0.14.1 depends on Compose Multiplatform 1.10.3, so Gradle's conflict
+# resolution raised every compose-* klib to 1.10.3 while this pin still drove the compiler plugin
+# at 1.9.3. The iOS app compiled and linked, then died on its first frame:
+#   IrLinkageError: Property accessor 'LocalSafeArea.<get-LocalSafeArea>' can not be called
+# The Compose compiler plugin and the Compose runtime have to be the same release; naming the
+# version the graph already chose is what keeps them together.
+composeMultiplatform = "1.10.3"
 datastore = "1.2.1"
 # FileKit is pinned in one place: :shared publishes filekit-core as an api() dependency, so the
 # app and the library must never drift onto different versions.
