@@ -111,7 +111,7 @@ AvifKit is a production-ready Kotlin Multiplatform library for AVIF image encodi
 
 AvifKit uses **native AVIF libraries** on both platforms with explicit error reporting:
 
-- **Android:** libavif (v1.2.1) + AOM via JNI — pre-built native binaries included in the AAR
+- **Android:** libavif (v1.4.2) + AOM via JNI — pre-built native binaries included in the AAR
 - **iOS:** the same libavif + AOM, linked directly into the Kotlin/Native framework via cinterop — the `Shared` XCFramework is self-contained (no avif.swift, no Swift bridge, no registration step). See [docs/IOS_CINTEROP_SOLUTION.md](docs/IOS_CINTEROP_SOLUTION.md).
 - **Error Handling:** clear `AvifError` exceptions are thrown on failure (no silent fallbacks)
 
@@ -340,7 +340,7 @@ pod 'AvifKit', '~> 0.3.2'
 
 #### iOS
 - **Direct libavif binding** via Kotlin/Native cinterop (`AvifConverter.ios.kt` → `libavif`) — the same C API as Android, no Swift bridge
-- **libavif v1.2.1 + AOM** statically linked into `Shared.framework` (self-contained XCFramework)
+- **libavif v1.4.2 + AOM** statically linked into `Shared.framework` (self-contained XCFramework)
 - **UIImage ⇄ RGBA via CoreGraphics** — orientation handled by drawing through a bitmap context
 - **No registration step** — the codec is always present (`isAvifSupported()` returns `true`)
 - **`@Throws` annotations** — errors propagate as NSError to Swift's do/catch
@@ -348,7 +348,7 @@ pod 'AvifKit', '~> 0.3.2'
 
 **Technical Details:**
 - iOS 15.0+ deployment target
-- libavif v1.2.1 + aom v3.12.0 (encode + decode)
+- libavif v1.4.2 + aom v3.14.1 (encode + decode)
 - Codec static libs built by `scripts/build-ios-libavif.sh`; linked via cinterop `linkerOpts`
 - XCFramework support for iosArm64 / iosSimulatorArm64 / iosX64
 

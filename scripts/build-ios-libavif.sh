@@ -7,7 +7,7 @@
 # cinterop — the iOS analog of the Android `avifkit-native` .so.
 #
 # This is the iOS counterpart of scripts/setup-android-libavif.sh + the
-# :shared-native CMake build. It reuses the SAME libavif v1.2.1 source tree
+# :shared-native CMake build. It reuses the SAME libavif v1.4.2 source tree
 # (with ext/aom prefetched) that Android already vendors, so both platforms stay
 # on the same codec version.
 #
@@ -36,7 +36,7 @@ BUILD_ROOT="$PROJECT_ROOT/build/ios-libavif"
 # Final per-target static-lib output consumed by the cinterop linkerOpts.
 OUT_ROOT="$PROJECT_ROOT/shared/src/nativeInterop/libs/ios"
 
-LIBAVIF_TAG="v1.2.1"
+LIBAVIF_TAG="v1.4.2"
 DEPLOYMENT_TARGET="15.0"
 
 echo "========================================="

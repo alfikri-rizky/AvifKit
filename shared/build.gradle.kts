@@ -46,7 +46,7 @@ kotlin {
     .forEach { iosTarget ->
       // Direct libavif C-API binding (the iOS analog of the Android JNI path).
       // AvifConverter.ios.kt calls libavif via this cinterop instead of a Swift
-      // handler. Header search dir points at the same libavif v1.2.1 source
+      // handler. Header search dir points at the same libavif v1.4.2 source
       // vendored for Android. See shared/src/nativeInterop/cinterop/libavif.def.
       //
       // The per-target static codec libs (libavif.a + libaom.a, produced by

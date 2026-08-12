@@ -36,13 +36,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: shared-native/src/main/cpp/libavif
-          key: libavif-src-v1.2.1-${{ hashFiles('scripts/setup-android-libavif.sh') }}
+          key: libavif-src-v1.4.2-${{ hashFiles('scripts/setup-android-libavif.sh') }}
 
       - name: Cache iOS codec static libs
         uses: actions/cache@v4
         with:
           path: shared/src/nativeInterop/libs/ios
-          key: ios-libavif-v1.2.1-${{ hashFiles('scripts/build-ios-libavif.sh', 'scripts/setup-android-libavif.sh') }}
+          key: ios-libavif-v1.4.2-${{ hashFiles('scripts/build-ios-libavif.sh', 'scripts/setup-android-libavif.sh') }}
 
       - name: Setup Android libavif (skipped on cache hit)
         run: |
@@ -155,7 +155,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: shared-native/src/main/cpp/libavif
-          key: libavif-src-v1.2.1-${{ hashFiles('scripts/setup-android-libavif.sh') }}
+          key: libavif-src-v1.4.2-${{ hashFiles('scripts/setup-android-libavif.sh') }}
 
       - name: Setup Android libavif (skipped on cache hit)
         run: |
