@@ -130,6 +130,11 @@
     <string name="english">English</string>
     <string name="indonesian">Bahasa Indonesia</string>
     <string name="restart_hint">Reopen the app if some text is still in the previous language.</string>
+    <!-- Default save location. Android only for now; iOS draws nothing here. -->
+    <string name="default_save_location">Default save location</string>
+    <string name="save_location_ask">Ask every time</string>
+    <string name="save_location_hint">Save writes straight into this folder, on internal storage or an SD card. Tap it to choose a different one.</string>
+    <string name="save_location_clear">Go back to asking every time</string>
 
     <!-- About -->
     <string name="about_body">AVIF is a modern image format that usually stores the same photo in about half the space of a JPEG. This app converts to it, and back out of it when whatever you are sending to cannot read it yet.</string>

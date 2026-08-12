@@ -34,8 +34,8 @@ kotlin {
     // Must differ from :androidApp's namespace — AGP refuses to merge two manifests that claim
     // the same one. Only affects the generated R/BuildConfig package, not the Kotlin packages.
     namespace = "com.alfikri.rizky.avifstudio.shared"
-    compileSdk = libs.versions.android.compileSdk.get().toInt()
-    minSdk = libs.versions.android.minSdk.get().toInt()
+    compileSdk = libs.versions.android.app.compileSdk.get().toInt()
+    minSdk = libs.versions.android.app.minSdk.get().toInt()
     // Compose Resources ships its strings through the Android resource/asset pipeline.
     androidResources { enable = true }
     compilerOptions { jvmTarget.set(JvmTarget.JVM_11) }
@@ -130,8 +130,11 @@ kotlin {
       // path, but re-encoding a photo through BitmapFactory here would otherwise rotate it.
       implementation(libs.androidx.exifinterface)
       implementation(libs.androidx.core.ktx)
-      // Writing a batch into the folder the user picked, through a SAF tree URI.
-      implementation(libs.androidx.documentfile)
+      // The folder picker, and the writes into whatever it returns. SimpleStorage is what makes
+      // the destination *stick*: it takes the persistable SAF grant, and remembers the folder as
+      // a volume-relative StoragePath, which survives an SD card being remounted under a new ID.
+      implementation(libs.simplestorage)
+      implementation(libs.simplestorage.compose)
     }
   }
 }

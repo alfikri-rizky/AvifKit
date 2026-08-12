@@ -13,6 +13,7 @@ import com.alfikri.rizky.avifstudio.platform.SessionCopy
 import com.alfikri.rizky.avifstudio.platform.SessionText
 import com.alfikri.rizky.avifstudio.settings.AppLanguage
 import com.alfikri.rizky.avifstudio.settings.AppSettings
+import com.alfikri.rizky.avifstudio.settings.SaveLocation
 import com.alfikri.rizky.avifstudio.settings.SettingsRepository
 import com.alfikri.rizky.avifstudio.settings.ThemeMode
 import io.github.vinceglb.filekit.PlatformFile
@@ -448,6 +449,8 @@ class StudioViewModelTest {
     override suspend fun setLanguage(language: AppLanguage) = Unit
 
     override suspend fun setThemeMode(mode: ThemeMode) = Unit
+
+    override suspend fun setDefaultSaveLocation(location: SaveLocation?) = Unit
 
     override suspend fun setLastRecipe(recipe: Recipe) = Unit
 

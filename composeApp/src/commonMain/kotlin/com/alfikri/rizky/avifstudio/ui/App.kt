@@ -83,15 +83,16 @@ private fun AppContent(viewModel: StudioViewModel) {
   val requestNotificationPermission = rememberNotificationPermissionRequest()
   val snackbarHostState = remember { SnackbarHostState() }
 
-  val actions = rememberPlatformActions { result ->
-    viewModel.showNotice(
-      when (result) {
-        is ExportResult.Saved -> Notice.Saved(result.count, result.location)
-        ExportResult.Cancelled -> Notice.ExportCancelled
-        is ExportResult.Failed -> Notice.ExportFailed(result.message)
-      }
-    )
-  }
+  val actions =
+    rememberPlatformActions(appSettings.defaultSaveLocation) { result ->
+      viewModel.showNotice(
+        when (result) {
+          is ExportResult.Saved -> Notice.Saved(result.count, result.location)
+          ExportResult.Cancelled -> Notice.ExportCancelled
+          is ExportResult.Failed -> Notice.ExportFailed(result.message)
+        }
+      )
+    }
 
   // Files handed to us by "Open with" or "Share to" land here rather than through the picker.
   LaunchedEffect(incoming) {
@@ -201,6 +202,7 @@ private fun AppContent(viewModel: StudioViewModel) {
             supportsNativeAvifEncoding = actions.supportsNativeAvifEncoding,
             onLanguageChange = viewModel::setLanguage,
             onThemeChange = viewModel::setThemeMode,
+            onDefaultSaveLocationChange = viewModel::setDefaultSaveLocation,
           )
       }
     }

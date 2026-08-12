@@ -22,6 +22,7 @@ import com.alfikri.rizky.avifstudio.platform.deviceImageDimensionCap
 import com.alfikri.rizky.avifstudio.platform.resolveMetadata
 import com.alfikri.rizky.avifstudio.settings.AppLanguage
 import com.alfikri.rizky.avifstudio.settings.AppSettings
+import com.alfikri.rizky.avifstudio.settings.SaveLocation
 import com.alfikri.rizky.avifstudio.settings.SettingsRepository
 import com.alfikri.rizky.avifstudio.settings.SettingsStore
 import com.alfikri.rizky.avifstudio.settings.ThemeMode
@@ -154,6 +155,11 @@ class StudioViewModel(
 
   fun setThemeMode(mode: ThemeMode) {
     viewModelScope.launch { settingsStore.setThemeMode(mode) }
+  }
+
+  /** `null` puts saving back to asking for a destination every time. */
+  fun setDefaultSaveLocation(location: SaveLocation?) {
+    viewModelScope.launch { settingsStore.setDefaultSaveLocation(location) }
   }
 
   /**

@@ -1,5 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+      SimpleStorage declares both of these unbounded, and they arrive here through the merge. They
+      are only ever exercised below Android 10, where the folder picker still goes through the
+      storage permission instead of a persistable SAF grant; from 10 onwards this app reaches
+      storage exclusively through SAF and the photo picker.
+
+      Capping them keeps the app off the "Photos and videos" permission on every modern device,
+      which for an app that advertises no accounts and no network is worth four lines.
+    -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28"
+        tools:node="replace" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28"
+        tools:node="replace" />
 
     <!--
       A batch of large photos takes longer than the few seconds Android gives a backgrounded app.

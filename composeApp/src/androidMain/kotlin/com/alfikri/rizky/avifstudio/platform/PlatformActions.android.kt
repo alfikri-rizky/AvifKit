@@ -6,18 +6,24 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.DocumentsContract
+import android.webkit.MimeTypeMap
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
-import androidx.documentfile.provider.DocumentFile
 import com.alfikri.rizky.avifkit.PlatformFile
+import com.alfikri.rizky.avifstudio.model.OutputFormat
+import com.alfikri.rizky.avifstudio.settings.SaveLocation
+import com.anggrayudi.storage.StorageFile
+import com.anggrayudi.storage.copyToFile
+import com.anggrayudi.storage.file.CreateMode
+import com.anggrayudi.storage.transfer.TransferResult
 import io.github.vinceglb.filekit.AndroidFile
 import io.github.vinceglb.filekit.name
-import io.github.vinceglb.filekit.readBytes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -27,6 +33,7 @@ actual class PlatformActions(
   private val context: Context,
   private val scope: CoroutineScope,
   private val pending: MutableList<PlatformFile>,
+  private val defaultSaveLocation: () -> SaveLocation?,
   private val launchTreePicker: () -> Unit,
   private val onExportResult: (ExportResult) -> Unit,
 ) {
@@ -70,6 +77,26 @@ actual class PlatformActions(
       onExportResult(ExportResult.Cancelled)
       return
     }
+    val remembered = defaultSaveLocation()
+    if (remembered == null) {
+      askWhereToPut(files)
+      return
+    }
+    scope.launch {
+      val folder = withContext(Dispatchers.IO) { remembered.resolve(context) }
+      if (folder == null) {
+        // Deleted, unmounted, or the grant is gone. Asking is better than reporting a failure
+        // against a folder the user has no way of knowing is no longer reachable. The setting is
+        // deliberately left alone: an SD card that is out today is back tomorrow, and clearing it
+        // would quietly cost the user a choice they never revoked.
+        askWhereToPut(files)
+        return@launch
+      }
+      onExportResult(withContext(Dispatchers.IO) { writeInto(folder, files) })
+    }
+  }
+
+  private fun askWhereToPut(files: List<PlatformFile>) {
     pending.clear()
     pending.addAll(files)
     launchTreePicker()
@@ -93,43 +120,62 @@ actual class PlatformActions(
     scope.launch {
       val result =
         withContext(Dispatchers.IO) {
-          try {
-            val directory =
-              DocumentFile.fromTreeUri(context, treeUri)
-                ?: return@withContext ExportResult.Failed("That folder is not writable")
-            var written = 0
-            for (file in files) {
-              val bytes = file.readBytes()
-              val name = file.name
-              // Replace rather than let the provider append " (1)": the user picked this folder
-              // to collect a specific batch, and duplicates on re-save are just clutter.
-              directory.findFile(name)?.takeIf { it.isFile }?.delete()
-              val target =
-                directory.createFile(mimeTypeFor(name), name)
-                  ?: return@withContext ExportResult.Failed("Could not create $name")
-              context.contentResolver.openOutputStream(target.uri)?.use { it.write(bytes) }
-                ?: return@withContext ExportResult.Failed("Could not write $name")
-              written++
-            }
-            ExportResult.Saved(written, directory.displayName())
-          } catch (error: Exception) {
-            ExportResult.Failed(error.message ?: "Could not save these files")
-          }
+          val folder =
+            StorageFile.from(context, treeUri)
+              ?: return@withContext ExportResult.Failed("That folder is not writable")
+          writeInto(folder, files)
         }
       onExportResult(result)
     }
   }
 
-  private fun DocumentFile.displayName(): String =
-    name ?: uri.lastPathSegment ?: "the chosen folder"
+  /**
+   * Copies the batch into [folder], one file at a time so a failure names the file it happened on.
+   *
+   * The target document is created first with a MIME type we choose, and only then filled: handed a
+   * type it does not recognise, a SAF provider is free to rename `photo.avif` to something whose
+   * extension matches what it thinks the file is.
+   */
+  private suspend fun writeInto(folder: StorageFile, files: List<PlatformFile>): ExportResult =
+    try {
+      var written = 0
+      for (file in files) {
+        val name = file.name
+        val source =
+          file.asStorageFile(context) ?: return ExportResult.Failed("Could not read $name")
+        // REPLACE rather than let the provider append " (1)": the user pointed at this folder to
+        // collect a specific batch, and duplicates on re-save are just clutter.
+        val target =
+          folder.createFile(name, mimeTypeFor(name), CreateMode.REPLACE)
+            ?: return ExportResult.Failed("Could not create $name")
+        when (val result = source.copyToFile(target)) {
+          is TransferResult.Success -> written++
+          is TransferResult.Skipped -> Unit
+          is TransferResult.Failure ->
+            return ExportResult.Failed(result.message ?: "Could not write $name")
+        }
+      }
+      ExportResult.Saved(written, folder.absolutePath ?: folder.name)
+    } catch (error: Exception) {
+      ExportResult.Failed(error.message ?: "Could not save these files")
+    }
 
-  private fun mimeTypeFor(name: String): String =
-    when (name.substringAfterLast('.', "").lowercase()) {
-      "avif" -> "image/avif"
-      "jpg",
-      "jpeg" -> "image/jpeg"
-      "png" -> "image/png"
-      else -> "application/octet-stream"
+  /**
+   * The app's own output formats are answered from [OutputFormat] rather than the platform map:
+   * `image/avif` only reached Android's MIME map in 13, and everything below that would otherwise
+   * write AVIF files as `application/octet-stream`. Anything else here is a source kept as-is.
+   */
+  private fun mimeTypeFor(name: String): String {
+    val extension = name.substringAfterLast('.', "").lowercase()
+    return OutputFormat.entries.firstOrNull { it.extension == extension }?.mimeType
+      ?: MimeTypeMap.getSingleton().getMimeTypeFromExtension(extension)
+      ?: "application/octet-stream"
+  }
+
+  private fun PlatformFile.asStorageFile(context: Context): StorageFile? =
+    when (val android = androidFile) {
+      is AndroidFile.UriWrapper -> StorageFile.from(context, android.uri)
+      is AndroidFile.FileWrapper -> StorageFile.from(context, android.file)
     }
 
   /**
@@ -146,10 +192,16 @@ actual class PlatformActions(
 }
 
 @Composable
-actual fun rememberPlatformActions(onExportResult: (ExportResult) -> Unit): PlatformActions {
+actual fun rememberPlatformActions(
+  defaultSaveLocation: SaveLocation?,
+  onExportResult: (ExportResult) -> Unit,
+): PlatformActions {
   val context = LocalContext.current
   val scope = rememberCoroutineScope()
   val pending = remember { mutableListOf<PlatformFile>() }
+  // Read through, not captured: keying the instance on the location instead would rebuild it —
+  // and the pending list with it — the moment Settings changed the folder.
+  val currentSaveLocation = rememberUpdatedState(defaultSaveLocation)
   // Held in a box so the launcher callback can reach the instance that is created just below it.
   val holder = remember { arrayOfNulls<PlatformActions>(1) }
 
@@ -163,6 +215,7 @@ actual fun rememberPlatformActions(onExportResult: (ExportResult) -> Unit): Plat
         context = context,
         scope = scope,
         pending = pending,
+        defaultSaveLocation = { currentSaveLocation.value },
         launchTreePicker = { treePicker.launch(initialTreeUri()) },
         onExportResult = onExportResult,
       )

@@ -2,6 +2,7 @@ package com.alfikri.rizky.avifstudio.platform
 
 import androidx.compose.runtime.Composable
 import com.alfikri.rizky.avifkit.PlatformFile
+import com.alfikri.rizky.avifstudio.settings.SaveLocation
 
 sealed interface ExportResult {
   data class Saved(val count: Int, val location: String) : ExportResult
@@ -21,16 +22,12 @@ expect class PlatformActions {
   fun share(files: List<PlatformFile>, mimeType: String)
 
   /**
-   * Asks the user where to put [files], then writes them all there.
+   * Writes [files] into the folder chosen in Settings, or asks where to put them when there is
+   * none.
    *
-   * TODO: replace the destination step with a remembered folder selector once SimpleStorage
-   *   (https://github.com/anggrayudi/SimpleStorage) ships Kotlin Multiplatform support. Today the
-   *   user picks a destination on every export, because each platform's own picker is one-shot:
-   *   Android returns a SAF tree URI we do not persist, and iOS's export sheet has no concept of a
-   *   remembered folder at all. SimpleStorage already solves the Android half — persisted tree
-   *   permissions, storage-access lifecycle, safe file writes — and a KMM version would let this
-   *   become "convert straight into the folder you chose last time", which is what a batch tool
-   *   should do. The KMM work is still in progress upstream, so this stays per-export for now.
+   * Asking is still every save on iOS, whose export sheet has no concept of a folder an app can be
+   * pointed at up front. On Android it is the fallback for a remembered folder that has since been
+   * deleted, unmounted, or had its grant revoked.
    */
   fun export(files: List<PlatformFile>)
 
@@ -48,5 +45,13 @@ expect class PlatformActions {
   val supportsNativeAvifEncoding: Boolean
 }
 
+/**
+ * @param defaultSaveLocation the folder chosen in Settings, read afresh on every save rather than
+ *   captured — changing it in Settings has to take effect without the export plumbing being
+ *   rebuilt.
+ */
 @Composable
-expect fun rememberPlatformActions(onExportResult: (ExportResult) -> Unit): PlatformActions
+expect fun rememberPlatformActions(
+  defaultSaveLocation: SaveLocation?,
+  onExportResult: (ExportResult) -> Unit,
+): PlatformActions

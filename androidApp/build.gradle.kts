@@ -15,11 +15,11 @@ ktfmt { googleStyle() }
 
 android {
   namespace = "com.alfikri.rizky.avifstudio"
-  compileSdk = libs.versions.android.compileSdk.get().toInt()
+  compileSdk = libs.versions.android.app.compileSdk.get().toInt()
 
   defaultConfig {
     applicationId = "com.alfikri.rizky.avifstudio"
-    minSdk = libs.versions.android.minSdk.get().toInt()
+    minSdk = libs.versions.android.app.minSdk.get().toInt()
     targetSdk = libs.versions.android.targetSdk.get().toInt()
     versionCode = 1
     versionName = "1.0"

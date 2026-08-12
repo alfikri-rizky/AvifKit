@@ -57,7 +57,9 @@ import com.alfikri.rizky.avifstudio.resources.powered_by
 import com.alfikri.rizky.avifstudio.resources.restart_hint
 import com.alfikri.rizky.avifstudio.settings.AppLanguage
 import com.alfikri.rizky.avifstudio.settings.AppSettings
+import com.alfikri.rizky.avifstudio.settings.SaveLocation
 import com.alfikri.rizky.avifstudio.settings.ThemeMode
+import com.alfikri.rizky.avifstudio.ui.components.DefaultSaveLocationSection
 import org.jetbrains.compose.resources.stringResource
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -69,6 +71,7 @@ fun SettingsScreen(
   supportsNativeAvifEncoding: Boolean,
   onLanguageChange: (AppLanguage) -> Unit,
   onThemeChange: (ThemeMode) -> Unit,
+  onDefaultSaveLocationChange: (SaveLocation?) -> Unit,
 ) {
   Column(
     modifier =
@@ -102,6 +105,11 @@ fun SettingsScreen(
         }
       }
     }
+
+    DefaultSaveLocationSection(
+      location = settings.defaultSaveLocation,
+      onLocationChange = onDefaultSaveLocationChange,
+    )
 
     AboutCard(supportsNativeAvifDecoding, supportsNativeAvifEncoding)
   }
