@@ -15,12 +15,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
+import androidx.documentfile.provider.DocumentFile
 import com.alfikri.rizky.avifkit.PlatformFile
 import com.alfikri.rizky.avifstudio.model.OutputFormat
 import com.alfikri.rizky.avifstudio.settings.SaveLocation
 import com.anggrayudi.storage.StorageFile
 import com.anggrayudi.storage.copyToFile
 import com.anggrayudi.storage.file.CreateMode
+import com.anggrayudi.storage.toStorageFile
 import com.anggrayudi.storage.transfer.TransferResult
 import io.github.vinceglb.filekit.AndroidFile
 import io.github.vinceglb.filekit.name
@@ -120,8 +122,13 @@ actual class PlatformActions(
     scope.launch {
       val result =
         withContext(Dispatchers.IO) {
+          // Wrapped straight from the tree URI rather than resolved through
+          // StorageFile.from(): that goes via DocumentFileCompat.fromUri(), which special-cases
+          // the Downloads provider and answers null for any tree URI whose path is not one of
+          // the shapes it knows. The picker opens in Downloads by design (see initialTreeUri),
+          // so routing this through it failed the most ordinary save there is.
           val folder =
-            StorageFile.from(context, treeUri)
+            DocumentFile.fromTreeUri(context, treeUri)?.toStorageFile(context)
               ?: return@withContext ExportResult.Failed("That folder is not writable")
           writeInto(folder, files)
         }

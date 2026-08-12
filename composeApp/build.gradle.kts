@@ -135,6 +135,9 @@ kotlin {
       // a volume-relative StoragePath, which survives an SD card being remounted under a new ID.
       implementation(libs.simplestorage)
       implementation(libs.simplestorage.compose)
+      // Still declared directly: the folder the export picker hands back is wrapped from its tree
+      // URI here rather than resolved by SimpleStorage, so DocumentFile is used by name.
+      implementation(libs.androidx.documentfile)
     }
   }
 }
