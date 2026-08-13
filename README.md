@@ -61,6 +61,10 @@ Both build the same UI from `:composeApp`.
 |---|---|---|
 | ![Results](art/screenshots/android-03-results.webp) | ![Settings](art/screenshots/android-04-settings.webp) | ![Dark](art/screenshots/android-05-settings-dark-id.webp) |
 
+Picking a folder once, so Save stops asking:
+
+<img src="art/screenshots/android-07-save-location.webp" width="300" alt="Default save location in Settings" />
+
 The same Compose UI on iOS, from the same `:composeApp` module:
 
 <img src="art/screenshots/ios-01-home.webp" width="300" alt="AVIF Studio on iOS" />
