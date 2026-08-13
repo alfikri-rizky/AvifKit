@@ -81,8 +81,12 @@ ios_build.log
 # Build outputs, not source — CI publishes them as release assets.
 shared/src/nativeInterop/libs/
 
-docs
-scripts
+# Agent working notes, deliberately untracked.
+#
+# `docs` and `scripts` used to sit in this list as bare directory entries. Both hold tracked,
+# load-bearing files — the README links docs/IOS_CINTEROP_SOLUTION.md, and CI runs the nine
+# scripts — so the only thing the entries achieved was hiding *new* files there from git status.
+# A build script added to scripts/ would never have shown up.
 .claude
 shared/AGENTS.md
 
