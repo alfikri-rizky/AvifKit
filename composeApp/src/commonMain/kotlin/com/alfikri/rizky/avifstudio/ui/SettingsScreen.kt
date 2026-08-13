@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -57,7 +56,9 @@ import com.alfikri.rizky.avifstudio.resources.powered_by
 import com.alfikri.rizky.avifstudio.resources.restart_hint
 import com.alfikri.rizky.avifstudio.settings.AppLanguage
 import com.alfikri.rizky.avifstudio.settings.AppSettings
+import com.alfikri.rizky.avifstudio.settings.SaveLocation
 import com.alfikri.rizky.avifstudio.settings.ThemeMode
+import com.alfikri.rizky.avifstudio.ui.components.DefaultSaveLocationSection
 import org.jetbrains.compose.resources.stringResource
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -69,6 +70,7 @@ fun SettingsScreen(
   supportsNativeAvifEncoding: Boolean,
   onLanguageChange: (AppLanguage) -> Unit,
   onThemeChange: (ThemeMode) -> Unit,
+  onDefaultSaveLocationChange: (SaveLocation?) -> Unit,
 ) {
   Column(
     modifier =
@@ -102,6 +104,11 @@ fun SettingsScreen(
         }
       }
     }
+
+    DefaultSaveLocationSection(
+      location = settings.defaultSaveLocation,
+      onLocationChange = onDefaultSaveLocationChange,
+    )
 
     AboutCard(supportsNativeAvifDecoding, supportsNativeAvifEncoding)
   }
@@ -212,7 +219,12 @@ private fun AboutCard(supportsNativeAvifDecoding: Boolean, supportsNativeAvifEnc
       Text(stringResource(Res.string.about_body), style = MaterialTheme.typography.bodyMedium)
       Text(stringResource(Res.string.about_offline), style = MaterialTheme.typography.bodyMedium)
 
-      Surface(shape = CircleShape, color = MaterialTheme.colorScheme.secondaryContainer) {
+      // Matches the folder row and the GitHub button on this screen, and stays a badge rather than
+      // a blob when the sentence runs to three lines.
+      Surface(
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+      ) {
         Text(
           text =
             when {

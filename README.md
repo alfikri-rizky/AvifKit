@@ -41,6 +41,10 @@ app in its own right. No ads, no accounts, no network permission.
   matter how many callers arrive at once.
 * **Keeps the original** when the conversion came out no smaller, instead of quietly handing back
   a bigger file.
+* **Pick a default save location** (Android) and Save writes straight into it — internal storage or
+  an SD card — instead of asking for a destination on every batch. Powered by
+  [SimpleStorage](https://github.com/anggrayudi/SimpleStorage) 3.x, which is also why the app needs
+  Android 8.0. iOS still asks every time; its export sheet has no folder to remember.
 * **English and Bahasa Indonesia**, light/dark/system theme, both persisted in DataStore along with
   the last preset used.
 * **Share to** and **Open with** integration on both platforms, so an `.avif` from a browser
@@ -56,6 +60,10 @@ Both build the same UI from `:composeApp`.
 | Results | Settings | Bahasa Indonesia + dark |
 |---|---|---|
 | ![Results](art/screenshots/android-03-results.webp) | ![Settings](art/screenshots/android-04-settings.webp) | ![Dark](art/screenshots/android-05-settings-dark-id.webp) |
+
+Picking a folder once, so Save stops asking:
+
+<img src="art/screenshots/android-07-save-location.webp" width="300" alt="Default save location in Settings" />
 
 The same Compose UI on iOS, from the same `:composeApp` module:
 

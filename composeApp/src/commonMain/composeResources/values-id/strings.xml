@@ -118,6 +118,10 @@
     <string name="english">English</string>
     <string name="indonesian">Bahasa Indonesia</string>
     <string name="restart_hint">Buka ulang aplikasi kalau masih ada teks dalam bahasa sebelumnya.</string>
+    <string name="default_save_location">Lokasi simpan default</string>
+    <string name="save_location_ask">Tanya setiap kali</string>
+    <string name="save_location_hint">Simpan langsung menulis ke folder ini, baik di penyimpanan internal maupun kartu SD. Ketuk untuk memilih folder lain.</string>
+    <string name="save_location_clear">Kembali ke tanya setiap kali</string>
 
     <string name="about_body">AVIF adalah format gambar modern yang umumnya menyimpan foto yang sama dengan ukuran sekitar setengah dari JPEG. Aplikasi ini mengubah gambar ke format tersebut, dan mengembalikannya lagi kalau aplikasi tujuanmu belum bisa membacanya.</string>
     <string name="about_offline">Berfungsi penuh tanpa internet. Gratis, tanpa iklan, tanpa pembelian.</string>

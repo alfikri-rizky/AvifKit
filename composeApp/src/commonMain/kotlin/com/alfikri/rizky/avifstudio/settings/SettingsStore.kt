@@ -25,6 +25,9 @@ interface SettingsRepository {
 
   suspend fun setThemeMode(mode: ThemeMode)
 
+  /** `null` goes back to asking for a destination on every save. */
+  suspend fun setDefaultSaveLocation(location: SaveLocation?)
+
   suspend fun setLastRecipe(recipe: Recipe)
 
   suspend fun setConversionSettings(settings: ConversionSettings)
@@ -46,6 +49,7 @@ class SettingsStore(private val dataStore: DataStore<Preferences> = settingsData
         AppSettings(
           language = AppLanguage.fromTag(preferences[KEY_LANGUAGE]),
           themeMode = ThemeMode.fromTag(preferences[KEY_THEME]),
+          defaultSaveLocation = preferences.readSaveLocation(),
           lastRecipe = recipeFromTag(preferences[KEY_RECIPE]),
           conversion = preferences.readConversionSettings(),
         )
@@ -57,6 +61,20 @@ class SettingsStore(private val dataStore: DataStore<Preferences> = settingsData
 
   override suspend fun setThemeMode(mode: ThemeMode) {
     runCatching { dataStore.edit { it[KEY_THEME] = mode.tag } }
+  }
+
+  override suspend fun setDefaultSaveLocation(location: SaveLocation?) {
+    runCatching {
+      dataStore.edit { preferences ->
+        if (location == null) {
+          preferences.remove(KEY_SAVE_LOCATION_ID)
+          preferences.remove(KEY_SAVE_LOCATION_LABEL)
+        } else {
+          preferences[KEY_SAVE_LOCATION_ID] = location.id
+          preferences[KEY_SAVE_LOCATION_LABEL] = location.label
+        }
+      }
+    }
   }
 
   override suspend fun setLastRecipe(recipe: Recipe) {
@@ -82,6 +100,13 @@ class SettingsStore(private val dataStore: DataStore<Preferences> = settingsData
     }
   }
 
+  private fun Preferences.readSaveLocation(): SaveLocation? {
+    val id = this[KEY_SAVE_LOCATION_ID]?.takeIf { it.isNotBlank() } ?: return null
+    // The label is only ever displayed, so a store written by an older build that never saved one
+    // is worth showing with the id rather than dropping the location the user actually chose.
+    return SaveLocation(id, this[KEY_SAVE_LOCATION_LABEL]?.takeIf { it.isNotBlank() } ?: id)
+  }
+
   private fun Preferences.readConversionSettings(): ConversionSettings {
     val default = recipeFromTag(this[KEY_RECIPE]).defaultSettings()
     val format = this[KEY_FORMAT] ?: return default
@@ -102,6 +127,8 @@ class SettingsStore(private val dataStore: DataStore<Preferences> = settingsData
   private companion object {
     val KEY_LANGUAGE = stringPreferencesKey("language")
     val KEY_THEME = stringPreferencesKey("theme_mode")
+    val KEY_SAVE_LOCATION_ID = stringPreferencesKey("default_save_location_id")
+    val KEY_SAVE_LOCATION_LABEL = stringPreferencesKey("default_save_location_label")
     val KEY_RECIPE = stringPreferencesKey("last_recipe")
     val KEY_FORMAT = stringPreferencesKey("output_format")
     val KEY_QUALITY = intPreferencesKey("quality")

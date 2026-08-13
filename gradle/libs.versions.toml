@@ -7,6 +7,12 @@ avifkit = "0.3.2"
 agp = "9.2.1"
 android-compileSdk = "36"
 android-minSdk = "24"
+# AVIF Studio only. SimpleStorage 3.x is built at minSdk 26 against API 37, and its AAR metadata
+# refuses anything lower on either axis. The published library stays on the pair above — nothing
+# in :shared depends on SimpleStorage, and moving its floor would be a breaking change for
+# consumers who have no reason to pay for it.
+android-app-compileSdk = "37"
+android-app-minSdk = "26"
 android-targetSdk = "36"
 # NDK r28c — compiles 16 KB-aligned shared libraries by default (Android 15+ / Google Play requirement)
 android-ndk = "28.2.13676358"
@@ -36,6 +42,7 @@ junit = "4.13.2"
 kotlin = "2.3.21"
 kotlinx-coroutines = "1.11.0"
 mavenPublish = "0.36.0"
+simplestorage = "3.0.1"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -52,6 +59,8 @@ junit = { module = "junit:junit", version.ref = "junit" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
 androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", version = "1.4.2" }
 androidx-documentfile = { module = "androidx.documentfile:documentfile", version = "1.1.0" }
+simplestorage = { module = "com.anggrayudi:storage", version.ref = "simplestorage" }
+simplestorage-compose = { module = "com.anggrayudi:storage-compose", version.ref = "simplestorage" }
 androidx-testExt-junit = { module = "androidx.test.ext:junit", version.ref = "androidx-testExt" }
 androidx-test-runner = { module = "androidx.test:runner", version = "1.7.0" }
 androidx-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "androidx-espresso" }

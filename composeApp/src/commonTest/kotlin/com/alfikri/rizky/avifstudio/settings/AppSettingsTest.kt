@@ -3,6 +3,7 @@ package com.alfikri.rizky.avifstudio.settings
 import com.alfikri.rizky.avifstudio.model.Recipe
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class AppSettingsTest {
 
@@ -71,5 +72,8 @@ class AppSettingsTest {
     assertEquals(AppLanguage.SYSTEM, settings.language)
     assertEquals(ThemeMode.SYSTEM, settings.themeMode)
     assertEquals(Recipe.WEB_READY, settings.lastRecipe)
+    // Nobody has pointed at a folder yet, so saving still asks — the same behaviour as before this
+    // setting existed, and the only one iOS has.
+    assertNull(settings.defaultSaveLocation)
   }
 }

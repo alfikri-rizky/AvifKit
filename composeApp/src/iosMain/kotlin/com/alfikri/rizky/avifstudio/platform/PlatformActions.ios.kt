@@ -5,6 +5,7 @@ package com.alfikri.rizky.avifstudio.platform
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.alfikri.rizky.avifkit.PlatformFile
+import com.alfikri.rizky.avifstudio.settings.SaveLocation
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
 import platform.Foundation.CFBridgingRelease
@@ -84,9 +85,12 @@ actual class PlatformActions(private val onExportResult: (ExportResult) -> Unit)
       ) == true
 }
 
+/** [defaultSaveLocation] is always null here — nothing on this platform can set one yet. */
 @Composable
-actual fun rememberPlatformActions(onExportResult: (ExportResult) -> Unit): PlatformActions =
-  remember(onExportResult) { PlatformActions(onExportResult) }
+actual fun rememberPlatformActions(
+  defaultSaveLocation: SaveLocation?,
+  onExportResult: (ExportResult) -> Unit,
+): PlatformActions = remember(onExportResult) { PlatformActions(onExportResult) }
 
 private val activeDelegates = mutableListOf<NSObject>()
 
