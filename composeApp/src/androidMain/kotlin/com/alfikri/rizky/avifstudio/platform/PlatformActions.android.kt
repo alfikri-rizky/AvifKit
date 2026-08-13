@@ -20,12 +20,12 @@ import com.alfikri.rizky.avifkit.PlatformFile
 import com.alfikri.rizky.avifstudio.model.OutputFormat
 import com.alfikri.rizky.avifstudio.settings.SaveLocation
 import com.anggrayudi.storage.StorageFile
-import com.anggrayudi.storage.copyToFile
 import com.anggrayudi.storage.file.CreateMode
 import com.anggrayudi.storage.toStorageFile
-import com.anggrayudi.storage.transfer.TransferResult
 import io.github.vinceglb.filekit.AndroidFile
 import io.github.vinceglb.filekit.name
+import java.io.FileInputStream
+import java.io.InputStream
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -122,11 +122,9 @@ actual class PlatformActions(
     scope.launch {
       val result =
         withContext(Dispatchers.IO) {
-          // Wrapped straight from the tree URI rather than resolved through
-          // StorageFile.from(): that goes via DocumentFileCompat.fromUri(), which special-cases
-          // the Downloads provider and answers null for any tree URI whose path is not one of
-          // the shapes it knows. The picker opens in Downloads by design (see initialTreeUri),
-          // so routing this through it failed the most ordinary save there is.
+          // Wrapped straight from the tree URI rather than resolved through StorageFile.from().
+          // Routing it through that resolution failed every save made from the picker; which of
+          // its branches answered null was never pinned down, and this way none of them run.
           val folder =
             DocumentFile.fromTreeUri(context, treeUri)?.toStorageFile(context)
               ?: return@withContext ExportResult.Failed("That folder is not writable")
@@ -142,25 +140,36 @@ actual class PlatformActions(
    * The target document is created first with a MIME type we choose, and only then filled: handed a
    * type it does not recognise, a SAF provider is free to rename `photo.avif` to something whose
    * extension matches what it thinks the file is.
+   *
+   * The bytes are streamed here rather than handed to SimpleStorage's `copyToFile`. That operation
+   * resolves the target's parent and requires a DocumentFile-backed source, neither of which holds
+   * for a document just created inside a picker-granted tree — it failed every save through the
+   * picker while leaving the empty target behind.
    */
   private suspend fun writeInto(folder: StorageFile, files: List<PlatformFile>): ExportResult =
     try {
       var written = 0
       for (file in files) {
         val name = file.name
-        val source =
-          file.asStorageFile(context) ?: return ExportResult.Failed("Could not read $name")
         // REPLACE rather than let the provider append " (1)": the user pointed at this folder to
         // collect a specific batch, and duplicates on re-save are just clutter.
         val target =
           folder.createFile(name, mimeTypeFor(name), CreateMode.REPLACE)
             ?: return ExportResult.Failed("Could not create $name")
-        when (val result = source.copyToFile(target)) {
-          is TransferResult.Success -> written++
-          is TransferResult.Skipped -> Unit
-          is TransferResult.Failure ->
-            return ExportResult.Failed(result.message ?: "Could not write $name")
+        val copied =
+          runCatching {
+              target.openOutputStream()?.use { output ->
+                file.openInputStream(context)?.use { input -> input.copyTo(output) }
+              }
+            }
+            .getOrNull()
+        if (copied == null) {
+          // Leave nothing half-written: an empty .avif in the user's folder looks like a file that
+          // saved, and it is the first thing they would open.
+          runCatching { target.delete() }
+          return ExportResult.Failed("Could not write $name")
         }
+        written++
       }
       ExportResult.Saved(written, folder.absolutePath ?: folder.name)
     } catch (error: Exception) {
@@ -179,10 +188,11 @@ actual class PlatformActions(
       ?: "application/octet-stream"
   }
 
-  private fun PlatformFile.asStorageFile(context: Context): StorageFile? =
+  /** Reads a converted output (a cache file) or a source the user picked (a content URI). */
+  private fun PlatformFile.openInputStream(context: Context): InputStream? =
     when (val android = androidFile) {
-      is AndroidFile.UriWrapper -> StorageFile.from(context, android.uri)
-      is AndroidFile.FileWrapper -> StorageFile.from(context, android.file)
+      is AndroidFile.UriWrapper -> context.contentResolver.openInputStream(android.uri)
+      is AndroidFile.FileWrapper -> FileInputStream(android.file)
     }
 
   /**
