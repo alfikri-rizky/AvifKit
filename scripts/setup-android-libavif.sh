@@ -14,7 +14,7 @@ CPP_DIR="$PROJECT_ROOT/shared-native/src/main/cpp"
 LIBAVIF_DIR="$CPP_DIR/libavif"
 
 # Pinned versions for reproducible builds
-LIBAVIF_TAG="v1.2.1"
+LIBAVIF_TAG="v1.4.2"
 
 echo "========================================="
 echo "AvifKit - libavif Setup for Android"
@@ -87,17 +87,35 @@ else
     echo "📦 libaom already exists at $AOM_DIR"
 fi
 
-# Patch LocalAom.cmake to use local ext/aom source instead of downloading
-# The FetchContent_Declare with URL still tries to download on CMake 3.22 (NDK default)
-# even when FETCHCONTENT_SOURCE_DIR is set. Replace the URL-based FetchContent_Declare
-# with a SOURCE_DIR-based one that uses the pre-cloned ext/aom.
+# Make libavif actually use the ext/aom cloned above.
+#
+# From 1.4.x LocalAom.cmake tries to do this itself, but sets
+# FETCHCONTENT_SOURCE_DIR_AOM while declaring the content as `libaom`. CMake reads
+# FETCHCONTENT_SOURCE_DIR_<uppercased declared name>, so the variable it sets is never read and
+# FetchContent goes to the network anyway — every other Local*.cmake in that release gets the
+# pairing right (LocalLibyuv sets ..._LIBYUV for `libyuv`), which is what makes this a typo rather
+# than a convention. Correcting the name here is the whole patch.
 if [ -f "$LOCALAOM_CMAKE" ]; then
-    if grep -q 'aomedia.googlesource.com/aom/+archive' "$LOCALAOM_CMAKE"; then
-        echo "🔧 Patching LocalAom.cmake to use local aom source..."
+    if grep -q 'FETCHCONTENT_SOURCE_DIR_AOM' "$LOCALAOM_CMAKE"; then
+        echo "🔧 Fixing FETCHCONTENT_SOURCE_DIR_AOM → FETCHCONTENT_SOURCE_DIR_LIBAOM..."
+        # No \b anywhere: BSD sed (macOS) does not know it, so a pattern carrying one matches
+        # nothing and the patch reports success while changing not a byte. Plain substrings are
+        # safe here — the corrected name does not contain the old one, so this is idempotent.
         # -i.bak (not -i '') so this works with both BSD (macOS) and GNU (Linux) sed.
-        sed -i.bak 's|libaom URL "https://aomedia.googlesource.com/aom/+archive/${AVIF_AOM_GIT_TAG}.tar.gz" BINARY_DIR "${AOM_BINARY_DIR}"|libaom SOURCE_DIR "${AOM_EXT_SOURCE_DIR}" BINARY_DIR "${AOM_BINARY_DIR}"|' "$LOCALAOM_CMAKE"
+        sed -i.bak 's|FETCHCONTENT_SOURCE_DIR_AOM|FETCHCONTENT_SOURCE_DIR_LIBAOM|g' "$LOCALAOM_CMAKE"
         rm -f "$LOCALAOM_CMAKE.bak"
-        echo "✅ LocalAom.cmake patched (URL → SOURCE_DIR)"
+        echo "✅ LocalAom.cmake patched"
+    fi
+
+    # Assert the end state rather than the edit. This passes whether we just patched it or a
+    # future libavif ships it correct, and fails loudly if the mechanism is gone altogether —
+    # the previous version of this block skipped silently on a pattern miss, which would have
+    # meant a quiet fall back to cloning aom over the network on every configure.
+    if ! grep -q 'FETCHCONTENT_SOURCE_DIR_LIBAOM' "$LOCALAOM_CMAKE"; then
+        echo "❌ Error: $LOCALAOM_CMAKE no longer points FetchContent at ext/aom."
+        echo "   libavif $LIBAVIF_TAG must have restructured LocalAom.cmake. Without this the"
+        echo "   build clones libaom from googlesource on every CMake configure."
+        exit 1
     fi
 fi
 
