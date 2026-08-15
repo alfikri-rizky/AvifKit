@@ -51,18 +51,16 @@ enum class ThemeMode(val tag: String, val glyph: String) {
 /**
  * A folder the user chose to save into, remembered across launches.
  *
- * [id] is whatever that platform needs to find the folder again — it is opaque here on purpose, so
- * common code never has to know what a SAF grant is. [label] is only ever shown, never resolved.
+ * [id] is whatever that platform needs to find the folder again — a volume-relative path on
+ * Android, a base64 security-scoped bookmark on iOS. It is opaque here on purpose, so common code
+ * never has to know what either of those is. [label] is only ever shown, never resolved.
  */
 data class SaveLocation(val id: String, val label: String)
 
 data class AppSettings(
   val language: AppLanguage = AppLanguage.SYSTEM,
   val themeMode: ThemeMode = ThemeMode.SYSTEM,
-  /**
-   * Where Save writes to without asking. `null` means ask every time, which is the only behaviour
-   * iOS has today — its export sheet has no concept of a folder it can be pointed at up front.
-   */
+  /** Where Save writes to without asking. `null` means ask every time, and is the default. */
   val defaultSaveLocation: SaveLocation? = null,
   /**
    * The recipe picked last time. People convert for the same reason over and over — someone who

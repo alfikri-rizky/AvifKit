@@ -25,9 +25,8 @@ expect class PlatformActions {
    * Writes [files] into the folder chosen in Settings, or asks where to put them when there is
    * none.
    *
-   * Asking is still every save on iOS, whose export sheet has no concept of a folder an app can be
-   * pointed at up front. On Android it is the fallback for a remembered folder that has since been
-   * deleted, unmounted, or had its grant revoked.
+   * Asking is also the fallback on both platforms when the remembered folder has since been
+   * deleted, unmounted, or had the grant behind it revoked.
    */
   fun export(files: List<PlatformFile>)
 

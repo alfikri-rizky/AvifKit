@@ -130,10 +130,11 @@
     <string name="english">English</string>
     <string name="indonesian">Bahasa Indonesia</string>
     <string name="restart_hint">Reopen the app if some text is still in the previous language.</string>
-    <!-- Default save location. Android only for now; iOS draws nothing here. -->
+    <!-- Default save location. The hint names where folders can live, so there is one per platform. -->
     <string name="default_save_location">Default save location</string>
     <string name="save_location_ask">Ask every time</string>
     <string name="save_location_hint">Save writes straight into this folder, on internal storage or an SD card. Tap it to choose a different one.</string>
+    <string name="save_location_hint_ios">Save writes straight into this folder in Files, on this iPhone or in iCloud Drive. Tap it to choose a different one.</string>
     <string name="save_location_clear">Go back to asking every time</string>
 
     <!-- About -->
