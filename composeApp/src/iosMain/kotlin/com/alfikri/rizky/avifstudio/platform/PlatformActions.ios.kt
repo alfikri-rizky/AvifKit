@@ -4,10 +4,18 @@ package com.alfikri.rizky.avifstudio.platform
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import com.alfikri.rizky.avifkit.PlatformFile
 import com.alfikri.rizky.avifstudio.settings.SaveLocation
+import io.github.vinceglb.filekit.copyTo
+import io.github.vinceglb.filekit.delete
+import io.github.vinceglb.filekit.div
+import io.github.vinceglb.filekit.name
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.useContents
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import platform.Foundation.CFBridgingRelease
 import platform.Foundation.NSProcessInfo
 import platform.Foundation.NSURL
@@ -24,7 +32,11 @@ import platform.UIKit.UIWindowScene
 import platform.UIKit.popoverPresentationController
 import platform.darwin.NSObject
 
-actual class PlatformActions(private val onExportResult: (ExportResult) -> Unit) {
+actual class PlatformActions(
+  private val scope: CoroutineScope,
+  private val defaultSaveLocation: () -> SaveLocation?,
+  private val onExportResult: (ExportResult) -> Unit,
+) {
 
   actual fun share(files: List<PlatformFile>, mimeType: String) {
     if (files.isEmpty()) return
@@ -39,15 +51,54 @@ actual class PlatformActions(private val onExportResult: (ExportResult) -> Unit)
     presenter.presentViewController(controller, animated = true, completion = null)
   }
 
-  /**
-   * The Files "export" sheet, which is the iOS equivalent of Android's folder picker: the user
-   * chooses a destination once and every file in the batch is copied there.
-   */
   actual fun export(files: List<PlatformFile>) {
     if (files.isEmpty()) {
       onExportResult(ExportResult.Cancelled)
       return
     }
+    val remembered = defaultSaveLocation()
+    if (remembered == null) {
+      askWhereToPut(files)
+      return
+    }
+    scope.launch {
+      val result = remembered.useFolder { folder -> writeInto(folder, files) }
+      // Gone, moved, or the grant behind the bookmark is no longer honoured. Asking beats
+      // reporting a failure against a folder the user cannot see is unreachable, and the setting
+      // is deliberately left alone: an unmounted external drive is back tomorrow, and clearing it
+      // would quietly cost a choice they never revoked.
+      if (result == null) askWhereToPut(files) else onExportResult(result)
+    }
+  }
+
+  /**
+   * Copies the batch into [folder], one file at a time so a failure names the file it happened on.
+   *
+   * Existing files are overwritten rather than given a numbered suffix: the user pointed at this
+   * folder to collect a specific batch, and duplicates on re-save are just clutter. This matches
+   * what Android does with `CreateMode.REPLACE`.
+   */
+  private suspend fun writeInto(folder: PlatformFile, files: List<PlatformFile>): ExportResult {
+    var written = 0
+    for (file in files) {
+      val target = folder / file.name
+      if (runCatching { file copyTo target }.isFailure) {
+        // Leave nothing half-written: an empty .avif in the user's folder looks like a file that
+        // saved, and it is the first thing they would open.
+        runCatching { target.delete(mustExist = false) }
+        return ExportResult.Failed("Could not write ${file.name}")
+      }
+      written++
+    }
+    return ExportResult.Saved(written, folder.name)
+  }
+
+  /**
+   * The Files "export" sheet: the user chooses a destination once and every file in the batch is
+   * copied there. Unlike a bookmarked folder this grants nothing that outlives the sheet, so it
+   * stays the fallback rather than the remembered path.
+   */
+  private fun askWhereToPut(files: List<PlatformFile>) {
     val presenter =
       rootViewController()
         ?: run {
@@ -85,12 +136,23 @@ actual class PlatformActions(private val onExportResult: (ExportResult) -> Unit)
       ) == true
 }
 
-/** [defaultSaveLocation] is always null here — nothing on this platform can set one yet. */
 @Composable
 actual fun rememberPlatformActions(
   defaultSaveLocation: SaveLocation?,
   onExportResult: (ExportResult) -> Unit,
-): PlatformActions = remember(onExportResult) { PlatformActions(onExportResult) }
+): PlatformActions {
+  val scope = rememberCoroutineScope()
+  // Read through, not captured: keying the instance on the location instead would rebuild it the
+  // moment Settings changed the folder.
+  val currentSaveLocation = rememberUpdatedState(defaultSaveLocation)
+  return remember(scope, onExportResult) {
+    PlatformActions(
+      scope = scope,
+      defaultSaveLocation = { currentSaveLocation.value },
+      onExportResult = onExportResult,
+    )
+  }
+}
 
 private val activeDelegates = mutableListOf<NSObject>()
 
