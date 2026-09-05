@@ -33,12 +33,43 @@ actual class AvifConverter {
 
   private external fun nativeDecode(avifData: ByteArray): DecodedImage?
 
-  // Parse-only metadata (no pixel decode): [width, height, hasAlpha(0|1), depth], or null on
-  // failure. Used by getImageInfo so AVIF inspection works below API 31 (where BitmapFactory
-  // can't decode AVIF) and reports alpha accurately.
+  // Parse-only metadata (no pixel decode): [width, height, hasAlpha(0|1), depth, frameCount,
+  // durationMs, repetitionCount], or null on failure. Used by getImageInfo so AVIF inspection
+  // works below API 31 (where BitmapFactory can't decode AVIF) and reports alpha accurately.
   private external fun nativeGetAvifInfo(avifData: ByteArray): IntArray?
 
   private external fun nativeGetVersion(): String
+
+  // Animated AVIF. The encoder is handle-based on purpose: frames are pushed one at a time so
+  // only a single frame's RGBA is ever alive on either side of the JNI boundary.
+  private external fun nativeAnimEncoderCreate(
+    width: Int,
+    height: Int,
+    quality: Int,
+    alphaQuality: Int,
+    speed: Int,
+    subsample: Int,
+    lossless: Boolean,
+    hasAlpha: Boolean,
+    timescale: Int,
+    repetitionCount: Int,
+  ): Long
+
+  private external fun nativeAnimEncoderAddFrame(
+    handle: Long,
+    pixels: ByteArray,
+    durationInTimescales: Int,
+  ): Boolean
+
+  private external fun nativeAnimEncoderFinish(handle: Long): ByteArray?
+
+  private external fun nativeAnimEncoderDestroy(handle: Long)
+
+  private external fun nativeAnimDecoderCreate(avifData: ByteArray): Long
+
+  private external fun nativeAnimDecoderNextFrame(handle: Long): DecodedImage?
+
+  private external fun nativeAnimDecoderDestroy(handle: Long)
 
   companion object {
     private const val TAG = "AvifConverter"
@@ -171,6 +202,50 @@ actual class AvifConverter {
       decodeAvifToBitmap(data)
     }
 
+  actual suspend fun decodeAvifFrames(
+    input: ImageInput,
+    maxDimension: Int?,
+    maxFrames: Int,
+  ): List<AvifFrame> =
+    withContext(Dispatchers.Default) {
+      require(maxFrames > 0) { "maxFrames must be positive" }
+      val data =
+        when (input) {
+          is ImageInput.FromBytes -> input.data
+          is ImageInput.FromPath -> readFileOnIo(File(input.path))
+          is ImageInput.FromFile -> input.file.readBytes()
+          is ImageInput.FromBitmap -> throw AvifError.InvalidInput
+        }
+
+      if (!nativeLibraryLoaded) {
+        throw AvifError.DecodingFailed(
+          "Native AVIF library not loaded. " +
+            "Ensure the 'avif-android-wrapper' native library is included in the AAR."
+        )
+      }
+
+      val handle = nativeAnimDecoderCreate(data)
+      if (handle == 0L) throw AvifError.DecodingFailed("Failed to open AVIF for frame decoding")
+      try {
+        buildList {
+            while (size < maxFrames) {
+              val frame = nativeAnimDecoderNextFrame(handle) ?: break
+              // Scale immediately: only one full-size frame is alive at a time, so a long animation
+              // costs the scaled total plus one frame instead of the full-size total.
+              add(
+                AvifFrame(scaledBitmap(orientedBitmap(frame), maxDimension), frame.durationMillis)
+              )
+            }
+          }
+          .ifEmpty { throw AvifError.DecodingFailed("No frames decoded") }
+      } catch (e: OutOfMemoryError) {
+        Log.e(TAG, "OutOfMemoryError decoding AVIF frames", e)
+        throw AvifError.OutOfMemory
+      } finally {
+        nativeAnimDecoderDestroy(handle)
+      }
+    }
+
   actual fun isAvifSupported(): Boolean {
     // Honest feature detection: false when the native library failed to load (or was
     // built without libavif), so callers can branch instead of hitting AvifError later.
@@ -232,13 +307,32 @@ actual class AvifConverter {
           format = ImageFormat.AVIF,
           hasAlpha = info[2] == 1,
           fileSize = fileSize,
+          frameCount = info.getOrElse(4) { 1 }.coerceAtLeast(1),
+          durationMillis = info.getOrElse(5) { 0 }.toLong(),
+          loopCount = AvifFormat.loopCountOf(info.getOrElse(6) { -1 }),
+        )
+      }
+    }
+
+    val format = ImageFormats.detect(data)
+    if (format == ImageFormat.GIF) {
+      // Structure walk only — no LZW, no pixels — so this stays cheap for a 100 MB GIF.
+      GifDecoder.parse(data)?.let { gif ->
+        return ImageInfo(
+          width = gif.width,
+          height = gif.height,
+          format = ImageFormat.GIF,
+          hasAlpha = gif.hasTransparency,
+          fileSize = fileSize,
+          frameCount = gif.frameCount,
+          durationMillis = gif.durationMillis,
+          loopCount = gif.loopCount,
         )
       }
     }
 
     val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeByteArray(data, 0, data.size, options)
-    val format = ImageFormats.detect(data)
     return ImageInfo(
       width = options.outWidth,
       height = options.outHeight,
@@ -273,17 +367,28 @@ actual class AvifConverter {
     options: EncodingOptions,
   ): ByteArray {
     val targetSize = options.maxSize!!
+    val bytes = readInputBytes(input)
+
+    // Animation wins over the byte budget. Reaching a target by dropping 47 of 48 frames changes
+    // what the image IS, and honouring it properly would re-encode the whole sequence once per
+    // binary-search probe. Documented on EncodingOptions.encodeAnimation.
+    if (bytes != null) {
+      animatedGif(bytes, options)?.let { gif ->
+        return encodeAnimatedGifToAvif(gif, options)
+      }
+    }
 
     // Already-AVIF input: return it untouched only when it fits the target. Otherwise decode it
     // (once) and re-encode — the passthrough would hand back the same oversized bytes forever.
-    val avifBytes = readInputAvifBytes(input)
     val source: Bitmap =
-      if (avifBytes != null) {
-        if (avifBytes.size <= targetSize) return avifBytes
-        decodeAvifToBitmap(avifBytes)
-      } else {
+      if (bytes != null && AvifFormat.isAvif(bytes)) {
+        if (bytes.size <= targetSize) return bytes
+        decodeAvifToBitmap(bytes)
+      } else if (bytes != null) {
         // Decode + orient the source ONCE; the loop only re-encodes it (M5 — previously each
         // attempt re-read and re-decoded the input).
+        decodeBytesToOrientedBitmap(bytes)
+      } else {
         decodeSourceToBitmap(input)
       }
 
@@ -295,45 +400,103 @@ actual class AvifConverter {
     )
   }
 
-  /** The input's raw bytes when they already contain AVIF data, else null. */
-  private suspend fun readInputAvifBytes(input: ImageInput): ByteArray? {
-    val bytes =
-      when (input) {
-        is ImageInput.FromBytes -> input.data
-        is ImageInput.FromPath ->
-          File(input.path).takeIf { it.exists() }?.let { readFileOnIo(it) } ?: return null
-        is ImageInput.FromFile -> input.file.readBytes()
-        is ImageInput.FromBitmap -> return null
-      }
-    return if (AvifFormat.isAvif(bytes)) bytes else null
-  }
+  /** The input's raw bytes, or null when the input is already a decoded bitmap. */
+  private suspend fun readInputBytes(input: ImageInput): ByteArray? =
+    when (input) {
+      is ImageInput.FromBytes -> input.data
+      is ImageInput.FromPath -> File(input.path).takeIf { it.exists() }?.let { readFileOnIo(it) }
+      is ImageInput.FromFile -> input.file.readBytes()
+      is ImageInput.FromBitmap -> null
+    }
 
   private suspend fun convertStandard(input: ImageInput, options: EncodingOptions): ByteArray =
     withContext(Dispatchers.Default) {
       when (input) {
-        is ImageInput.FromBytes ->
-          if (AvifFormat.isAvif(input.data)) input.data
-          else encodeBitmapToAvif(decodeBytesToOrientedBitmap(input.data), options)
-
         is ImageInput.FromBitmap -> encodeBitmapToAvif(input.bitmap, options)
+
+        is ImageInput.FromBytes -> encodeBytes(input.data, options)
 
         is ImageInput.FromPath -> {
           val file = File(input.path)
           if (!file.exists()) throw AvifError.FileError("File not found: ${input.path}")
           // Sniff by content, not by ".avif" extension (M4): a mislabeled file must not pass
           // through unconverted, and a real AVIF with the wrong name must not go to BitmapFactory.
-          val data = readFileOnIo(file)
-          if (AvifFormat.isAvif(data)) data
-          else encodeBitmapToAvif(decodeBytesToOrientedBitmap(data), options)
+          encodeBytes(readFileOnIo(file), options)
         }
 
-        is ImageInput.FromFile -> {
-          val data = input.file.readBytes()
-          if (AvifFormat.isAvif(data)) data
-          else encodeBitmapToAvif(decodeBytesToOrientedBitmap(data), options)
-        }
+        is ImageInput.FromFile -> encodeBytes(input.file.readBytes(), options)
       }
     }
+
+  private fun encodeBytes(data: ByteArray, options: EncodingOptions): ByteArray =
+    when {
+      AvifFormat.isAvif(data) -> data
+      else ->
+        animatedGif(data, options)?.let { encodeAnimatedGifToAvif(it, options) }
+          ?: encodeBitmapToAvif(decodeBytesToOrientedBitmap(data), options)
+    }
+
+  /** The parsed GIF when [data] is a multi-frame GIF that should be encoded as an animation. */
+  private fun animatedGif(data: ByteArray, options: EncodingOptions): GifDecoder? {
+    if (!options.encodeAnimation) return null
+    if (ImageFormats.detect(data) != ImageFormat.GIF) return null
+    return GifDecoder.parse(data)?.takeIf { it.frameCount > 1 }
+  }
+
+  /**
+   * Encodes a GIF's frames as an AVIF image sequence.
+   *
+   * Frames stream: [GifDecoder] composes one frame at a time onto a reused canvas and each is
+   * handed straight to the native encoder, so peak memory is one frame's RGBA rather than the whole
+   * animation (92 MB for a 48-frame 800x600 GIF).
+   */
+  private fun encodeAnimatedGifToAvif(gif: GifDecoder, options: EncodingOptions): ByteArray {
+    if (!nativeLibraryLoaded) {
+      throw AvifError.EncodingFailed(
+        "Native AVIF library not loaded. " +
+          "Ensure the 'avif-android-wrapper' native library is included in the AAR."
+      )
+    }
+    val stream = GifFrameStream(gif, options.maxDimension)
+    val subsampleValue =
+      when (options.subsample) {
+        ChromaSubsample.YUV444 -> 0
+        ChromaSubsample.YUV422 -> 1
+        ChromaSubsample.YUV420 -> 2
+      }
+
+    val handle =
+      nativeAnimEncoderCreate(
+        stream.width,
+        stream.height,
+        options.quality,
+        options.alphaQuality,
+        options.speed,
+        subsampleValue,
+        options.lossless,
+        stream.hasAlpha,
+        GifFrameStream.TIMESCALE,
+        stream.repetitionCount,
+      )
+    if (handle == 0L) throw AvifError.EncodingFailed("Failed to start animated AVIF encoding")
+
+    return try {
+      var index = 0
+      stream.forEachFrame { rgba, durationMillis ->
+        if (!nativeAnimEncoderAddFrame(handle, rgba, durationMillis)) {
+          throw AvifError.EncodingFailed("Failed to encode frame $index of ${stream.frameCount}")
+        }
+        index++
+      }
+      nativeAnimEncoderFinish(handle)
+        ?: throw AvifError.EncodingFailed("Failed to finalize animated AVIF")
+    } catch (e: OutOfMemoryError) {
+      Log.e(TAG, "OutOfMemoryError during animated AVIF encoding", e)
+      throw AvifError.OutOfMemory
+    } finally {
+      nativeAnimEncoderDestroy(handle)
+    }
+  }
 
   /** Decode any non-AVIF input to an EXIF-oriented bitmap. Reads the source exactly once. */
   private suspend fun decodeSourceToBitmap(input: ImageInput): Bitmap =
@@ -415,6 +578,44 @@ actual class AvifConverter {
     }
   }
 
+  /**
+   * Builds a Bitmap from a decoded frame, applying the AVIF irot/imir transform libavif reports but
+   * does not itself apply.
+   */
+  private fun orientedBitmap(decoded: DecodedImage): Bitmap {
+    val oriented =
+      if (RgbaTransform.isIdentity(decoded.irotAngle, decoded.imirAxis)) {
+        decoded
+      } else {
+        DecodedImage(
+          pixels =
+            RgbaTransform.applyToPixels(
+              decoded.pixels,
+              decoded.width,
+              decoded.height,
+              decoded.irotAngle,
+              decoded.imirAxis,
+            ),
+          width = RgbaTransform.outputWidth(decoded.width, decoded.height, decoded.irotAngle),
+          height = RgbaTransform.outputHeight(decoded.width, decoded.height, decoded.irotAngle),
+        )
+      }
+    return Bitmap.createBitmap(
+      oriented.pixels,
+      oriented.width,
+      oriented.height,
+      Bitmap.Config.ARGB_8888,
+    )
+  }
+
+  /** Downscales [bitmap] to fit [maxDimension], recycling the original when it is replaced. */
+  private fun scaledBitmap(bitmap: Bitmap, maxDimension: Int?): Bitmap {
+    if (maxDimension == null) return bitmap
+    val scaled = resizeBitmap(bitmap, maxDimension)
+    if (scaled != bitmap) bitmap.recycle()
+    return scaled
+  }
+
   private fun decodeAvifToBitmap(avifData: ByteArray): Bitmap {
     try {
       if (!nativeLibraryLoaded) {
@@ -445,31 +646,7 @@ actual class AvifConverter {
           throw AvifError.DecodingFailed("Native decoding failed: ${e.message}")
         }
 
-      // Apply AVIF irot/imir orientation (libavif reports but does not apply it).
-      val oriented =
-        if (RgbaTransform.isIdentity(decoded.irotAngle, decoded.imirAxis)) {
-          decoded
-        } else {
-          DecodedImage(
-            pixels =
-              RgbaTransform.applyToPixels(
-                decoded.pixels,
-                decoded.width,
-                decoded.height,
-                decoded.irotAngle,
-                decoded.imirAxis,
-              ),
-            width = RgbaTransform.outputWidth(decoded.width, decoded.height, decoded.irotAngle),
-            height = RgbaTransform.outputHeight(decoded.width, decoded.height, decoded.irotAngle),
-          )
-        }
-
-      return Bitmap.createBitmap(
-        oriented.pixels,
-        oriented.width,
-        oriented.height,
-        Bitmap.Config.ARGB_8888,
-      )
+      return orientedBitmap(decoded)
     } catch (e: OutOfMemoryError) {
       Log.e(TAG, "OutOfMemoryError during AVIF decoding", e)
       throw AvifError.OutOfMemory

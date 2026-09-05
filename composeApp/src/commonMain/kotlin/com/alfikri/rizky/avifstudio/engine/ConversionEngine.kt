@@ -1,6 +1,7 @@
 package com.alfikri.rizky.avifstudio.engine
 
 import com.alfikri.rizky.avifkit.AvifConverter
+import com.alfikri.rizky.avifkit.AvifFrame
 import com.alfikri.rizky.avifkit.ImageInput
 import com.alfikri.rizky.avifkit.PlatformFile
 import com.alfikri.rizky.avifstudio.model.ConversionOutput
@@ -110,6 +111,8 @@ class ConversionEngine(
       height = encoded.size.height,
       format = settings.outputFormat,
       elapsedMillis = startedAt.elapsedNow().inWholeMilliseconds,
+      frameCount = encoded.frameCount,
+      durationMillis = encoded.durationMillis,
     )
   }
 
@@ -122,12 +125,44 @@ class ConversionEngine(
     return encodeGate.withPermit { decodeAny(bytes, maxDimension) }
   }
 
+  /**
+   * Frames for display, in playback order. A still comes back as a single zero-duration frame, so
+   * callers render one code path either way.
+   *
+   * Animations are decoded to a smaller budget than [decodeForDisplay] uses on purpose: every frame
+   * is held at once, so a 48-frame preview at the still budget would be well over 100 MB.
+   */
+  suspend fun decodeFramesForDisplay(file: PlatformFile, maxDimension: Int?): List<AvifFrame> {
+    val bytes = readSource(file)
+    return encodeGate.withPermit {
+      if (!ImageSniffer.isAvif(bytes)) {
+        return@withPermit listOf(AvifFrame(codec.decode(bytes, maxDimension), 0))
+      }
+      // Parse-only, so this costs nothing next to the decode it is deciding the shape of.
+      val info = converter.getImageInfo(ImageInput.from(bytes))
+      if (info.frameCount <= 1) {
+        listOf(AvifFrame(decodeAny(bytes, maxDimension), 0))
+      } else {
+        converter.decodeAvifFrames(
+          input = ImageInput.from(bytes),
+          maxDimension = ANIMATION_PREVIEW_PX,
+          maxFrames = ANIMATION_PREVIEW_FRAMES,
+        )
+      }
+    }
+  }
+
   override suspend fun clearOutputs() {
     val dir = outputDir
     if (dir.exists()) dir.delete(mustExist = false)
   }
 
-  private class Encoded(val bytes: ByteArray, val size: PixelSize)
+  private class Encoded(
+    val bytes: ByteArray,
+    val size: PixelSize,
+    val frameCount: Int = 1,
+    val durationMillis: Long = 0,
+  )
 
   private suspend fun encodeAvif(sourceBytes: ByteArray, settings: ConversionSettings): Encoded {
     val bytes =
@@ -136,7 +171,7 @@ class ConversionEngine(
         options = settings.toEncodingOptions(),
       )
     val info = converter.getImageInfo(ImageInput.from(bytes))
-    return Encoded(bytes, PixelSize(info.width, info.height))
+    return Encoded(bytes, PixelSize(info.width, info.height), info.frameCount, info.durationMillis)
   }
 
   private suspend fun encodeViaBitmap(
@@ -187,5 +222,13 @@ class ConversionEngine(
      * queue behind the same permit or the memory ceiling means nothing.
      */
     private val encodeGate = Semaphore(permits = 1)
+
+    /**
+     * Animation preview budget. Every frame is resident at once, so this is a memory ceiling, not a
+     * quality choice: 48 frames at 480 px is ~33 MB, which an Android 7 device survives; the same
+     * animation at the 1024 px still budget is ~150 MB, which it does not.
+     */
+    private const val ANIMATION_PREVIEW_PX = 480
+    private const val ANIMATION_PREVIEW_FRAMES = 120
   }
 }

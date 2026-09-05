@@ -35,6 +35,9 @@ app in its own right. No ads, no accounts, no network permission.
   it (Android 11 and below cannot display AVIF at all).
 * **Job-shaped presets** — "Web-ready", "Fit a size limit", "Smallest file", "Archive quality" —
   rather than a wall of codec settings, with every knob still available under Advanced settings.
+* **Animated GIFs stay animated.** A GIF converts to an AVIF image sequence — every frame, its own
+  delay, the same loop count — and the result plays back in the app's preview. Byte budgets do not
+  apply here: an animation is kept whole rather than trimmed to a size target.
 * **Fit a byte budget** using AvifKit's adaptive compression (100 KB … 2 MB, SMART or STRICT).
 * **One image at a time**, gated by a single-permit semaphore. Twenty 12 MP photos decoded
   concurrently is an OOM on a mid-range phone; this caps peak memory at one in-flight image no
@@ -60,6 +63,10 @@ Both build the same UI from `:composeApp`.
 | Results | Settings | Bahasa Indonesia + dark |
 |---|---|---|
 | ![Results](art/screenshots/android-03-results.webp) | ![Settings](art/screenshots/android-04-settings.webp) | ![Dark](art/screenshots/android-05-settings-dark-id.webp) |
+
+An animated GIF keeps all 48 of its frames, and the preview plays them:
+
+<img src="art/screenshots/android-08-animated-gif.webp" width="300" alt="Animated GIF converted to an AVIF image sequence" />
 
 Picking a folder once, so Save stops asking:
 
@@ -97,6 +104,7 @@ AvifKit is a production-ready Kotlin Multiplatform library for AVIF image encodi
 
 #### Core Functionality
 - ✅ **AVIF Encoding & Decoding** - Full support via libavif + AOM on both platforms (cinterop on iOS, JNI on Android)
+- ✅ **Animated GIF → animated AVIF** - Frames, per-frame delays and loop count preserved as an AVIF image sequence, streamed one frame at a time so memory stays flat
 - ✅ **Android 15+ Compatible** - 16 KB page size alignment (Google Play requirement)
 - ✅ **Adaptive Compression** - Intelligent file size targeting with two strategies
 - ✅ **Priority Presets** - Quick configuration for common use cases
@@ -109,6 +117,7 @@ AvifKit is a production-ready Kotlin Multiplatform library for AVIF image encodi
 - ✅ **Memory Safety** - OutOfMemory error handling
 
 #### Advanced Features
+- Animated GIF input, and `decodeAvifFrames` to read an image sequence back frame by frame
 - Image resizing with dimension constraints
 - Chroma subsampling options (YUV444, YUV422, YUV420)
 - Alpha channel quality control
@@ -137,6 +146,36 @@ val result = converter.convertToFile(
     priority = Priority.BALANCED
 )
 ```
+
+#### Animated GIFs
+
+An animated GIF becomes an AVIF image sequence automatically — no extra call, no flag to remember.
+Frames, per-frame delays and the loop count all survive.
+
+```kotlin
+val converter = AvifConverter()
+
+val avif = converter.encodeAvif(ImageInput.from(gifBytes))
+
+val info = converter.getImageInfo(ImageInput.from(avif))
+info.isAnimated      // true
+info.frameCount      // 48
+info.durationMillis  // 1610
+info.loopCount       // 0 — loops forever, as the GIF did
+
+// Reading a sequence back. Both limits are memory bounds: every frame is held at once.
+val frames = converter.decodeAvifFrames(
+    input = ImageInput.from(avif),
+    maxDimension = 480,
+    maxFrames = 120,
+)
+frames.first().durationMillis  // 30
+```
+
+Set `EncodingOptions(encodeAnimation = false)` to keep only the first frame instead. `maxSize` does
+not apply to animated output: reaching a byte budget by dropping frames would change what the image
+is, so the animation is kept whole and `quality`/`maxDimension` are the knobs. A still image is a
+one-frame sequence, so `decodeAvifFrames` never needs a branch in front of it.
 
 #### Advanced Compression with Target Size
 
@@ -235,7 +274,8 @@ EncodingOptions(
     alphaQuality = 90,                              // Alpha channel quality
     maxDimension = 2048,                            // Auto-resize if larger
     maxSize = 200 * 1024,                           // Target size in bytes
-    compressionStrategy = CompressionStrategy.SMART  // SMART or STRICT
+    compressionStrategy = CompressionStrategy.SMART, // SMART or STRICT
+    encodeAnimation = true                          // Keep animated GIF input animated
 )
 ```
 

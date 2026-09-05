@@ -2,12 +2,14 @@ package com.alfikri.rizky.avifkit
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.os.Build
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import kotlin.math.abs
 import kotlin.random.Random
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -161,6 +163,10 @@ class AvifConverterAndroidRoundTripTest {
   @Test
   fun hardwareBitmap_encodes() {
     runBlocking {
+      // Bitmap.Config.HARDWARE is API 26; touching the field at all on API 24 is a
+      // NoSuchFieldError, so this has nothing to exercise below O.
+      assumeTrue(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+
       // Build a software bitmap, then round-trip through HARDWARE config to simulate what image
       // loaders hand back. (HARDWARE bitmaps have no getPixels access.)
       val software = solidBitmap(Color.argb(0xFF, 0x20, 0x80, 0xC0))

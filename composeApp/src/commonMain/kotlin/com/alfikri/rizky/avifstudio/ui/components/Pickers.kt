@@ -37,7 +37,10 @@ fun rememberImagePickers(onPicked: (List<PlatformFile>) -> Unit): ImagePickers {
   val fileLauncher =
     rememberFilePickerLauncher(
       // Bare extensions, no dots. AVIF is first because opening one is a headline use case.
-      type = FileKitType.File(listOf("avif", "jpg", "jpeg", "png", "webp", "heic", "heif", "bmp")),
+      type =
+        FileKitType.File(
+          listOf("avif", "gif", "jpg", "jpeg", "png", "webp", "heic", "heif", "bmp")
+        ),
       mode = FileKitMode.Multiple(),
     ) { picked ->
       onPicked(picked.orEmpty())

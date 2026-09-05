@@ -296,8 +296,6 @@ class AvifConverterIosRoundTripTest {
   // Test helpers
   // ---------------------------------------------------------------------------
 
-  private class RgbaPixels(val pixels: ByteArray, val width: Int, val height: Int)
-
   private fun solidRgba(r: Int, g: Int, b: Int, a: Int): ByteArray {
     val out = ByteArray(width * height * 4)
     for (i in 0 until width * height) {
@@ -334,46 +332,6 @@ class AvifConverterIosRoundTripTest {
     } finally {
       CGColorSpaceRelease(colorSpace)
     }
-  }
-
-  /** Extract PREMULTIPLIED RGBA from a UIImage the same way the production encode path does. */
-  private fun uiImagePremultipliedRgba(image: UIImage): RgbaPixels {
-    val cgImage = image.CGImage ?: error("UIImage has no CGImage")
-    val w = CGImageGetWidth(cgImage).toInt()
-    val h = CGImageGetHeight(cgImage).toInt()
-    val out = ByteArray(w * h * 4)
-    val colorSpace = CGColorSpaceCreateDeviceRGB()
-    try {
-      out.usePinned { pinned ->
-        val ctx =
-          CGBitmapContextCreate(
-            data = pinned.addressOf(0),
-            width = w.toULong(),
-            height = h.toULong(),
-            bitsPerComponent = 8u,
-            bytesPerRow = (w * 4).toULong(),
-            space = colorSpace,
-            bitmapInfo = CGImageAlphaInfo.kCGImageAlphaPremultipliedLast.value,
-          )!!
-        UIGraphicsPushContext(ctx)
-        memScoped {
-          val rect =
-            alloc<CGRect>().apply {
-              origin.x = 0.0
-              origin.y = 0.0
-              size.width = w.toDouble()
-              size.height = h.toDouble()
-            }
-          CGContextTranslateCTM(ctx, 0.0, h.toDouble())
-          CGContextScaleCTM(ctx, 1.0, -1.0)
-          image.drawInRect(rect.readValue())
-        }
-        UIGraphicsPopContext()
-      }
-    } finally {
-      CGColorSpaceRelease(colorSpace)
-    }
-    return RgbaPixels(out, w, h)
   }
 
   /**

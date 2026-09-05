@@ -76,6 +76,28 @@ expect class AvifConverter() {
   @Throws(Exception::class) suspend fun decodeAvif(input: ImageInput): PlatformBitmap
 
   /**
+   * Decode the frames of an AVIF image sequence, in playback order.
+   *
+   * A still AVIF yields a single frame with a zero duration, so callers do not need to branch on
+   * [ImageInfo.isAnimated] first. Unlike [decodeAvif] this holds every frame at once — `width *
+   * height * 4 * frameCount` bytes, which is 92 MB for a 48-frame 800x600 animation — so both
+   * limits below exist to keep that bounded and are worth setting for anything on-screen.
+   *
+   * @param input AVIF data as ByteArray or file path
+   * @param maxDimension Downscale each frame so its longest edge is at most this. Null keeps the
+   *   encoded size.
+   * @param maxFrames Stop after this many frames. The result is truncated, not resampled, so the
+   *   animation it plays back is shorter rather than faster.
+   * @return One entry per frame, each with the delay to show it for
+   */
+  @Throws(Exception::class)
+  suspend fun decodeAvifFrames(
+    input: ImageInput,
+    maxDimension: Int? = null,
+    maxFrames: Int = Int.MAX_VALUE,
+  ): List<AvifFrame>
+
+  /**
    * Check if AVIF encoding/decoding is supported on this platform
    *
    * @return true if AVIF is supported

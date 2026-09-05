@@ -27,7 +27,14 @@ data class ConversionOutput(
   val height: Int,
   val format: OutputFormat,
   val elapsedMillis: Long,
-)
+  /** Frames in the output; 1 for a still. An animated GIF converted to AVIF keeps all of them. */
+  val frameCount: Int = 1,
+  /** Playback time of one loop, 0 for a still. */
+  val durationMillis: Long = 0,
+) {
+  val isAnimated: Boolean
+    get() = frameCount > 1
+}
 
 /**
  * A code rather than a sentence, so the UI can translate it. Native codec errors are not sentences,
