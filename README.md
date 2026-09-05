@@ -64,9 +64,12 @@ Both build the same UI from `:composeApp`.
 |---|---|---|
 | ![Results](art/screenshots/android-03-results.webp) | ![Settings](art/screenshots/android-04-settings.webp) | ![Dark](art/screenshots/android-05-settings-dark-id.webp) |
 
-An animated GIF keeps all 48 of its frames, and the preview plays them:
+An animated GIF keeps all 48 of its frames, and the preview plays them — same result on both
+platforms, from the same shared code:
 
-<img src="art/screenshots/android-08-animated-gif.webp" width="300" alt="Animated GIF converted to an AVIF image sequence" />
+| Android | iOS |
+|---|---|
+| <img src="art/screenshots/android-08-animated-gif.webp" width="280" alt="Animated GIF converted to an AVIF image sequence on Android" /> | <img src="art/screenshots/ios-02-animated-gif.webp" width="280" alt="The same conversion on iOS" /> |
 
 Picking a folder once, so Save stops asking:
 
