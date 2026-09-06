@@ -894,15 +894,48 @@ actual class AvifConverter {
   /** RGBA8888 pixel buffer extracted from a UIImage (origin top-left, premultiplied alpha). */
   private class RgbaBuffer(val pixels: ByteArray, val width: Int, val height: Int)
 
+  /** Pixel dimensions of an image as it is DISPLAYED, i.e. with `imageOrientation` applied. */
+  private class PixelSize(val width: Int, val height: Int)
+
+  /**
+   * The size a UIImage actually draws at, in pixels.
+   *
+   * A UIImage carries a raster plus an `imageOrientation`, and every UIKit draw call applies the
+   * orientation. So for a portrait photo — stored 1600x1200 with orientation `.right` — the raster
+   * is landscape but the image draws as 1200x1600, and any context sized from `CGImageGetWidth`
+   * receives it squashed. Swapping the two on a quarter turn is what keeps the canvas and the
+   * drawing in agreement.
+   *
+   * `image.size * image.scale` would also be orientation-aware, but it is CGFloat points and
+   * rounds; the raster is exact integers, and this is the number the encoder has to allocate planes
+   * for.
+   */
+  private fun orientedPixelSize(image: UIImage): PixelSize? {
+    val cgImage = image.CGImage ?: return null
+    val rasterWidth = CGImageGetWidth(cgImage).toInt()
+    val rasterHeight = CGImageGetHeight(cgImage).toInt()
+    val quarterTurn =
+      when (image.imageOrientation) {
+        UIImageOrientation.UIImageOrientationLeft,
+        UIImageOrientation.UIImageOrientationRight,
+        UIImageOrientation.UIImageOrientationLeftMirrored,
+        UIImageOrientation.UIImageOrientationRightMirrored -> true
+        else -> false
+      }
+    return if (quarterTurn) PixelSize(rasterHeight, rasterWidth)
+    else PixelSize(rasterWidth, rasterHeight)
+  }
+
   /**
    * Draw a UIImage into an RGBA8888 CGBitmapContext and read back the bytes. Drawing through the
    * context bakes in the image's `imageOrientation`, so this also handles EXIF orientation (the job
-   * the Swift `normalizeOrientation` used to do).
+   * the Swift `normalizeOrientation` used to do) — which is exactly why the context is sized from
+   * [orientedPixelSize] and not from the raster.
    */
   private fun uiImageToRgba(image: UIImage): RgbaBuffer? {
-    val cgImage = image.CGImage ?: return null
-    val width = CGImageGetWidth(cgImage).toInt()
-    val height = CGImageGetHeight(cgImage).toInt()
+    val pixelSize = orientedPixelSize(image) ?: return null
+    val width = pixelSize.width
+    val height = pixelSize.height
     if (width <= 0 || height <= 0) return null
 
     val bytesPerRow = width * 4
@@ -980,14 +1013,16 @@ actual class AvifConverter {
 
   /**
    * Downscale a UIImage so its longest side is at most [maxDimension] PIXELS; no-op if already
-   * smaller. Uses the CGImage's pixel dimensions (not `image.size`, which is in points and lets
-   * `scale>1` images — screenshots, asset catalogs — dodge the resize, unlike Android). Renders
+   * smaller. Measures in PIXELS via [orientedPixelSize], not `image.size`, which is in points and
+   * lets `scale>1` images — screenshots, asset catalogs — dodge the resize, unlike Android. Renders
    * with UIGraphicsImageRenderer (UIGraphicsBeginImageContext* is deprecated since iOS 17). (M8)
+   *
+   * The renderer output is always `.up`, so an oriented source comes out of here already upright.
    */
   private fun resizeImage(image: UIImage, maxDimension: Int): UIImage {
-    val cgImage = image.CGImage ?: return image
-    val pxWidth = CGImageGetWidth(cgImage).toInt()
-    val pxHeight = CGImageGetHeight(cgImage).toInt()
+    val pixelSize = orientedPixelSize(image) ?: return image
+    val pxWidth = pixelSize.width
+    val pxHeight = pixelSize.height
 
     if (pxWidth <= maxDimension && pxHeight <= maxDimension) {
       return image

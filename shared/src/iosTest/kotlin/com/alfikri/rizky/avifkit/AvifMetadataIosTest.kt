@@ -106,12 +106,9 @@ class AvifMetadataIosTest {
    * file it writes must claim orientation 1 and carry no irot/imir. Copying the 6 through would
    * leave `transformFlags` set and every reader would rotate the already-rotated image again.
    *
-   * Deliberately no dimension assertion here, unlike the Android twin: `uiImageToRgba` sizes its
-   * bitmap context from the *unrotated* CGImage and then draws the *oriented* UIImage into it, so
-   * an orientation-6 source comes out 32x16 with its content rotated — squashed, and independent of
-   * this feature (preserveMetadata=false produces exactly the same pixels). Asserting the current
-   * dimensions here would bless that bug; `transformFlags` proves what this test is actually for,
-   * and proves it more directly than a dimension check could.
+   * `transformFlags` is the direct proof; the dimensions are the same claim seen from outside, and
+   * only became assertable here once the encode path started sizing its context from the displayed
+   * size rather than the raster (see `AvifOrientationIosTest`).
    */
   @Test
   fun preservedExif_emitsNoRotationTransform() = runBlocking {
@@ -119,6 +116,8 @@ class AvifMetadataIosTest {
 
     assertEquals(1, ExifTiff.orientationOf(result.exif), "embedded Exif must read as upright")
     assertEquals(0u, result.transformFlags, "AVIF_TRANSFORM_NONE — no irot/imir may be emitted")
+    assertEquals(MetadataFixtures.ORIENTED_DISPLAY_WIDTH, result.width)
+    assertEquals(MetadataFixtures.ORIENTED_DISPLAY_HEIGHT, result.height)
   }
 
   /** And the pixels themselves must land the same way with metadata on or off. */

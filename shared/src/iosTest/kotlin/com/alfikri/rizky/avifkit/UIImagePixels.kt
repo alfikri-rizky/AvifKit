@@ -13,12 +13,25 @@ internal class RgbaPixels(val pixels: ByteArray, val width: Int, val height: Int
   }
 }
 
-/** Extract PREMULTIPLIED RGBA from a UIImage the same way the production encode path does. */
+/**
+ * Extract PREMULTIPLIED RGBA from a UIImage the same way the production encode path does.
+ *
+ * That includes sizing the context from the DISPLAYED pixel size rather than the raster: UIKit
+ * applies `imageOrientation` when drawing, so a quarter-turned image drawn into a raster-sized
+ * context comes out squashed (the bug `AvifConverter.orientedPixelSize` exists to prevent).
+ */
 @OptIn(ExperimentalForeignApi::class)
 internal fun uiImagePremultipliedRgba(image: UIImage): RgbaPixels {
   val cgImage = image.CGImage ?: error("UIImage has no CGImage")
-  val w = CGImageGetWidth(cgImage).toInt()
-  val h = CGImageGetHeight(cgImage).toInt()
+  val quarterTurn =
+    image.imageOrientation == UIImageOrientation.UIImageOrientationLeft ||
+      image.imageOrientation == UIImageOrientation.UIImageOrientationRight ||
+      image.imageOrientation == UIImageOrientation.UIImageOrientationLeftMirrored ||
+      image.imageOrientation == UIImageOrientation.UIImageOrientationRightMirrored
+  val rasterW = CGImageGetWidth(cgImage).toInt()
+  val rasterH = CGImageGetHeight(cgImage).toInt()
+  val w = if (quarterTurn) rasterH else rasterW
+  val h = if (quarterTurn) rasterW else rasterH
   val out = ByteArray(w * h * 4)
   val colorSpace = CGColorSpaceCreateDeviceRGB()
   try {
