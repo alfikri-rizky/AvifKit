@@ -111,6 +111,8 @@
     <string name="converted">Converted</string>
     <string name="dimensions">Dimensions</string>
     <string name="file_size">File size</string>
+    <string name="frames">Frames</string>
+    <string name="frames_value">%1$s frames · %2$s</string>
     <string name="time_taken">Took</string>
     <string name="view_full_screen">View full screen</string>
 

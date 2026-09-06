@@ -3,6 +3,8 @@
 #include <unistd.h>
 #include <vector>
 #include <memory>
+#include <new>
+#include <cstdint>
 #include <cstring>
 
 // Conditional libavif inclusion
@@ -23,6 +25,51 @@ static int recommendedThreadCount() {
     if (n > 8) n = 8;
     return static_cast<int>(n);
 }
+
+
+#if HAVE_LIBAVIF
+namespace {
+
+avifPixelFormat pixelFormatFor(int subsample, bool lossless) {
+    // True lossless needs identity matrix coefficients, which libavif only supports with YUV444.
+    if (lossless) return AVIF_PIXEL_FORMAT_YUV444;
+    switch (subsample) {
+        case 0: return AVIF_PIXEL_FORMAT_YUV444;
+        case 1: return AVIF_PIXEL_FORMAT_YUV422;
+        default: return AVIF_PIXEL_FORMAT_YUV420;
+    }
+}
+
+// One in-flight animation encode. libavif encodes each frame inside avifEncoderAddImage(), so the
+// only state that has to survive between JNI calls is the encoder itself plus the frame geometry
+// every frame must match.
+struct AnimEncoder {
+    avifEncoder* encoder = nullptr;
+    int width = 0;
+    int height = 0;
+    avifPixelFormat pixelFormat = AVIF_PIXEL_FORMAT_YUV420;
+    bool hasAlpha = false;
+    bool lossless = false;
+    int frameCount = 0;
+};
+
+// avifDecoderSetIOMemory borrows the buffer rather than copying it, so the bytes have to outlive
+// every avifDecoderNextImage() call — hence the owned copy here.
+struct AnimDecoder {
+    avifDecoder* decoder = nullptr;
+    std::vector<uint8_t> data;
+};
+
+// Playback time in milliseconds. libavif gives a still image a nominal 1-tick duration at
+// timescale 1, which would read as a full second — a still has no playback time, so callers pass
+// frameCount and get 0 back for one.
+uint64_t millisFrom(uint64_t durationInTimescales, uint64_t timescale, int frameCount) {
+    if (timescale == 0 || frameCount <= 1) return 0;
+    return (durationInTimescales * 1000ULL) / timescale;
+}
+
+} // namespace
+#endif
 
 extern "C" {
 
@@ -397,7 +444,7 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeDecode(
         return nullptr;
     }
 
-    jmethodID constructor = env->GetMethodID(decodedImageClass, "<init>", "([IIIII)V");
+    jmethodID constructor = env->GetMethodID(decodedImageClass, "<init>", "([IIIIII)V");
     if (!constructor) {
         LOGE("Failed to find DecodedImage constructor");
         // Check for pending JNI exceptions
@@ -419,7 +466,7 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeDecode(
 
     // Create and return DecodedImage object
     jobject result = env->NewObject(decodedImageClass, constructor,
-                                    pixelArray, width, height, irotAngle, imirAxis);
+                                    pixelArray, width, height, irotAngle, imirAxis, 0);
 
     if (!result) {
         LOGE("Failed to create DecodedImage object");
@@ -478,16 +525,20 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeGetAvifInfo(
     if (avifDecoderSetIOMemory(decoder, reinterpret_cast<const uint8_t*>(data), dataLength) == AVIF_RESULT_OK &&
         avifDecoderParse(decoder) == AVIF_RESULT_OK) {
         const avifImage* image = decoder->image;
-        // alphaPresent is valid after parse (image->alphaPlane isn't allocated until decode).
-        jint info[4] = {
+        // alphaPresent, imageCount and the track timing are all valid after parse — no pixel
+        // decode is needed to answer "is this animated, and how long is it?".
+        jint info[7] = {
             static_cast<jint>(image->width),
             static_cast<jint>(image->height),
             decoder->alphaPresent ? 1 : 0,
             static_cast<jint>(image->depth),
+            static_cast<jint>(decoder->imageCount),
+            static_cast<jint>(millisFrom(decoder->durationInTimescales, decoder->timescale, decoder->imageCount)),
+            static_cast<jint>(decoder->repetitionCount),
         };
-        result = env->NewIntArray(4);
+        result = env->NewIntArray(7);
         if (result) {
-            env->SetIntArrayRegion(result, 0, 4, info);
+            env->SetIntArrayRegion(result, 0, 7, info);
         }
     }
 
@@ -514,6 +565,376 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeGetVersion(
     return env->NewStringUTF(info.c_str());
 #else
     return env->NewStringUTF("Placeholder (libavif not integrated)");
+#endif
+}
+
+// ==================================================================================
+// Animated AVIF (image sequences)
+// ==================================================================================
+//
+// Frame-at-a-time by design. The Kotlin side decodes an animated GIF frame by frame
+// (GifDecoder) and pushes each one through nativeAnimEncoderAddFrame; libavif encodes
+// inside that call, so no more than one frame's RGBA is ever alive. Handing the whole
+// animation across JNI instead would be width*height*4*frameCount bytes — 92 MB for a
+// 48-frame 800x600 GIF, an OOM on the low-end devices this library still supports.
+//
+// The jlong handle owns the encoder. Kotlin must call nativeAnimEncoderDestroy in a
+// finally block; Finish alone does not free it.
+
+/**
+ * Starts an image-sequence encode. Returns an opaque handle, or 0 on failure.
+ */
+JNIEXPORT jlong JNICALL
+Java_com_alfikri_rizky_avifkit_AvifConverter_nativeAnimEncoderCreate(
+    JNIEnv* /* env */,
+    jobject /* this */,
+    jint width,
+    jint height,
+    jint quality,
+    jint alphaQuality,
+    jint speed,
+    jint subsample,
+    jboolean lossless,
+    jboolean hasAlpha,
+    jint timescale,
+    jint repetitionCount) {
+
+#if HAVE_LIBAVIF
+    if (width <= 0 || height <= 0 || timescale <= 0) {
+        LOGE("nativeAnimEncoderCreate: invalid geometry %dx%d timescale=%d", width, height, timescale);
+        return 0;
+    }
+
+    const char* codecName = avifCodecName(AVIF_CODEC_CHOICE_AUTO, AVIF_CODEC_FLAG_CAN_ENCODE);
+    if (!codecName || codecName[0] == '\0') {
+        LOGE("No encoder codec available! AOM codec not found.");
+        return 0;
+    }
+
+    avifEncoder* encoder = avifEncoderCreate();
+    if (!encoder) {
+        LOGE("Failed to create AVIF encoder");
+        return 0;
+    }
+
+    encoder->quality = lossless ? AVIF_QUALITY_LOSSLESS : quality;
+    encoder->qualityAlpha = lossless ? AVIF_QUALITY_LOSSLESS : alphaQuality;
+    encoder->speed = speed;
+    encoder->maxThreads = recommendedThreadCount();
+    encoder->codecChoice = AVIF_CODEC_CHOICE_AUTO;
+    encoder->timescale = static_cast<uint64_t>(timescale);
+    encoder->repetitionCount = repetitionCount;
+
+    AnimEncoder* handle = new (std::nothrow) AnimEncoder();
+    if (!handle) {
+        avifEncoderDestroy(encoder);
+        LOGE("Failed to allocate animation encoder handle");
+        return 0;
+    }
+    handle->encoder = encoder;
+    handle->width = width;
+    handle->height = height;
+    handle->pixelFormat = pixelFormatFor(subsample, lossless == JNI_TRUE);
+    handle->hasAlpha = hasAlpha == JNI_TRUE;
+    handle->lossless = lossless == JNI_TRUE;
+
+    LOGI("nativeAnimEncoderCreate: %dx%d quality=%d speed=%d timescale=%d repeat=%d alpha=%d",
+         width, height, quality, speed, timescale, repetitionCount, (int)hasAlpha);
+    return reinterpret_cast<jlong>(handle);
+#else
+    LOGE("libavif not compiled into this build (HAVE_LIBAVIF=0); animation encoding unavailable.");
+    return 0;
+#endif
+}
+
+/**
+ * Encodes one RGBA8888 frame into the sequence. `durationInTimescales` is the frame's
+ * on-screen time in the encoder's timescale units.
+ */
+JNIEXPORT jboolean JNICALL
+Java_com_alfikri_rizky_avifkit_AvifConverter_nativeAnimEncoderAddFrame(
+    JNIEnv* env,
+    jobject /* this */,
+    jlong handleValue,
+    jbyteArray pixels,
+    jint durationInTimescales) {
+
+#if HAVE_LIBAVIF
+    AnimEncoder* handle = reinterpret_cast<AnimEncoder*>(handleValue);
+    if (!handle || !handle->encoder || !pixels) return JNI_FALSE;
+
+    const jsize expected = static_cast<jsize>(handle->width) * handle->height * 4;
+    if (env->GetArrayLength(pixels) != expected) {
+        LOGE("nativeAnimEncoderAddFrame: got %d bytes, expected %d for %dx%d RGBA",
+             env->GetArrayLength(pixels), expected, handle->width, handle->height);
+        return JNI_FALSE;
+    }
+
+    jbyte* pixelData = env->GetByteArrayElements(pixels, nullptr);
+    if (!pixelData) return JNI_FALSE;
+
+    avifImage* image = avifImageCreate(handle->width, handle->height, 8, handle->pixelFormat);
+    if (!image) {
+        env->ReleaseByteArrayElements(pixels, pixelData, JNI_ABORT);
+        LOGE("Failed to create AVIF frame image");
+        return JNI_FALSE;
+    }
+    if (handle->lossless) {
+        image->matrixCoefficients = AVIF_MATRIX_COEFFICIENTS_IDENTITY;
+    }
+
+    jboolean ok = JNI_FALSE;
+    avifPlanesFlags planes = handle->hasAlpha ? (avifPlanesFlags)(AVIF_PLANES_YUV | AVIF_PLANES_A)
+                                              : (avifPlanesFlags)AVIF_PLANES_YUV;
+    avifResult result = avifImageAllocatePlanes(image, planes);
+    if (result == AVIF_RESULT_OK) {
+        avifRGBImage rgb;
+        avifRGBImageSetDefaults(&rgb, image);
+        rgb.pixels = reinterpret_cast<uint8_t*>(pixelData);
+        rgb.rowBytes = handle->width * 4;
+        rgb.format = AVIF_RGB_FORMAT_RGBA;
+        rgb.depth = 8;
+        // GIF transparency is binary, so its composited pixels are identical under straight and
+        // premultiplied alpha. Declaring straight is what AVIF stores, so no conversion runs.
+        rgb.alphaPremultiplied = AVIF_FALSE;
+        rgb.ignoreAlpha = handle->hasAlpha ? AVIF_FALSE : AVIF_TRUE;
+
+        result = avifImageRGBToYUV(image, &rgb);
+        if (result == AVIF_RESULT_OK) {
+            result = avifEncoderAddImage(handle->encoder,
+                                         image,
+                                         static_cast<uint64_t>(durationInTimescales > 0 ? durationInTimescales : 1),
+                                         AVIF_ADD_IMAGE_FLAG_NONE);
+            if (result == AVIF_RESULT_OK) {
+                handle->frameCount++;
+                ok = JNI_TRUE;
+            }
+        }
+    }
+    if (!ok) {
+        LOGE("nativeAnimEncoderAddFrame failed at frame %d: %s",
+             handle->frameCount, avifResultToString(result));
+    }
+
+    avifImageDestroy(image);
+    env->ReleaseByteArrayElements(pixels, pixelData, JNI_ABORT);
+    return ok;
+#else
+    return JNI_FALSE;
+#endif
+}
+
+/**
+ * Closes the sequence and returns the finished AVIF bytes, or null on failure.
+ */
+JNIEXPORT jbyteArray JNICALL
+Java_com_alfikri_rizky_avifkit_AvifConverter_nativeAnimEncoderFinish(
+    JNIEnv* env,
+    jobject /* this */,
+    jlong handleValue) {
+
+#if HAVE_LIBAVIF
+    AnimEncoder* handle = reinterpret_cast<AnimEncoder*>(handleValue);
+    if (!handle || !handle->encoder || handle->frameCount == 0) {
+        LOGE("nativeAnimEncoderFinish: nothing to finish");
+        return nullptr;
+    }
+
+    avifRWData output = AVIF_DATA_EMPTY;
+    avifResult result = avifEncoderFinish(handle->encoder, &output);
+    if (result != AVIF_RESULT_OK || output.size == 0 || output.data == nullptr) {
+        avifRWDataFree(&output);
+        LOGE("avifEncoderFinish failed: %s", avifResultToString(result));
+        return nullptr;
+    }
+
+    jbyteArray bytes = env->NewByteArray(output.size);
+    if (!bytes) {
+        avifRWDataFree(&output);
+        LOGE("Failed to allocate Java byte array for animated AVIF");
+        return nullptr;
+    }
+    env->SetByteArrayRegion(bytes, 0, output.size, reinterpret_cast<const jbyte*>(output.data));
+    LOGI("Animated AVIF encoded: %d frames, %zu bytes", handle->frameCount, output.size);
+    avifRWDataFree(&output);
+    return bytes;
+#else
+    return nullptr;
+#endif
+}
+
+JNIEXPORT void JNICALL
+Java_com_alfikri_rizky_avifkit_AvifConverter_nativeAnimEncoderDestroy(
+    JNIEnv* /* env */,
+    jobject /* this */,
+    jlong handleValue) {
+
+#if HAVE_LIBAVIF
+    AnimEncoder* handle = reinterpret_cast<AnimEncoder*>(handleValue);
+    if (!handle) return;
+    if (handle->encoder) avifEncoderDestroy(handle->encoder);
+    delete handle;
+#endif
+}
+
+/**
+ * Opens an AVIF for frame-by-frame reading. Returns an opaque handle, or 0 on failure.
+ */
+JNIEXPORT jlong JNICALL
+Java_com_alfikri_rizky_avifkit_AvifConverter_nativeAnimDecoderCreate(
+    JNIEnv* env,
+    jobject /* this */,
+    jbyteArray avifData) {
+
+#if HAVE_LIBAVIF
+    if (!avifData) return 0;
+    const jsize length = env->GetArrayLength(avifData);
+    if (length <= 0) return 0;
+
+    AnimDecoder* handle = new (std::nothrow) AnimDecoder();
+    if (!handle) return 0;
+    try {
+        handle->data.resize(static_cast<size_t>(length));
+    } catch (const std::bad_alloc&) {
+        delete handle;
+        LOGE("Out of memory copying %d bytes of AVIF data", length);
+        return 0;
+    }
+    env->GetByteArrayRegion(avifData, 0, length, reinterpret_cast<jbyte*>(handle->data.data()));
+
+    handle->decoder = avifDecoderCreate();
+    if (!handle->decoder) {
+        delete handle;
+        LOGE("Failed to create AVIF decoder");
+        return 0;
+    }
+    handle->decoder->maxThreads = recommendedThreadCount();
+    handle->decoder->ignoreXMP = AVIF_TRUE;
+    handle->decoder->ignoreExif = AVIF_FALSE;
+
+    avifResult result = avifDecoderSetIOMemory(handle->decoder, handle->data.data(), handle->data.size());
+    if (result == AVIF_RESULT_OK) {
+        result = avifDecoderParse(handle->decoder);
+    }
+    if (result != AVIF_RESULT_OK) {
+        LOGE("nativeAnimDecoderCreate: %s", avifResultToString(result));
+        avifDecoderDestroy(handle->decoder);
+        delete handle;
+        return 0;
+    }
+
+    LOGI("nativeAnimDecoderCreate: %dx%d, %d frame(s), sequence=%d",
+         handle->decoder->image->width, handle->decoder->image->height,
+         handle->decoder->imageCount, (int)handle->decoder->imageSequenceTrackPresent);
+    return reinterpret_cast<jlong>(handle);
+#else
+    return 0;
+#endif
+}
+
+/**
+ * Decodes the next frame as a DecodedImage carrying its own duration, or null when the
+ * sequence is exhausted.
+ */
+JNIEXPORT jobject JNICALL
+Java_com_alfikri_rizky_avifkit_AvifConverter_nativeAnimDecoderNextFrame(
+    JNIEnv* env,
+    jobject /* this */,
+    jlong handleValue) {
+
+#if HAVE_LIBAVIF
+    AnimDecoder* handle = reinterpret_cast<AnimDecoder*>(handleValue);
+    if (!handle || !handle->decoder) return nullptr;
+
+    avifDecoder* decoder = handle->decoder;
+    avifResult result = avifDecoderNextImage(decoder);
+    if (result != AVIF_RESULT_OK) {
+        // AVIF_RESULT_NO_IMAGES_REMAINING is the normal end of a sequence, not a failure.
+        if (result != AVIF_RESULT_NO_IMAGES_REMAINING) {
+            LOGE("avifDecoderNextImage failed: %s", avifResultToString(result));
+        }
+        return nullptr;
+    }
+
+    avifImage* image = decoder->image;
+    int irotAngle = 0;
+    int imirAxis = -1;
+    if (image->transformFlags & AVIF_TRANSFORM_IROT) irotAngle = image->irot.angle & 3;
+    if (image->transformFlags & AVIF_TRANSFORM_IMIR) imirAxis = image->imir.axis & 1;
+
+    avifRGBImage rgb;
+    avifRGBImageSetDefaults(&rgb, image);
+    rgb.format = AVIF_RGB_FORMAT_RGBA;
+    rgb.depth = 8;
+    if (avifRGBImageAllocatePixels(&rgb) != AVIF_RESULT_OK) {
+        LOGE("Failed to allocate RGB pixels for frame %d", decoder->imageIndex);
+        return nullptr;
+    }
+    if (avifImageYUVToRGB(image, &rgb) != AVIF_RESULT_OK) {
+        avifRGBImageFreePixels(&rgb);
+        LOGE("Failed to convert frame %d to RGB", decoder->imageIndex);
+        return nullptr;
+    }
+
+    const int width = rgb.width;
+    const int height = rgb.height;
+    std::vector<int32_t> pixels;
+    try {
+        pixels.resize(static_cast<size_t>(width) * static_cast<size_t>(height));
+    } catch (const std::bad_alloc&) {
+        avifRGBImageFreePixels(&rgb);
+        LOGE("Out of memory allocating %dx%d frame buffer", width, height);
+        return nullptr;
+    }
+
+    const uint8_t* src = rgb.pixels;
+    for (int i = 0; i < width * height; i++) {
+        uint32_t r = src[i * 4 + 0];
+        uint32_t g = src[i * 4 + 1];
+        uint32_t b = src[i * 4 + 2];
+        uint32_t a = src[i * 4 + 3];
+        pixels[i] = static_cast<int32_t>((a << 24) | (r << 16) | (g << 8) | b);
+    }
+    avifRGBImageFreePixels(&rgb);
+
+    const jint durationMillis = static_cast<jint>(
+        millisFrom(decoder->imageTiming.durationInTimescales,
+                   decoder->imageTiming.timescale,
+                   decoder->imageCount));
+
+    jclass decodedImageClass = env->FindClass("com/alfikri/rizky/avifkit/DecodedImage");
+    if (!decodedImageClass) {
+        if (env->ExceptionCheck()) { env->ExceptionDescribe(); env->ExceptionClear(); }
+        return nullptr;
+    }
+    jmethodID constructor = env->GetMethodID(decodedImageClass, "<init>", "([IIIIII)V");
+    if (!constructor) {
+        if (env->ExceptionCheck()) { env->ExceptionDescribe(); env->ExceptionClear(); }
+        return nullptr;
+    }
+
+    jintArray pixelArray = env->NewIntArray(pixels.size());
+    if (!pixelArray) return nullptr;
+    env->SetIntArrayRegion(pixelArray, 0, pixels.size(), reinterpret_cast<const jint*>(pixels.data()));
+
+    return env->NewObject(decodedImageClass, constructor,
+                          pixelArray, width, height, irotAngle, imirAxis, durationMillis);
+#else
+    return nullptr;
+#endif
+}
+
+JNIEXPORT void JNICALL
+Java_com_alfikri_rizky_avifkit_AvifConverter_nativeAnimDecoderDestroy(
+    JNIEnv* /* env */,
+    jobject /* this */,
+    jlong handleValue) {
+
+#if HAVE_LIBAVIF
+    AnimDecoder* handle = reinterpret_cast<AnimDecoder*>(handleValue);
+    if (!handle) return;
+    if (handle->decoder) avifDecoderDestroy(handle->decoder);
+    delete handle;
 #endif
 }
 

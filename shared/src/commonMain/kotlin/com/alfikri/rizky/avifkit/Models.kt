@@ -63,6 +63,10 @@ sealed class ImageInput {
  *   it does not.
  * @param compressionStrategy Strategy for adaptive compression when maxSize is set. SMART (default)
  *   finds highest quality within target size. STRICT finds smallest possible size.
+ * @param encodeAnimation Keep the animation when the input is an animated GIF, writing an AVIF
+ *   image sequence instead of a still. Set false to encode only the first frame. Has no effect on
+ *   single-frame input. [maxSize] is NOT applied to animated output — hitting a byte budget would
+ *   mean re-encoding every frame once per probe, so quality/[maxDimension] are the knobs here.
  */
 data class EncodingOptions(
   val quality: Int = 75,
@@ -74,6 +78,7 @@ data class EncodingOptions(
   val maxDimension: Int? = null,
   val maxSize: Long? = null,
   val compressionStrategy: CompressionStrategy = CompressionStrategy.SMART,
+  val encodeAnimation: Boolean = true,
 ) {
   init {
     require(quality in 0..100) { "Quality must be between 0 and 100" }
@@ -174,20 +179,38 @@ enum class CompressionStrategy {
   STRICT,
 }
 
+/**
+ * @param frameCount Number of frames; 1 for a still image. Populated for animated GIF input and for
+ *   AVIF image sequences (`avis`).
+ * @param durationMillis Playback time of one loop. 0 when the image is not animated.
+ * @param loopCount How many times playback repeats, where 0 means forever. Mirrors the GIF
+ *   NETSCAPE2.0 loop count and AVIF's repetition count.
+ */
 data class ImageInfo(
   val width: Int,
   val height: Int,
   val format: ImageFormat = ImageFormat.UNKNOWN,
   val hasAlpha: Boolean = false,
   val fileSize: Long? = null,
-)
+  val frameCount: Int = 1,
+  val durationMillis: Long = 0,
+  val loopCount: Int = 0,
+) {
+  val isAnimated: Boolean
+    get() = frameCount > 1
+}
+
+/** One frame of an animation, as returned by [AvifConverter.decodeAvifFrames]. */
+data class AvifFrame(val bitmap: PlatformBitmap, val durationMillis: Int)
 
 /**
  * Internal data class for decoded image data.
  *
  * [irotAngle]/[imirAxis] carry the AVIF `irot`/`imir` orientation properties (see [RgbaTransform]);
  * the Android JNI wrapper constructs this class reflectively, so the primary constructor signature
- * must stay in sync with `avif_jni_wrapper.cpp` (`([IIIII)V`).
+ * must stay in sync with `avif_jni_wrapper.cpp` (`([IIIIII)V`).
+ *
+ * [durationMillis] is only meaningful for frames pulled out of an image sequence.
  */
 data class DecodedImage(
   val pixels: IntArray,
@@ -195,6 +218,7 @@ data class DecodedImage(
   val height: Int,
   val irotAngle: Int = 0,
   val imirAxis: Int = -1,
+  val durationMillis: Int = 0,
 ) {
   override fun equals(other: Any?): Boolean {
     if (this === other) return true
@@ -205,6 +229,7 @@ data class DecodedImage(
     if (height != other.height) return false
     if (irotAngle != other.irotAngle) return false
     if (imirAxis != other.imirAxis) return false
+    if (durationMillis != other.durationMillis) return false
     return true
   }
 
@@ -214,6 +239,7 @@ data class DecodedImage(
     result = 31 * result + height
     result = 31 * result + irotAngle
     result = 31 * result + imirAxis
+    result = 31 * result + durationMillis
     return result
   }
 }

@@ -126,6 +126,29 @@ actual class AvifConverter {
       decodeAvifToImage(data)
     }
 
+  actual suspend fun decodeAvifFrames(
+    input: ImageInput,
+    maxDimension: Int?,
+    maxFrames: Int,
+  ): List<AvifFrame> =
+    withContext(Dispatchers.Default) {
+      require(maxFrames > 0) { "maxFrames must be positive" }
+      val data =
+        when (input) {
+          is ImageInput.FromBytes -> input.data.toNSData()
+          is ImageInput.FromPath -> {
+            val url = NSURL.fileURLWithPath(input.path)
+            NSData.dataWithContentsOfURL(url)
+              ?: throw AvifError.FileError("File not found: ${input.path}")
+          }
+
+          is ImageInput.FromFile -> input.file.readBytes().toNSData()
+          is ImageInput.FromBitmap -> throw AvifError.InvalidInput
+        }
+
+      decodeAvifFrameList(data, maxDimension, maxFrames)
+    }
+
   actual fun isAvifSupported(): Boolean {
     // libavif (+ aom) is statically linked into the framework via cinterop, so
     // the codec is always present — no runtime handler discovery needed.
@@ -199,6 +222,21 @@ actual class AvifConverter {
         return it
       }
     }
+    if (ImageFormats.detect(header) == ImageFormat.GIF) {
+      // Structure walk only — no LZW, no pixels — so this stays cheap for a 100 MB GIF.
+      GifDecoder.parse(nsData.toByteArray())?.let { gif ->
+        return ImageInfo(
+          width = gif.width,
+          height = gif.height,
+          format = ImageFormat.GIF,
+          hasAlpha = gif.hasTransparency,
+          fileSize = fileSize,
+          frameCount = gif.frameCount,
+          durationMillis = gif.durationMillis,
+          loopCount = gif.loopCount,
+        )
+      }
+    }
     val image = UIImage.imageWithData(nsData) ?: throw AvifError.InvalidInput
     val width = image.size.useContents { this.width }
     val height = image.size.useContents { this.height }
@@ -221,13 +259,23 @@ actual class AvifConverter {
       }
       if (avifDecoderParse(decoder) != AVIF_RESULT_OK) return@memScoped null
       val image = decoder.pointed.image ?: return@memScoped null
+      val frameCount = decoder.pointed.imageCount.coerceAtLeast(1)
+      val timescale = decoder.pointed.timescale
       ImageInfo(
         width = image.pointed.width.toInt(),
         height = image.pointed.height.toInt(),
         format = ImageFormat.AVIF,
-        // alphaPresent is valid after parse (image->alphaPlane isn't allocated until decode).
+        // alphaPresent, imageCount and the track timing are all valid after parse — no pixel
+        // decode is needed to answer "is this animated, and how long is it?".
         hasAlpha = decoder.pointed.alphaPresent != AVIF_FALSE,
         fileSize = fileSize,
+        frameCount = frameCount,
+        // libavif hands a still image a nominal 1-tick duration at timescale 1, which reads as a
+        // full second. A still has no playback time, so report none.
+        durationMillis =
+          if (frameCount <= 1 || timescale == 0uL) 0L
+          else (decoder.pointed.durationInTimescales * 1000uL / timescale).toLong(),
+        loopCount = AvifFormat.loopCountOf(decoder.pointed.repetitionCount),
       )
     } finally {
       avifDecoderDestroy(decoder)
@@ -241,18 +289,29 @@ actual class AvifConverter {
     options: EncodingOptions,
   ): NSData {
     val targetSize = options.maxSize!!
+    val bytes = readInputBytes(input)
+
+    // Animation wins over the byte budget. Reaching a target by dropping 47 of 48 frames changes
+    // what the image IS, and honouring it properly would re-encode the whole sequence once per
+    // binary-search probe. Documented on EncodingOptions.encodeAnimation.
+    if (bytes != null) {
+      animatedGif(bytes, options)?.let { gif ->
+        return encodeAnimatedGifToAvif(gif, options)
+      }
+    }
 
     // Already-AVIF input: return it untouched only when it fits the target. Otherwise decode it
     // (once) and re-encode — the passthrough would hand back the same oversized bytes forever.
-    val avifBytes = readInputAvifBytes(input)
     val source: UIImage =
-      if (avifBytes != null) {
-        val nsData = avifBytes.toNSData()
-        if (avifBytes.size <= targetSize) return nsData
+      if (bytes != null && AvifFormat.isAvif(bytes)) {
+        val nsData = bytes.toNSData()
+        if (bytes.size <= targetSize) return nsData
         decodeAvifToImage(nsData)
-      } else {
+      } else if (bytes != null) {
         // Decode the source ONCE; the loop only re-encodes it (M5 — previously each attempt
         // re-read and re-decoded the input).
+        imageFromData(bytes.toNSData())
+      } else {
         decodeSourceToImage(input)
       }
 
@@ -264,48 +323,58 @@ actual class AvifConverter {
     )
   }
 
-  /** The input's raw bytes when they already contain AVIF data, else null. */
-  private suspend fun readInputAvifBytes(input: ImageInput): ByteArray? {
-    val bytes =
-      when (input) {
-        is ImageInput.FromBytes -> input.data
-        is ImageInput.FromPath -> {
-          val url = NSURL.fileURLWithPath(input.path)
-          NSData.dataWithContentsOfURL(url)?.toByteArray() ?: return null
-        }
-        is ImageInput.FromFile -> input.file.readBytes()
-        is ImageInput.FromBitmap -> return null
+  /** The input's raw bytes, or null when the input is already a decoded image. */
+  private suspend fun readInputBytes(input: ImageInput): ByteArray? =
+    when (input) {
+      is ImageInput.FromBytes -> input.data
+      is ImageInput.FromPath -> {
+        val url = NSURL.fileURLWithPath(input.path)
+        NSData.dataWithContentsOfURL(url)?.toByteArray()
       }
-    return if (AvifFormat.isAvif(bytes)) bytes else null
-  }
+      is ImageInput.FromFile -> input.file.readBytes()
+      is ImageInput.FromBitmap -> null
+    }
 
   private suspend fun convertStandard(input: ImageInput, options: EncodingOptions): NSData =
     withContext(Dispatchers.Default) {
       when (input) {
-        is ImageInput.FromBytes -> {
-          val nsData = input.data.toNSData()
-          if (AvifFormat.isAvif(input.data)) nsData
-          else encodeImageToAvif(imageFromData(nsData), options)
-        }
-
         is ImageInput.FromBitmap -> encodeImageToAvif(input.bitmap, options)
+
+        is ImageInput.FromBytes -> encodeBytes(input.data, options)
 
         is ImageInput.FromPath -> {
           val url = NSURL.fileURLWithPath(input.path)
           val data = NSData.dataWithContentsOfURL(url) ?: throw AvifError.InvalidInput
-          // Sniff by content, not by ".avif" extension (M4).
-          if (AvifFormat.isAvif(data.headerBytes())) data
-          else encodeImageToAvif(imageFromData(data), options)
+          val header = data.headerBytes()
+          when {
+            // Sniff by content, not by ".avif" extension (M4).
+            AvifFormat.isAvif(header) -> data
+            // Only a GIF needs its bytes in Kotlin. Copying an NSData-backed file into a ByteArray
+            // for every input would double peak memory on the JPEG path for nothing.
+            ImageFormats.detect(header) == ImageFormat.GIF ->
+              encodeBytes(data.toByteArray(), options)
+            else -> encodeImageToAvif(imageFromData(data), options)
+          }
         }
 
-        is ImageInput.FromFile -> {
-          val byteData = input.file.readBytes()
-          val nsData = byteData.toNSData()
-          if (AvifFormat.isAvif(byteData)) nsData
-          else encodeImageToAvif(imageFromData(nsData), options)
-        }
+        is ImageInput.FromFile -> encodeBytes(input.file.readBytes(), options)
       }
     }
+
+  private fun encodeBytes(data: ByteArray, options: EncodingOptions): NSData =
+    when {
+      AvifFormat.isAvif(data) -> data.toNSData()
+      else ->
+        animatedGif(data, options)?.let { encodeAnimatedGifToAvif(it, options) }
+          ?: encodeImageToAvif(imageFromData(data.toNSData()), options)
+    }
+
+  /** The parsed GIF when [data] is a multi-frame GIF that should be encoded as an animation. */
+  private fun animatedGif(data: ByteArray, options: EncodingOptions): GifDecoder? {
+    if (!options.encodeAnimation) return null
+    if (ImageFormats.detect(data) != ImageFormat.GIF) return null
+    return GifDecoder.parse(data)?.takeIf { it.frameCount > 1 }
+  }
 
   /** Decode any non-AVIF input to a UIImage. Reads the source exactly once. */
   private suspend fun decodeSourceToImage(input: ImageInput): UIImage =
@@ -551,6 +620,237 @@ actual class AvifConverter {
         throw AvifError.OutOfMemory
       }
       throw AvifError.DecodingFailed("Decoding failed: ${e.message}")
+    }
+  }
+
+  /**
+   * Encodes a GIF's frames as an AVIF image sequence, the iOS analog of the JNI animation encoder.
+   *
+   * Frames stream: [GifDecoder] composes one frame at a time onto a reused canvas and each is
+   * handed straight to libavif, which encodes it inside `avifEncoderAddImage`. Peak memory is one
+   * frame's RGBA rather than the whole animation (92 MB for a 48-frame 800x600 GIF).
+   */
+  private fun encodeAnimatedGifToAvif(gif: GifDecoder, options: EncodingOptions): NSData {
+    val stream = GifFrameStream(gif, options.maxDimension)
+    val pixelFormat =
+      if (options.lossless) AVIF_PIXEL_FORMAT_YUV444
+      else
+        when (options.subsample) {
+          ChromaSubsample.YUV444 -> AVIF_PIXEL_FORMAT_YUV444
+          ChromaSubsample.YUV422 -> AVIF_PIXEL_FORMAT_YUV422
+          ChromaSubsample.YUV420 -> AVIF_PIXEL_FORMAT_YUV420
+        }
+
+    val encoder =
+      avifEncoderCreate() ?: throw AvifError.EncodingFailed("libavif: failed to create encoder")
+    try {
+      encoder.pointed.quality = if (options.lossless) AVIF_QUALITY_LOSSLESS else options.quality
+      encoder.pointed.qualityAlpha =
+        if (options.lossless) AVIF_QUALITY_LOSSLESS else options.alphaQuality
+      encoder.pointed.speed = options.speed
+      encoder.pointed.maxThreads = codecThreads
+      encoder.pointed.codecChoice = AVIF_CODEC_CHOICE_AUTO
+      encoder.pointed.timescale = GifFrameStream.TIMESCALE.toULong()
+      encoder.pointed.repetitionCount = stream.repetitionCount
+
+      var index = 0
+      stream.forEachFrame { rgba, durationMillis ->
+        addAnimationFrame(
+          encoder = encoder,
+          rgba = rgba,
+          width = stream.width,
+          height = stream.height,
+          pixelFormat = pixelFormat,
+          hasAlpha = stream.hasAlpha,
+          lossless = options.lossless,
+          durationMillis = durationMillis,
+          index = index,
+          frameCount = stream.frameCount,
+        )
+        index++
+      }
+
+      return memScoped {
+        val output = alloc<avifRWData>()
+        try {
+          val finishRes = avifEncoderFinish(encoder, output.ptr)
+          if (finishRes != AVIF_RESULT_OK) {
+            throw AvifError.EncodingFailed("libavif: ${avifResultToString(finishRes)?.toKString()}")
+          }
+          if (output.size == 0uL || output.data == null) {
+            throw AvifError.EncodingFailed("libavif: encoder produced empty animation")
+          }
+          NSData.create(bytes = output.data, length = output.size)
+        } finally {
+          avifRWDataFree(output.ptr)
+        }
+      }
+    } finally {
+      avifEncoderDestroy(encoder)
+    }
+  }
+
+  private fun addAnimationFrame(
+    encoder: CPointer<avifEncoder>,
+    rgba: ByteArray,
+    width: Int,
+    height: Int,
+    pixelFormat: avifPixelFormat,
+    hasAlpha: Boolean,
+    lossless: Boolean,
+    durationMillis: Int,
+    index: Int,
+    frameCount: Int,
+  ) {
+    val image =
+      avifImageCreate(width.toUInt(), height.toUInt(), 8u, pixelFormat)
+        ?: throw AvifError.EncodingFailed("libavif: failed to create frame $index")
+    try {
+      if (lossless) {
+        image.pointed.matrixCoefficients = AVIF_MATRIX_COEFFICIENTS_IDENTITY.convert()
+      }
+      val planes = if (hasAlpha) AVIF_PLANES_YUV or AVIF_PLANES_A else AVIF_PLANES_YUV
+      val allocRes = avifImageAllocatePlanes(image, planes)
+      if (allocRes != AVIF_RESULT_OK) {
+        throw AvifError.EncodingFailed("libavif: ${avifResultToString(allocRes)?.toKString()}")
+      }
+
+      memScoped {
+        rgba.usePinned { pinned ->
+          val rgb = alloc<avifRGBImage>()
+          avifRGBImageSetDefaults(rgb.ptr, image)
+          rgb.pixels = pinned.addressOf(0).reinterpret()
+          rgb.rowBytes = (width * 4).toUInt()
+          rgb.format = AVIF_RGB_FORMAT_RGBA
+          rgb.depth = 8u
+          // GIF transparency is binary, so composited frames are identical under straight and
+          // premultiplied alpha. Straight is what AVIF stores, so nothing is converted.
+          rgb.alphaPremultiplied = AVIF_FALSE
+          rgb.ignoreAlpha = if (hasAlpha) AVIF_FALSE else AVIF_TRUE
+
+          val convertRes = avifImageRGBToYUV(image, rgb.ptr)
+          if (convertRes != AVIF_RESULT_OK) {
+            throw AvifError.EncodingFailed(
+              "libavif: ${avifResultToString(convertRes)?.toKString()}"
+            )
+          }
+        }
+      }
+
+      val duration = if (durationMillis > 0) durationMillis else 1
+      val addRes =
+        avifEncoderAddImage(encoder, image, duration.toULong(), AVIF_ADD_IMAGE_FLAG_NONE.convert())
+      if (addRes != AVIF_RESULT_OK) {
+        throw AvifError.EncodingFailed(
+          "libavif: frame $index of $frameCount — ${avifResultToString(addRes)?.toKString()}"
+        )
+      }
+    } finally {
+      avifImageDestroy(image)
+    }
+  }
+
+  /** Decodes the frames of an AVIF, still images included (one frame, zero duration). */
+  private fun decodeAvifFrameList(
+    avifData: NSData,
+    maxDimension: Int?,
+    maxFrames: Int,
+  ): List<AvifFrame> {
+    val decoder =
+      avifDecoderCreate() ?: throw AvifError.DecodingFailed("libavif: failed to create decoder")
+    try {
+      decoder.pointed.maxThreads = codecThreads
+      decoder.pointed.ignoreXMP = AVIF_TRUE
+      decoder.pointed.ignoreExif = AVIF_FALSE
+
+      val ioRes =
+        avifDecoderSetIOMemory(decoder, avifData.bytes?.reinterpret<UByteVar>(), avifData.length)
+      if (ioRes != AVIF_RESULT_OK) {
+        throw AvifError.DecodingFailed("libavif: ${avifResultToString(ioRes)?.toKString()}")
+      }
+      val parseRes = avifDecoderParse(decoder)
+      if (parseRes != AVIF_RESULT_OK) {
+        throw AvifError.DecodingFailed("libavif: ${avifResultToString(parseRes)?.toKString()}")
+      }
+
+      val frames = mutableListOf<AvifFrame>()
+      while (frames.size < maxFrames) {
+        val nextRes = avifDecoderNextImage(decoder)
+        if (nextRes == AVIF_RESULT_NO_IMAGES_REMAINING) break
+        if (nextRes != AVIF_RESULT_OK) {
+          throw AvifError.DecodingFailed("libavif: ${avifResultToString(nextRes)?.toKString()}")
+        }
+        val image = decoder.pointed.image ?: break
+        val timing = decoder.pointed.imageTiming
+        // A still image gets libavif's nominal 1-tick duration; report it as no duration at all.
+        val durationMillis =
+          if (decoder.pointed.imageCount <= 1 || timing.timescale == 0uL) 0
+          else (timing.durationInTimescales * 1000uL / timing.timescale).toInt()
+        // Scale immediately: only one full-size frame is alive at a time, so a long animation
+        // costs the scaled total plus one frame instead of the full-size total.
+        val frame = frameToUIImage(image)
+        frames += AvifFrame(maxDimension?.let { resizeImage(frame, it) } ?: frame, durationMillis)
+      }
+      if (frames.isEmpty()) throw AvifError.DecodingFailed("libavif: no frames decoded")
+      return frames
+    } finally {
+      avifDecoderDestroy(decoder)
+    }
+  }
+
+  /** YUV -> RGBA -> UIImage for one decoded frame, applying the AVIF irot/imir transform. */
+  private fun frameToUIImage(decodedImage: CPointer<avifImage>): UIImage = memScoped {
+    val rgb = alloc<avifRGBImage>()
+    avifRGBImageSetDefaults(rgb.ptr, decodedImage)
+    rgb.format = AVIF_RGB_FORMAT_RGBA
+    rgb.depth = 8u
+    // See decodeAvifToImage: the CGImage this ends up in is declared premultiplied, the only
+    // mode CGBitmapContext supports.
+    rgb.alphaPremultiplied = AVIF_TRUE
+    val allocRes = avifRGBImageAllocatePixels(rgb.ptr)
+    if (allocRes != AVIF_RESULT_OK) {
+      throw AvifError.DecodingFailed("libavif: ${avifResultToString(allocRes)?.toKString()}")
+    }
+    try {
+      val yuvRes = avifImageYUVToRGB(decodedImage, rgb.ptr)
+      if (yuvRes != AVIF_RESULT_OK) {
+        throw AvifError.DecodingFailed("libavif: ${avifResultToString(yuvRes)?.toKString()}")
+      }
+
+      val transformFlags = decodedImage.pointed.transformFlags
+      val irotAngle =
+        if (transformFlags and AVIF_TRANSFORM_IROT.toUInt() != 0u) {
+          decodedImage.pointed.irot.angle.toInt() and 3
+        } else 0
+      val imirAxis =
+        if (transformFlags and AVIF_TRANSFORM_IMIR.toUInt() != 0u) {
+          decodedImage.pointed.imir.axis.toInt() and 1
+        } else -1
+
+      val width = rgb.width.toInt()
+      val height = rgb.height.toInt()
+      val rowBytes = rgb.rowBytes.toInt()
+      val image =
+        if (RgbaTransform.isIdentity(irotAngle, imirAxis)) {
+          rgbaToUIImage(rgb.pixels!!, width, height, rowBytes)
+        } else {
+          val srcBytes = ByteArray(rowBytes * height)
+          srcBytes.usePinned { pinned ->
+            memcpy(pinned.addressOf(0), rgb.pixels, (rowBytes * height).toULong())
+          }
+          val oriented = RgbaTransform.apply(srcBytes, width, height, rowBytes, irotAngle, imirAxis)
+          oriented.pixels.usePinned { pinned ->
+            rgbaToUIImage(
+              pinned.addressOf(0).reinterpret(),
+              oriented.width,
+              oriented.height,
+              oriented.width * 4,
+            )
+          }
+        }
+      image ?: throw AvifError.DecodingFailed("libavif: failed to build UIImage from RGBA")
+    } finally {
+      avifRGBImageFreePixels(rgb.ptr)
     }
   }
 

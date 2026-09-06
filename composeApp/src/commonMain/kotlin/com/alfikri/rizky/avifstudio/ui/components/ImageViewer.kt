@@ -19,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -43,12 +44,22 @@ import com.alfikri.rizky.avifstudio.resources.decoding
 import com.alfikri.rizky.avifstudio.resources.view_full_screen
 import com.alfikri.rizky.avifstudio.resources.viewer_hint
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
+
+/** One frame of a decoded image; a still is a single frame with no duration. */
+data class PreviewFrame(val image: ImageBitmap, val durationMillis: Int)
 
 sealed interface DecodeState {
   data object Loading : DecodeState
 
-  data class Ready(val image: ImageBitmap) : DecodeState
+  data class Ready(val frames: List<PreviewFrame>) : DecodeState {
+    init {
+      // Constructed inside rememberDecodedImage's try, so a decoder that returned nothing surfaces
+      // as "cannot decode" rather than crashing the renderer on frames.first().
+      require(frames.isNotEmpty()) { "A decoded image needs at least one frame" }
+    }
+  }
 
   data class Failed(val message: String) : DecodeState
 }
@@ -67,7 +78,11 @@ fun rememberDecodedImage(file: PlatformFile, maxDimension: Int): DecodeState {
   LaunchedEffect(file, maxDimension) {
     state =
       try {
-        DecodeState.Ready(ConversionEngine().decodeForDisplay(file, maxDimension).toImageBitmap())
+        DecodeState.Ready(
+          ConversionEngine().decodeFramesForDisplay(file, maxDimension).map {
+            PreviewFrame(it.bitmap.toImageBitmap(), it.durationMillis)
+          }
+        )
       } catch (cancellation: CancellationException) {
         // Leaving the screen cancels this effect. Swallowing it rendered
         // "StandaloneCoroutine was cancelled" as if the image were broken.
@@ -95,7 +110,7 @@ fun ImagePreview(file: PlatformFile, maxDimension: Int, modifier: Modifier = Mod
         )
       is DecodeState.Ready ->
         Image(
-          bitmap = state.image,
+          bitmap = playingFrame(state.frames),
           contentDescription = null,
           contentScale = ContentScale.Fit,
           modifier = Modifier.fillMaxSize(),
@@ -131,7 +146,7 @@ fun FullScreenImageViewer(file: PlatformFile, onDismiss: () -> Unit) {
             modifier = Modifier.align(Alignment.Center).padding(24.dp),
           )
         is DecodeState.Ready ->
-          ZoomableImage(state.image, stringResource(Res.string.view_full_screen))
+          ZoomableImage(playingFrame(state.frames), stringResource(Res.string.view_full_screen))
       }
 
       if (state is DecodeState.Ready) {
@@ -159,6 +174,29 @@ fun FullScreenImageViewer(file: PlatformFile, onDismiss: () -> Unit) {
     }
   }
 }
+
+/**
+ * The frame to draw right now, advancing on each frame's own delay. A still (one frame) never
+ * starts a coroutine, so nothing about the previous behaviour changes for a photo.
+ *
+ * The floor exists because AVIF, like GIF, can declare delays a display cannot keep up with;
+ * without it a pathological file spins the composition as fast as the device will allow.
+ */
+@Composable
+private fun playingFrame(frames: List<PreviewFrame>): ImageBitmap {
+  if (frames.size <= 1) return frames.first().image
+
+  var index by remember(frames) { mutableIntStateOf(0) }
+  LaunchedEffect(frames) {
+    while (true) {
+      delay(frames[index].durationMillis.coerceAtLeast(MIN_FRAME_DELAY_MS).toLong())
+      index = (index + 1) % frames.size
+    }
+  }
+  return frames[index].image
+}
+
+private const val MIN_FRAME_DELAY_MS = 20
 
 @Composable
 private fun ZoomableImage(image: ImageBitmap, contentDescription: String) {

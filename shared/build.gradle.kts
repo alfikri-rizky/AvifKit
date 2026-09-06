@@ -109,9 +109,17 @@ kotlin {
       // kotlinx-io for FileKit's I/O operations
       implementation(libs.kotlinx.io.core)
     }
-    commonTest.dependencies {
-      implementation(libs.kotlin.test)
-      implementation(libs.kotlinx.coroutines.test)
+    // GIF fixtures are shared by three suites that live in different source-set trees: the JVM
+    // unit tests, the Android instrumented tests and the iOS simulator tests. A source directory
+    // is how they reach all three — a dependsOn(commonTest) edge from androidDeviceTest crosses
+    // trees, which turns OFF the default hierarchy template for the whole module.
+    val fixtures = "src/commonTestFixtures/kotlin"
+    commonTest {
+      kotlin.srcDir(fixtures)
+      dependencies {
+        implementation(libs.kotlin.test)
+        implementation(libs.kotlinx.coroutines.test)
+      }
     }
     androidMain.dependencies {
       implementation(libs.kotlinx.coroutines.android)
@@ -122,9 +130,12 @@ kotlin {
       // consumers of io.github.alfikri-rizky:avifkit receive the .so automatically.
       implementation(projects.sharedNative)
     }
-    getByName("androidDeviceTest").dependencies {
-      implementation(libs.androidx.testExt.junit)
-      implementation(libs.androidx.test.runner)
+    getByName("androidDeviceTest") {
+      kotlin.srcDir(fixtures)
+      dependencies {
+        implementation(libs.androidx.testExt.junit)
+        implementation(libs.androidx.test.runner)
+      }
     }
   }
 }

@@ -45,6 +45,15 @@ internal object AvifFormat {
     return false
   }
 
+  /**
+   * Converts libavif's `repetitionCount` to [ImageInfo.loopCount].
+   *
+   * libavif counts *repeats* (`n` plays the sequence n+1 times) and uses negative sentinels for
+   * infinite and unknown; ImageInfo counts *plays*, with 0 meaning forever — the GIF convention, so
+   * a GIF and the AVIF it converted to report the same number.
+   */
+  fun loopCountOf(repetitionCount: Int): Int = if (repetitionCount < 0) 0 else repetitionCount + 1
+
   private fun readBe32(data: ByteArray, offset: Int): Int =
     ((data[offset].toInt() and 0xFF) shl 24) or
       ((data[offset + 1].toInt() and 0xFF) shl 16) or

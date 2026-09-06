@@ -101,6 +101,8 @@
     <string name="converted">Hasil</string>
     <string name="dimensions">Dimensi</string>
     <string name="file_size">Ukuran berkas</string>
+    <string name="frames">Frame</string>
+    <string name="frames_value">%1$s frame · %2$s</string>
     <string name="time_taken">Waktu</string>
     <string name="view_full_screen">Lihat layar penuh</string>
 

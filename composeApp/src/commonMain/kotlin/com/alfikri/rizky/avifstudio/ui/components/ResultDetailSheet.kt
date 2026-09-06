@@ -33,6 +33,8 @@ import com.alfikri.rizky.avifstudio.resources.Res
 import com.alfikri.rizky.avifstudio.resources.converted
 import com.alfikri.rizky.avifstudio.resources.dimensions
 import com.alfikri.rizky.avifstudio.resources.file_size
+import com.alfikri.rizky.avifstudio.resources.frames
+import com.alfikri.rizky.avifstudio.resources.frames_value
 import com.alfikri.rizky.avifstudio.resources.original
 import com.alfikri.rizky.avifstudio.resources.share
 import com.alfikri.rizky.avifstudio.resources.time_taken
@@ -90,6 +92,23 @@ fun ResultDetailSheet(job: ConversionJob, onDismiss: () -> Unit, onShare: (Platf
           },
         after = formatDimensions(output.width, output.height),
       )
+      if (output.isAnimated) {
+        // Only shown for an animation: on a photo "1 frame" is noise, and it is the one fact that
+        // tells the user the GIF they fed in came out still moving.
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+          Text(stringResource(Res.string.frames), style = MaterialTheme.typography.bodyMedium)
+          Text(
+            text =
+              stringResource(
+                Res.string.frames_value,
+                output.frameCount.toString(),
+                formatDuration(output.durationMillis),
+              ),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+      }
       Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(stringResource(Res.string.time_taken), style = MaterialTheme.typography.bodyMedium)
         Text(formatDuration(output.elapsedMillis), style = MaterialTheme.typography.bodyMedium)
