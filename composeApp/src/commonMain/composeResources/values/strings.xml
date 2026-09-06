@@ -80,6 +80,8 @@
     <string name="strategy_strict_hint">Keeps compressing past your limit</string>
     <string name="skip_if_larger">Keep the original if it was smaller</string>
     <string name="skip_if_larger_hint">Some images genuinely do not compress any further</string>
+    <string name="preserve_metadata">Keep EXIF and XMP</string>
+    <string name="preserve_metadata_hint">Capture date and camera travel with the photo. For GPS use Add files — the system photo picker removes it first.</string>
 
     <!-- Progress and results -->
     <string name="converting">Converting…</string>

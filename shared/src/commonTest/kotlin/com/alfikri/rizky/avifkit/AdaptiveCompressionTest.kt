@@ -66,6 +66,21 @@ class AdaptiveCompressionTest {
   }
 
   @Test
+  fun fallback_keepsTheCallersMetadataChoice() = runTest {
+    // Whether a photo keeps its capture date must not depend on how hard the encoder had to work.
+    val enc = FakeEncoder()
+    AdaptiveCompression.compress(
+      EncodingOptions(compressionStrategy = CompressionStrategy.SMART, preserveMetadata = true),
+      targetSize = 10, // nothing fits, so the fallback options are what actually encode
+      encode = enc::encode,
+      sizeOf = { (it * 100).toLong() },
+    )
+    assertEquals(40, enc.optionsSeen.last().quality, "the fallback really did run")
+    assertTrue(enc.optionsSeen.last().preserveMetadata)
+    assertTrue(enc.optionsSeen.all { it.preserveMetadata }, "every probe keeps it too")
+  }
+
+  @Test
   fun strict_returnsSmallestThatFits() = runTest {
     val enc = FakeEncoder()
     val result =

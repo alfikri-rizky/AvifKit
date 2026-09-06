@@ -29,6 +29,8 @@ actual class AvifConverter {
     subsample: Int,
     lossless: Boolean,
     hasAlpha: Boolean,
+    exif: ByteArray?,
+    xmp: ByteArray?,
   ): ByteArray?
 
   private external fun nativeDecode(avifData: ByteArray): DecodedImage?
@@ -395,7 +397,7 @@ actual class AvifConverter {
     return AdaptiveCompression.compress(
       options = options,
       targetSize = targetSize,
-      encode = { opts -> encodeBitmapToAvif(source, opts) },
+      encode = { opts -> encodeBitmapToAvif(source, opts, bytes) },
       sizeOf = { it.size.toLong() },
     )
   }
@@ -433,7 +435,7 @@ actual class AvifConverter {
       AvifFormat.isAvif(data) -> data
       else ->
         animatedGif(data, options)?.let { encodeAnimatedGifToAvif(it, options) }
-          ?: encodeBitmapToAvif(decodeBytesToOrientedBitmap(data), options)
+          ?: encodeBitmapToAvif(decodeBytesToOrientedBitmap(data), options, data)
     }
 
   /** The parsed GIF when [data] is a multi-frame GIF that should be encoded as an animation. */
@@ -522,7 +524,16 @@ actual class AvifConverter {
     return applyExifOrientation(bitmap, data)
   }
 
-  private fun encodeBitmapToAvif(bitmap: Bitmap, options: EncodingOptions): ByteArray {
+  /**
+   * [sourceBytes] are the original file's bytes, needed only for [EncodingOptions.preserveMetadata]
+   * — null when the caller started from a decoded Bitmap, which has no file (and so no metadata)
+   * behind it.
+   */
+  private fun encodeBitmapToAvif(
+    bitmap: Bitmap,
+    options: EncodingOptions,
+    sourceBytes: ByteArray? = null,
+  ): ByteArray {
     try {
       // HARDWARE bitmaps (Coil/Glide default on API 26+) have no accessible pixels; copy to a
       // readable config first, else getPixels() throws (M1). Must happen before resize/getPixels.
@@ -554,6 +565,13 @@ actual class AvifConverter {
       // decode. A JPEG-backed bitmap reports hasAlpha()==false.
       val hasAlpha = resizedBitmap.hasAlpha()
 
+      // Read AFTER the resize: the Exif pixel-dimension tags have to describe the encoded image,
+      // not the file it came from.
+      val metadata =
+        if (options.preserveMetadata) {
+          EncodedMetadata.forSource(sourceBytes, resizedBitmap.width, resizedBitmap.height)
+        } else null
+
       // Encode using native method (works with or without libavif)
       return nativeEncode(
         pixels,
@@ -565,6 +583,8 @@ actual class AvifConverter {
         subsampleValue,
         options.lossless,
         hasAlpha,
+        metadata?.exif,
+        metadata?.xmp,
       ) ?: throw AvifError.EncodingFailed("Native encoding failed")
     } catch (e: OutOfMemoryError) {
       Log.e(TAG, "OutOfMemoryError during AVIF encoding", e)

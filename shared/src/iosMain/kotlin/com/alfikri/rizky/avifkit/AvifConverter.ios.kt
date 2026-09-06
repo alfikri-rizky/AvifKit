@@ -10,6 +10,7 @@ import platform.CoreGraphics.*
 import platform.Foundation.*
 import platform.UIKit.*
 import platform.posix.memcpy
+import platform.posix.size_t
 
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 actual class AvifConverter {
@@ -318,7 +319,7 @@ actual class AvifConverter {
     return AdaptiveCompression.compress(
       options = options,
       targetSize = targetSize,
-      encode = { opts -> encodeImageToAvif(source, opts) },
+      encode = { opts -> encodeImageToAvif(source, opts, bytes) },
       sizeOf = { it.length.toLong() },
     )
   }
@@ -353,7 +354,14 @@ actual class AvifConverter {
             // for every input would double peak memory on the JPEG path for nothing.
             ImageFormats.detect(header) == ImageFormat.GIF ->
               encodeBytes(data.toByteArray(), options)
-            else -> encodeImageToAvif(imageFromData(data), options)
+            // toByteArray() doubles peak memory for the file, so it is paid only when the
+            // caller actually asked for the metadata inside it.
+            else ->
+              encodeImageToAvif(
+                imageFromData(data),
+                options,
+                if (options.preserveMetadata) data.toByteArray() else null,
+              )
           }
         }
 
@@ -366,7 +374,7 @@ actual class AvifConverter {
       AvifFormat.isAvif(data) -> data.toNSData()
       else ->
         animatedGif(data, options)?.let { encodeAnimatedGifToAvif(it, options) }
-          ?: encodeImageToAvif(imageFromData(data.toNSData()), options)
+          ?: encodeImageToAvif(imageFromData(data.toNSData()), options, data)
     }
 
   /** The parsed GIF when [data] is a multi-frame GIF that should be encoded as an animation. */
@@ -397,7 +405,11 @@ actual class AvifConverter {
    * the Android JNI path (shared-native/.../avif_jni_wrapper.cpp): extract RGBA bytes from the
    * image, convert RGB→YUV, then avifEncoderWrite. No Swift, no handler registration.
    */
-  private fun encodeImageToAvif(image: UIImage, options: EncodingOptions): NSData {
+  private fun encodeImageToAvif(
+    image: UIImage,
+    options: EncodingOptions,
+    sourceBytes: ByteArray? = null,
+  ): NSData {
     try {
       // Determine alpha from the ORIGINAL image: resizing renders into an RGBA context that always
       // carries an alpha channel, so it can't be the source of truth (M6).
@@ -405,7 +417,13 @@ actual class AvifConverter {
       // Orientation-normalize + optional downscale, then pull RGBA8888 bytes via CoreGraphics.
       val normalized = options.maxDimension?.let { resizeImage(image, it) } ?: image
       val rgba = uiImageToRgba(normalized) ?: throw AvifError.InvalidInput
-      return encodeRgbaToAvif(rgba.pixels, rgba.width, rgba.height, options, hasAlpha)
+      // Read AFTER the resize: the Exif pixel-dimension tags have to describe the encoded image,
+      // not the file it came from.
+      val metadata =
+        if (options.preserveMetadata) {
+          EncodedMetadata.forSource(sourceBytes, rgba.width, rgba.height)
+        } else null
+      return encodeRgbaToAvif(rgba.pixels, rgba.width, rgba.height, options, hasAlpha, metadata)
     } catch (e: AvifError) {
       throw e
     } catch (e: OutOfMemoryError) {
@@ -428,6 +446,7 @@ actual class AvifConverter {
     height: Int,
     options: EncodingOptions,
     hasAlpha: Boolean,
+    metadata: SourceMetadata? = null,
   ): NSData = memScoped {
     val pixelFormat =
       if (options.lossless) {
@@ -465,6 +484,24 @@ actual class AvifConverter {
       encoder.pointed.speed = options.speed
       encoder.pointed.maxThreads = codecThreads
       encoder.pointed.codecChoice = AVIF_CODEC_CHOICE_AUTO
+
+      // Exif/XMP carried over from the source (EncodingOptions.preserveMetadata). A libavif
+      // failure here is logged, not thrown: losing a tag beats failing the conversion.
+      fun attach(
+        blob: ByteArray?,
+        label: String,
+        set: (CValuesRef<avifImage>?, CValuesRef<UByteVar>?, size_t) -> avifResult,
+      ) {
+        if (blob == null || blob.isEmpty()) return
+        blob.usePinned { pinned ->
+          val res = set(avifImage, pinned.addressOf(0).reinterpret(), blob.size.convert())
+          if (res != AVIF_RESULT_OK) {
+            NSLog("⚠️ Failed to attach $label: ${avifResultToString(res)?.toKString()}")
+          }
+        }
+      }
+      attach(metadata?.exif, "Exif", ::avifImageSetMetadataExif)
+      attach(metadata?.xmp, "XMP", ::avifImageSetMetadataXMP)
 
       // Opaque sources skip the alpha plane entirely (M6): smaller output, no phantom alpha on
       // decode. avifImageRGBToYUV also honors rgb.ignoreAlpha below, so the two agree.

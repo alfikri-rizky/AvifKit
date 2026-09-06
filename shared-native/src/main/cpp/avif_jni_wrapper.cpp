@@ -60,6 +60,34 @@ struct AnimDecoder {
     std::vector<uint8_t> data;
 };
 
+// Copies a Java byte[] metadata blob onto the avifImage. A libavif failure is logged and treated
+// as "no metadata", because losing an Exif block is a far smaller harm than failing the conversion.
+//
+// The Kotlin side guarantees the Exif payload is one libavif can parse (EncodedMetadata rewrites
+// and validates it). That matters: avifEncoderWrite() rejects a payload it cannot find a TIFF
+// header in, so an unchecked blob would turn into a failed encode rather than a missing tag.
+void attachBlob(JNIEnv* env,
+                avifImage* image,
+                jbyteArray source,
+                const char* label,
+                avifResult (*set)(avifImage*, const uint8_t*, size_t)) {
+    if (source == nullptr) return;
+    jsize length = env->GetArrayLength(source);
+    if (length <= 0) return;
+    jbyte* bytes = env->GetByteArrayElements(source, nullptr);
+    if (!bytes) return;
+    avifResult result = set(image, reinterpret_cast<const uint8_t*>(bytes), (size_t)length);
+    env->ReleaseByteArrayElements(source, bytes, JNI_ABORT);
+    if (result != AVIF_RESULT_OK) {
+        LOGE("Failed to attach %s metadata: %s", label, avifResultToString(result));
+    }
+}
+
+void setImageMetadata(JNIEnv* env, avifImage* image, jbyteArray exif, jbyteArray xmp) {
+    attachBlob(env, image, exif, "Exif", avifImageSetMetadataExif);
+    attachBlob(env, image, xmp, "XMP", avifImageSetMetadataXMP);
+}
+
 // Playback time in milliseconds. libavif gives a still image a nominal 1-tick duration at
 // timescale 1, which would read as a full second — a still has no playback time, so callers pass
 // frameCount and get 0 back for one.
@@ -88,7 +116,9 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeEncode(
     jint speed,
     jint subsample,
     jboolean lossless,
-    jboolean hasAlpha) {
+    jboolean hasAlpha,
+    jbyteArray exif,
+    jbyteArray xmp) {
 
     LOGI("nativeEncode: %dx%d, quality=%d, alphaQuality=%d, speed=%d, subsample=%d, lossless=%d, hasAlpha=%d",
          width, height, quality, alphaQuality, speed, subsample, (int)lossless, (int)hasAlpha);
@@ -163,6 +193,10 @@ Java_com_alfikri_rizky_avifkit_AvifConverter_nativeEncode(
         // quality=100 alone is NOT lossless. avifImageCreate defaults to full range.
         image->matrixCoefficients = AVIF_MATRIX_COEFFICIENTS_IDENTITY;
     }
+
+    // Exif/XMP carried over from the source (EncodingOptions.preserveMetadata). Both are null when
+    // the caller asked for a stripped file, which is the default.
+    setImageMetadata(env, image, exif, xmp);
 
     // Allocate image planes. Opaque sources skip the alpha plane entirely (M6): no wasted
     // all-0xFF alpha OBU, smaller files, and no phantom alpha reported on decode.

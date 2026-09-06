@@ -19,6 +19,21 @@ data class ConversionSettings(
   val subsample: ChromaSubsample = ChromaSubsample.YUV420,
   val alphaQuality: Int = DEFAULT_ALPHA_QUALITY,
   val lossless: Boolean = false,
+  /**
+   * Carry the source's EXIF and XMP into the output.
+   *
+   * Off by default, and deliberately not part of any preset: EXIF routinely carries the GPS
+   * coordinates the photo was taken at, and an app that quietly republished those would be doing
+   * something the user never asked for. AVIF-only — the JPEG/PNG/WebP output paths here do not
+   * write metadata.
+   *
+   * GPS is the one tag this cannot promise. Android's system photo picker hands back Exif with the
+   * GPS values zeroed unless the app holds ACCESS_MEDIA_LOCATION, which on API 33+ only means
+   * anything alongside READ_MEDIA_IMAGES — the "Photos and videos" permission this app deliberately
+   * does without (see the comment in AndroidManifest.xml). Files chosen through "Add files" (SAF)
+   * arrive intact, which is what the toggle's hint tells the user.
+   */
+  val preserveMetadata: Boolean = false,
   val maxDimension: Int? = null,
   val targetSizeBytes: Long? = null,
   val strategy: CompressionStrategy = CompressionStrategy.SMART,
@@ -53,9 +68,7 @@ data class ConversionSettings(
       subsample = subsample,
       alphaQuality = alphaQuality.coerceIn(0, 100),
       lossless = lossless,
-      // AvifKit documents preserveMetadata as a not-yet-implemented no-op, so leaving it false
-      // keeps the UI honest — there is no toggle for it.
-      preserveMetadata = false,
+      preserveMetadata = preserveMetadata,
       maxDimension = effectiveMaxDimension,
       maxSize = targetSizeBytes?.takeIf { it > 0 },
       compressionStrategy = strategy,
