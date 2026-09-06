@@ -4,6 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class EncodingOptionsTest {
 
@@ -26,14 +27,22 @@ class EncodingOptionsTest {
   }
 
   @Test
-  fun qualityPreset_doesNotPromiseUnimplementedMetadataPreservation() {
-    // preserveMetadata is a documented no-op until implemented; presets must not set it.
-    Priority.entries.forEach { priority ->
+  fun onlyTheQualityPreset_keepsMetadata() {
+    // Exif carries GPS, so every preset whose job is small files strips it; QUALITY is the archival
+    // one and keeps it. The default stays off (see below) so an upgrade can't start republishing
+    // locations on its own.
+    assertTrue(EncodingOptions.fromPriority(Priority.QUALITY).preserveMetadata)
+    listOf(Priority.SPEED, Priority.STORAGE, Priority.BALANCED).forEach { priority ->
       assertFalse(
         EncodingOptions.fromPriority(priority).preserveMetadata,
-        "preset $priority must not promise metadata preservation",
+        "preset $priority optimises for size and must not carry metadata",
       )
     }
+  }
+
+  @Test
+  fun defaults_stripMetadata() {
+    assertFalse(EncodingOptions().preserveMetadata)
   }
 
   @Test

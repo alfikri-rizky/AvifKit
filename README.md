@@ -124,7 +124,7 @@ AvifKit is a production-ready Kotlin Multiplatform library for AVIF image encodi
 - Image resizing with dimension constraints
 - Chroma subsampling options (YUV444, YUV422, YUV420)
 - Alpha channel quality control
-- Metadata preservation (optional)
+- EXIF and XMP preservation (opt-in via `preserveMetadata`; off by default because EXIF carries GPS)
 - Multiple input types (ByteArray, Bitmap/UIImage, file path)
 
 ### Architecture
@@ -412,6 +412,7 @@ pod 'AvifKit', '~> 0.3.2'
 | **iOS Native** | ✅ Complete | `shared/src/iosMain/kotlin/` + `shared/src/nativeInterop/` | cinterop + libavif (no Swift) |
 | **Adaptive Compression** | ✅ Complete | Both platforms | SMART & STRICT strategies |
 | **Orientation Support** | ✅ Complete | Both platforms | EXIF (Android), UIImage (iOS) |
+| **Metadata Preservation** | ✅ Complete | Both platforms | EXIF + XMP from JPEG/PNG/WebP; opt-in, ICC not carried |
 | **Fallback Mode** | ❌ Removed | Both platforms | Replaced with explicit `AvifError` exceptions |
 | **Distribution** | ✅ Complete | `Package.swift` | SPM support (CocoaPods coming soon) |
 | **Build Configuration** | ✅ Complete | `shared/build.gradle.kts` | Ready for publishing |
@@ -433,7 +434,16 @@ pod 'AvifKit', '~> 0.3.2'
    - iOS uses `UIImage`
    - Abstracted via `PlatformBitmap` expect/actual pattern
 
-4. **Build Requirements (for library authors only):**
+4. **Metadata Preservation Scope:**
+   - `preserveMetadata` reads EXIF and XMP from **JPEG, PNG and WebP** sources only — HEIC keeps its
+     metadata in ISOBMFF items this library does not parse, and a GIF has nowhere to put EXIF (so
+     animated output carries none)
+   - **ICC profiles are not carried.** Both platforms draw the source through an sRGB context on the
+     way to the encoder, so the source profile would misdescribe the pixels it was attached to
+   - Orientation is rewritten to "normal" and the EXIF pixel-dimension tags are updated, because both
+     describe the input rather than the encoded output
+
+5. **Build Requirements (for library authors only):**
    - Android: Requires NDK and CMake to build from source
    - iOS: Requires Xcode and CocoaPods/SPM
    - End users don't need these - they get pre-built binaries

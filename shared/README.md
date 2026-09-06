@@ -28,7 +28,7 @@ A Kotlin Multiplatform library for converting images to AVIF format, supporting 
   - Target file size
   - Alpha channel quality
   - Lossless mode
-  - Metadata preservation
+  - EXIF/XMP preservation (opt-in)
 
 ## 📦 Installation
 
@@ -150,7 +150,14 @@ val options = EncodingOptions(
     maxSize = 500_000, // Target 500KB
     compressionStrategy = CompressionStrategy.SMART
 )
+```
 
+`preserveMetadata` copies the source's EXIF and XMP into the AVIF (capture date, camera, GPS,
+ratings). It is off by default because EXIF routinely carries the photographer's location. Sources
+must be JPEG, PNG or WebP; ICC profiles are not carried. Orientation is rewritten to "normal" since
+AvifKit has already baked it into the pixels — see the `EncodingOptions` KDoc for the full contract.
+
+```kotlin
 // Convert with custom options
 val resultFile = converter.convertToFile(
     input = input,

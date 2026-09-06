@@ -36,6 +36,8 @@ import com.alfikri.rizky.avifstudio.resources.keep_original_size
 import com.alfikri.rizky.avifstudio.resources.lossless
 import com.alfikri.rizky.avifstudio.resources.lossless_hint
 import com.alfikri.rizky.avifstudio.resources.output_format
+import com.alfikri.rizky.avifstudio.resources.preserve_metadata
+import com.alfikri.rizky.avifstudio.resources.preserve_metadata_hint
 import com.alfikri.rizky.avifstudio.resources.quality
 import com.alfikri.rizky.avifstudio.resources.resize_longest_edge
 import com.alfikri.rizky.avifstudio.resources.skip_if_larger
@@ -134,6 +136,13 @@ fun AdvancedSettingsSheet(
           hint = stringResource(Res.string.lossless_hint),
           checked = settings.lossless,
           onCheckedChange = { onChange(settings.copy(lossless = it)) },
+        )
+
+        ToggleRow(
+          title = stringResource(Res.string.preserve_metadata),
+          hint = stringResource(Res.string.preserve_metadata_hint),
+          checked = settings.preserveMetadata,
+          onCheckedChange = { onChange(settings.copy(preserveMetadata = it)) },
         )
 
         Section(stringResource(Res.string.target_size)) {

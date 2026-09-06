@@ -68,8 +68,16 @@ class ConversionSettingsTest {
   }
 
   @Test
-  fun neverAsksTheLibraryToPreserveMetadataItDoesNotYetSupport() {
+  fun metadataIsStrippedUnlessTheUserAsksForIt() {
+    // EXIF carries GPS; the toggle is opt-in, never a default and never part of a recipe.
     assertTrue(!ConversionSettings().toEncodingOptions().preserveMetadata)
+    Recipe.entries.forEach { recipe ->
+      assertTrue(
+        !recipe.defaultSettings().preserveMetadata,
+        "recipe $recipe must not turn metadata on behind the user's back",
+      )
+    }
+    assertTrue(ConversionSettings(preserveMetadata = true).toEncodingOptions().preserveMetadata)
   }
 
   @Test

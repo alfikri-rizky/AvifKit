@@ -10,6 +10,7 @@ import platform.CoreGraphics.*
 import platform.Foundation.*
 import platform.UIKit.*
 import platform.posix.memcpy
+import platform.posix.size_t
 
 @OptIn(ExperimentalForeignApi::class, BetaInteropApi::class)
 actual class AvifConverter {
@@ -318,7 +319,7 @@ actual class AvifConverter {
     return AdaptiveCompression.compress(
       options = options,
       targetSize = targetSize,
-      encode = { opts -> encodeImageToAvif(source, opts) },
+      encode = { opts -> encodeImageToAvif(source, opts, bytes) },
       sizeOf = { it.length.toLong() },
     )
   }
@@ -353,7 +354,14 @@ actual class AvifConverter {
             // for every input would double peak memory on the JPEG path for nothing.
             ImageFormats.detect(header) == ImageFormat.GIF ->
               encodeBytes(data.toByteArray(), options)
-            else -> encodeImageToAvif(imageFromData(data), options)
+            // toByteArray() doubles peak memory for the file, so it is paid only when the
+            // caller actually asked for the metadata inside it.
+            else ->
+              encodeImageToAvif(
+                imageFromData(data),
+                options,
+                if (options.preserveMetadata) data.toByteArray() else null,
+              )
           }
         }
 
@@ -366,7 +374,7 @@ actual class AvifConverter {
       AvifFormat.isAvif(data) -> data.toNSData()
       else ->
         animatedGif(data, options)?.let { encodeAnimatedGifToAvif(it, options) }
-          ?: encodeImageToAvif(imageFromData(data.toNSData()), options)
+          ?: encodeImageToAvif(imageFromData(data.toNSData()), options, data)
     }
 
   /** The parsed GIF when [data] is a multi-frame GIF that should be encoded as an animation. */
@@ -397,7 +405,11 @@ actual class AvifConverter {
    * the Android JNI path (shared-native/.../avif_jni_wrapper.cpp): extract RGBA bytes from the
    * image, convert RGB→YUV, then avifEncoderWrite. No Swift, no handler registration.
    */
-  private fun encodeImageToAvif(image: UIImage, options: EncodingOptions): NSData {
+  private fun encodeImageToAvif(
+    image: UIImage,
+    options: EncodingOptions,
+    sourceBytes: ByteArray? = null,
+  ): NSData {
     try {
       // Determine alpha from the ORIGINAL image: resizing renders into an RGBA context that always
       // carries an alpha channel, so it can't be the source of truth (M6).
@@ -405,7 +417,13 @@ actual class AvifConverter {
       // Orientation-normalize + optional downscale, then pull RGBA8888 bytes via CoreGraphics.
       val normalized = options.maxDimension?.let { resizeImage(image, it) } ?: image
       val rgba = uiImageToRgba(normalized) ?: throw AvifError.InvalidInput
-      return encodeRgbaToAvif(rgba.pixels, rgba.width, rgba.height, options, hasAlpha)
+      // Read AFTER the resize: the Exif pixel-dimension tags have to describe the encoded image,
+      // not the file it came from.
+      val metadata =
+        if (options.preserveMetadata) {
+          EncodedMetadata.forSource(sourceBytes, rgba.width, rgba.height)
+        } else null
+      return encodeRgbaToAvif(rgba.pixels, rgba.width, rgba.height, options, hasAlpha, metadata)
     } catch (e: AvifError) {
       throw e
     } catch (e: OutOfMemoryError) {
@@ -428,6 +446,7 @@ actual class AvifConverter {
     height: Int,
     options: EncodingOptions,
     hasAlpha: Boolean,
+    metadata: SourceMetadata? = null,
   ): NSData = memScoped {
     val pixelFormat =
       if (options.lossless) {
@@ -465,6 +484,24 @@ actual class AvifConverter {
       encoder.pointed.speed = options.speed
       encoder.pointed.maxThreads = codecThreads
       encoder.pointed.codecChoice = AVIF_CODEC_CHOICE_AUTO
+
+      // Exif/XMP carried over from the source (EncodingOptions.preserveMetadata). A libavif
+      // failure here is logged, not thrown: losing a tag beats failing the conversion.
+      fun attach(
+        blob: ByteArray?,
+        label: String,
+        set: (CValuesRef<avifImage>?, CValuesRef<UByteVar>?, size_t) -> avifResult,
+      ) {
+        if (blob == null || blob.isEmpty()) return
+        blob.usePinned { pinned ->
+          val res = set(avifImage, pinned.addressOf(0).reinterpret(), blob.size.convert())
+          if (res != AVIF_RESULT_OK) {
+            NSLog("⚠️ Failed to attach $label: ${avifResultToString(res)?.toKString()}")
+          }
+        }
+      }
+      attach(metadata?.exif, "Exif", ::avifImageSetMetadataExif)
+      attach(metadata?.xmp, "XMP", ::avifImageSetMetadataXMP)
 
       // Opaque sources skip the alpha plane entirely (M6): smaller output, no phantom alpha on
       // decode. avifImageRGBToYUV also honors rgb.ignoreAlpha below, so the two agree.
@@ -857,15 +894,48 @@ actual class AvifConverter {
   /** RGBA8888 pixel buffer extracted from a UIImage (origin top-left, premultiplied alpha). */
   private class RgbaBuffer(val pixels: ByteArray, val width: Int, val height: Int)
 
+  /** Pixel dimensions of an image as it is DISPLAYED, i.e. with `imageOrientation` applied. */
+  private class PixelSize(val width: Int, val height: Int)
+
+  /**
+   * The size a UIImage actually draws at, in pixels.
+   *
+   * A UIImage carries a raster plus an `imageOrientation`, and every UIKit draw call applies the
+   * orientation. So for a portrait photo — stored 1600x1200 with orientation `.right` — the raster
+   * is landscape but the image draws as 1200x1600, and any context sized from `CGImageGetWidth`
+   * receives it squashed. Swapping the two on a quarter turn is what keeps the canvas and the
+   * drawing in agreement.
+   *
+   * `image.size * image.scale` would also be orientation-aware, but it is CGFloat points and
+   * rounds; the raster is exact integers, and this is the number the encoder has to allocate planes
+   * for.
+   */
+  private fun orientedPixelSize(image: UIImage): PixelSize? {
+    val cgImage = image.CGImage ?: return null
+    val rasterWidth = CGImageGetWidth(cgImage).toInt()
+    val rasterHeight = CGImageGetHeight(cgImage).toInt()
+    val quarterTurn =
+      when (image.imageOrientation) {
+        UIImageOrientation.UIImageOrientationLeft,
+        UIImageOrientation.UIImageOrientationRight,
+        UIImageOrientation.UIImageOrientationLeftMirrored,
+        UIImageOrientation.UIImageOrientationRightMirrored -> true
+        else -> false
+      }
+    return if (quarterTurn) PixelSize(rasterHeight, rasterWidth)
+    else PixelSize(rasterWidth, rasterHeight)
+  }
+
   /**
    * Draw a UIImage into an RGBA8888 CGBitmapContext and read back the bytes. Drawing through the
    * context bakes in the image's `imageOrientation`, so this also handles EXIF orientation (the job
-   * the Swift `normalizeOrientation` used to do).
+   * the Swift `normalizeOrientation` used to do) — which is exactly why the context is sized from
+   * [orientedPixelSize] and not from the raster.
    */
   private fun uiImageToRgba(image: UIImage): RgbaBuffer? {
-    val cgImage = image.CGImage ?: return null
-    val width = CGImageGetWidth(cgImage).toInt()
-    val height = CGImageGetHeight(cgImage).toInt()
+    val pixelSize = orientedPixelSize(image) ?: return null
+    val width = pixelSize.width
+    val height = pixelSize.height
     if (width <= 0 || height <= 0) return null
 
     val bytesPerRow = width * 4
@@ -943,14 +1013,16 @@ actual class AvifConverter {
 
   /**
    * Downscale a UIImage so its longest side is at most [maxDimension] PIXELS; no-op if already
-   * smaller. Uses the CGImage's pixel dimensions (not `image.size`, which is in points and lets
-   * `scale>1` images — screenshots, asset catalogs — dodge the resize, unlike Android). Renders
+   * smaller. Measures in PIXELS via [orientedPixelSize], not `image.size`, which is in points and
+   * lets `scale>1` images — screenshots, asset catalogs — dodge the resize, unlike Android. Renders
    * with UIGraphicsImageRenderer (UIGraphicsBeginImageContext* is deprecated since iOS 17). (M8)
+   *
+   * The renderer output is always `.up`, so an oriented source comes out of here already upright.
    */
   private fun resizeImage(image: UIImage, maxDimension: Int): UIImage {
-    val cgImage = image.CGImage ?: return image
-    val pxWidth = CGImageGetWidth(cgImage).toInt()
-    val pxHeight = CGImageGetHeight(cgImage).toInt()
+    val pixelSize = orientedPixelSize(image) ?: return image
+    val pxWidth = pixelSize.width
+    val pxHeight = pixelSize.height
 
     if (pxWidth <= maxDimension && pxHeight <= maxDimension) {
       return image
