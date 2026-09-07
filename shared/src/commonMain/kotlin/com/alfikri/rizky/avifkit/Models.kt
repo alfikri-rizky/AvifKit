@@ -52,9 +52,20 @@ sealed class ImageInput {
  * @param lossless Enable true lossless compression. Overrides [quality], [alphaQuality], and
  *   [subsample]: encodes at quality 100 with YUV444 and identity matrix coefficients. Output files
  *   are significantly larger than lossy output.
- * @param preserveMetadata NOT YET IMPLEMENTED — currently a no-op on both platforms. EXIF
- *   orientation is always baked into the pixels before encoding instead; other metadata (EXIF
- *   fields, XMP, ICC) is not copied to the output.
+ * @param preserveMetadata Copy the source file's EXIF and XMP into the AVIF — capture date, camera
+ *   and lens, GPS, ratings, edit history. Off by default, because EXIF routinely carries the
+ *   photographer's location and silently republishing it is the worse mistake. Only JPEG, PNG and
+ *   WebP sources are read: HEIC keeps its metadata in ISOBMFF items this library does not parse, a
+ *   GIF has nowhere to put EXIF (so animated output carries none), and an AVIF source is either
+ *   returned byte for byte — metadata and all — or, when [maxSize] forces a re-encode, comes out
+ *   stripped. Two values are rewritten rather than copied, because they describe the input:
+ *   orientation becomes 1 (the pixels handed to the encoder are already upright, so copying "rotate
+ *   90" through would make every reader rotate them a second time), and the EXIF pixel-dimension
+ *   tags follow [maxDimension]. An EXIF block that cannot be parsed is dropped rather than embedded
+ *   — libavif rejects a malformed payload at `avifEncoderWrite`, and losing metadata beats failing
+ *   the conversion. ICC profiles are NOT carried: both platforms draw the source through an sRGB
+ *   context on the way to the encoder, so the source's profile would misdescribe the pixels it was
+ *   attached to. Metadata counts toward [maxSize].
  * @param maxDimension Auto-resize if larger. May be auto-adjusted if maxSize is set.
  * @param maxSize Target maximum file size in bytes. If set, will override other params to achieve
  *   this size through adaptive compression. Best-effort: if even the most aggressive settings
@@ -107,8 +118,10 @@ data class EncodingOptions(
             speed = 5,
             subsample = ChromaSubsample.YUV444,
             alphaQuality = 98,
-            // preserveMetadata is not implemented yet; keep the preset honest until it is.
-            preserveMetadata = false,
+            // The one preset that keeps it: "quality" here means an archival copy, and a photo
+            // stripped of its capture date and camera is not that. The other presets exist to make
+            // files small, where metadata is just bytes.
+            preserveMetadata = true,
             maxDimension = 4096,
           )
         Priority.STORAGE ->

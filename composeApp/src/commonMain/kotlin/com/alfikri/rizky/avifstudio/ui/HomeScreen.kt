@@ -86,6 +86,7 @@ import com.alfikri.rizky.avifstudio.resources.count_kept
 import com.alfikri.rizky.avifstudio.resources.empty_body
 import com.alfikri.rizky.avifstudio.resources.empty_title
 import com.alfikri.rizky.avifstudio.resources.image_count
+import com.alfikri.rizky.avifstudio.resources.location_removed
 import com.alfikri.rizky.avifstudio.resources.nothing_saved
 import com.alfikri.rizky.avifstudio.resources.original
 import com.alfikri.rizky.avifstudio.resources.privacy_note
@@ -475,6 +476,17 @@ private fun SummaryCard(state: StudioUiState) {
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onPrimaryContainer,
       )
+
+      // Only when it actually happened: the user turned "keep EXIF and XMP" on and the coordinates
+      // were already gone before this app opened the file. Naming the door that keeps them is the
+      // whole point — a warning with no next step would just be an apology.
+      if (summary.locationRedacted > 0) {
+        Text(
+          text = stringResource(Res.string.location_removed, summary.locationRedacted),
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+        )
+      }
     }
   }
 }

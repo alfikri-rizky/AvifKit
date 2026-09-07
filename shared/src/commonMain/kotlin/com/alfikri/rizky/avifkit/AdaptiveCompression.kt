@@ -58,7 +58,7 @@ internal object AdaptiveCompression {
       }
     }
 
-    return bestResult ?: encode(fallbackOptions())
+    return bestResult ?: encode(fallbackOptions(options.preserveMetadata))
   }
 
   /**
@@ -92,7 +92,7 @@ internal object AdaptiveCompression {
       currentOptions = next
     }
 
-    return bestResult ?: encode(fallbackOptions())
+    return bestResult ?: encode(fallbackOptions(options.preserveMetadata))
   }
 
   /**
@@ -134,14 +134,20 @@ internal object AdaptiveCompression {
     }
   }
 
-  /** Last-resort aggressive settings when no attempt met the target. */
-  fun fallbackOptions(): EncodingOptions =
+  /**
+   * Last-resort aggressive settings when no attempt met the target.
+   *
+   * [preserveMetadata] is carried through from the caller's options rather than forced off: the
+   * other attempts all keep it, and a fallback that silently strips metadata would make whether a
+   * photo keeps its capture date depend on how hard the encoder had to work.
+   */
+  fun fallbackOptions(preserveMetadata: Boolean = false): EncodingOptions =
     EncodingOptions(
       quality = 40,
       speed = 10,
       subsample = ChromaSubsample.YUV420,
       alphaQuality = 50,
       maxDimension = 1024,
-      preserveMetadata = false,
+      preserveMetadata = preserveMetadata,
     )
 }

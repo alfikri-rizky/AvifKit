@@ -1,0 +1,228 @@
+package com.alfikri.rizky.avifkit
+
+/**
+ * Just enough TIFF/Exif structure walking to rewrite the handful of tags that go stale when AvifKit
+ * re-encodes an image.
+ *
+ * AvifKit hands libavif the source's Exif payload byte for byte. Two tags in it describe the
+ * *source* rather than the output and would lie if copied verbatim:
+ * - **Orientation (0x0112)** — the pixels handed to the encoder are already rotated (Android
+ *   rotates the bitmap, iOS bakes `imageOrientation` in when drawing). `avifImageSetMetadataExif`
+ *   parses this tag and emits matching `irot`/`imir` boxes, so copying "rotate 90" through would
+ *   make every reader rotate an already-rotated image. Rewriting it to 1 is what keeps the two
+ *   agreeing.
+ * - **PixelXDimension / PixelYDimension (0xA002/0xA003)** — wrong after
+ *   [EncodingOptions.maxDimension] downscales.
+ *
+ * Only values that live *inside* the 12-byte field entry are touched, so nothing is relaid out and
+ * offsets elsewhere in the payload stay valid. Anything unparseable makes [normalize] return null,
+ * which drops the metadata rather than risking `AVIF_RESULT_INVALID_EXIF_PAYLOAD` from
+ * `avifEncoderWrite` — the encoder rejects a payload it cannot find a TIFF header in, and failing a
+ * whole conversion over metadata would be the wrong trade.
+ */
+internal object ExifTiff {
+
+  private const val TAG_ORIENTATION = 0x0112
+  private const val TAG_EXIF_IFD_POINTER = 0x8769
+  private const val TAG_GPS_IFD_POINTER = 0x8825
+  private const val TAG_GPS_VERSION_ID = 0x0000
+  private const val TAG_GPS_LATITUDE_REF = 0x0001
+  private const val TAG_PIXEL_X_DIMENSION = 0xA002
+  private const val TAG_PIXEL_Y_DIMENSION = 0xA003
+
+  private const val TYPE_SHORT = 3
+  private const val TYPE_LONG = 4
+
+  /** Bytes per field entry in an IFD: tag(2) + type(2) + count(4) + value/offset(4). */
+  private const val FIELD_SIZE = 12
+
+  /**
+   * The source Exif payload rewritten to describe the encoded output: orientation reset to 1 and,
+   * when [width]/[height] are given, the pixel-dimension tags updated.
+   *
+   * Returns null when the payload carries no TIFF header — libavif's encoder rejects those.
+   */
+  fun normalize(exif: ByteArray, width: Int? = null, height: Int? = null): ByteArray? {
+    val tiff = tiffHeaderOffset(exif) ?: return null
+    val out = exif.copyOf()
+    val littleEndian = out[tiff] == 'I'.code.toByte()
+
+    val ifd0 = readU32(out, tiff + 4, littleEndian)?.let { tiff + it } ?: return out
+    var exifIfd: Int? = null
+
+    forEachField(out, ifd0, littleEndian) { tag, type, count, valueAt ->
+      when {
+        tag == TAG_ORIENTATION && type == TYPE_SHORT && count == 1L ->
+          // Pixels are already upright; say so, so no irot/imir is derived from this payload.
+          writeInline(out, valueAt, type, littleEndian, 1)
+        tag == TAG_EXIF_IFD_POINTER && type == TYPE_LONG && count == 1L ->
+          exifIfd = readU32(out, valueAt, littleEndian)?.let { tiff + it }
+      }
+    }
+
+    if (width != null && height != null) {
+      exifIfd?.let { ifd ->
+        forEachField(out, ifd, littleEndian) { tag, type, count, valueAt ->
+          if (count == 1L && (type == TYPE_SHORT || type == TYPE_LONG)) {
+            when (tag) {
+              TAG_PIXEL_X_DIMENSION -> writeInline(out, valueAt, type, littleEndian, width)
+              TAG_PIXEL_Y_DIMENSION -> writeInline(out, valueAt, type, littleEndian, height)
+            }
+          }
+        }
+      }
+    }
+
+    return out
+  }
+
+  /**
+   * The Exif orientation value (1..8), or null when the payload has none. Read from the same place
+   * [normalize] rewrites, so tests can prove the rewrite happened.
+   */
+  fun orientationOf(exif: ByteArray): Int? {
+    val tiff = tiffHeaderOffset(exif) ?: return null
+    val littleEndian = exif[tiff] == 'I'.code.toByte()
+    val ifd0 = readU32(exif, tiff + 4, littleEndian)?.let { tiff + it } ?: return null
+    var orientation: Int? = null
+    forEachField(exif, ifd0, littleEndian) { tag, type, count, valueAt ->
+      if (tag == TAG_ORIENTATION && type == TYPE_SHORT && count == 1L) {
+        orientation = readU16(exif, valueAt, littleEndian)?.takeIf { it in 1..8 }
+      }
+    }
+    return orientation
+  }
+
+  /**
+   * What the payload's GPS block says about where the photo was taken.
+   *
+   * The interesting case is [LocationMetadata.REDACTED]. Android's MediaProvider does not delete
+   * the GPS block when it hands a photo to an app that may not see locations — it leaves every tag
+   * in place and zeroes the values, so "has a GPS IFD" is not the same question as "knows where it
+   * was taken", and only the second one is worth telling a user about.
+   *
+   * The discriminator is the two small inline tags a genuine block can never have as all-zero:
+   * GPSVersionID is 2.x.x.x by JEITA CP-3451C, and GPSLatitudeRef is 'N' or 'S'. The coordinates
+   * themselves are rationals stored out of line, so their field entries hold a non-zero *offset*
+   * even after redaction and cannot be tested this way. With neither marker present there is
+   * nothing to prove redaction with, and guessing would put a wrong sentence in front of a user, so
+   * the answer is [LocationMetadata.PRESENT].
+   */
+  fun gpsState(exif: ByteArray): LocationMetadata {
+    val tiff = tiffHeaderOffset(exif) ?: return LocationMetadata.NONE
+    val littleEndian = exif[tiff] == 'I'.code.toByte()
+    val ifd0 =
+      readU32(exif, tiff + 4, littleEndian)?.let { tiff + it } ?: return LocationMetadata.NONE
+
+    var gpsIfd: Int? = null
+    forEachField(exif, ifd0, littleEndian) { tag, type, count, valueAt ->
+      if (tag == TAG_GPS_IFD_POINTER && type == TYPE_LONG && count == 1L) {
+        gpsIfd = readU32(exif, valueAt, littleEndian)?.let { tiff + it }
+      }
+    }
+    val ifd = gpsIfd ?: return LocationMetadata.NONE
+
+    var sawMarker = false
+    var allZero = true
+    forEachField(exif, ifd, littleEndian) { tag, _, _, valueAt ->
+      if (tag == TAG_GPS_VERSION_ID || tag == TAG_GPS_LATITUDE_REF) {
+        sawMarker = true
+        for (i in 0 until 4) {
+          if (valueAt + i < exif.size && exif[valueAt + i] != 0.toByte()) allZero = false
+        }
+      }
+    }
+    return if (sawMarker && allZero) LocationMetadata.REDACTED else LocationMetadata.PRESENT
+  }
+
+  /**
+   * Offset of the TIFF header (`II*\0` or `MM\0*`) within [exif], or null.
+   *
+   * Scanning rather than assuming offset 0 mirrors `avifGetExifTiffHeaderOffset`, and is what lets
+   * the same code accept a WebP `EXIF` chunk that some encoders prefix with `Exif\0\0`.
+   */
+  private fun tiffHeaderOffset(exif: ByteArray): Int? {
+    for (offset in 0..exif.size - 5) {
+      val b0 = exif[offset]
+      val b1 = exif[offset + 1]
+      val b2 = exif[offset + 2]
+      val b3 = exif[offset + 3]
+      val littleEndian =
+        b0 == 'I'.code.toByte() && b1 == 'I'.code.toByte() && b2 == 42.toByte() && b3 == 0.toByte()
+      val bigEndian =
+        b0 == 'M'.code.toByte() && b1 == 'M'.code.toByte() && b2 == 0.toByte() && b3 == 42.toByte()
+      if (littleEndian || bigEndian) return offset
+    }
+    return null
+  }
+
+  /**
+   * Visits every field of the IFD starting at [ifdOffset], handing the visitor the absolute offset
+   * of the field's 4-byte value slot. Stops silently at the first out-of-bounds read, so a
+   * truncated payload yields the fields that were readable instead of throwing.
+   */
+  private inline fun forEachField(
+    data: ByteArray,
+    ifdOffset: Int,
+    littleEndian: Boolean,
+    visit: (tag: Int, type: Int, count: Long, valueAt: Int) -> Unit,
+  ) {
+    val fieldCount = readU16(data, ifdOffset, littleEndian) ?: return
+    for (i in 0 until fieldCount) {
+      val at = ifdOffset + 2 + i * FIELD_SIZE
+      if (at + FIELD_SIZE > data.size) return
+      val tag = readU16(data, at, littleEndian) ?: return
+      val type = readU16(data, at + 2, littleEndian) ?: return
+      val count = readU32(data, at + 4, littleEndian)?.toLong() ?: return
+      visit(tag, type, count, at + 8)
+    }
+  }
+
+  /**
+   * Overwrites a SHORT or LONG value stored inline in the field entry. A SHORT occupies the first
+   * two bytes of the 4-byte slot and the remaining padding is left untouched, which is what the
+   * TIFF spec requires and what keeps the payload byte-compatible with what it replaced.
+   */
+  private fun writeInline(
+    data: ByteArray,
+    valueAt: Int,
+    type: Int,
+    littleEndian: Boolean,
+    value: Int,
+  ) {
+    if (valueAt + 4 > data.size) return
+    if (type == TYPE_SHORT) {
+      if (value !in 0..0xFFFF) return
+      if (littleEndian) {
+        data[valueAt] = (value and 0xFF).toByte()
+        data[valueAt + 1] = (value ushr 8 and 0xFF).toByte()
+      } else {
+        data[valueAt] = (value ushr 8 and 0xFF).toByte()
+        data[valueAt + 1] = (value and 0xFF).toByte()
+      }
+    } else {
+      for (i in 0 until 4) {
+        val shift = if (littleEndian) i * 8 else (3 - i) * 8
+        data[valueAt + i] = (value ushr shift and 0xFF).toByte()
+      }
+    }
+  }
+
+  private fun readU16(data: ByteArray, at: Int, littleEndian: Boolean): Int? {
+    if (at < 0 || at + 2 > data.size) return null
+    val b0 = data[at].toInt() and 0xFF
+    val b1 = data[at + 1].toInt() and 0xFF
+    return if (littleEndian) (b1 shl 8) or b0 else (b0 shl 8) or b1
+  }
+
+  private fun readU32(data: ByteArray, at: Int, littleEndian: Boolean): Int? {
+    if (at < 0 || at + 4 > data.size) return null
+    var value = 0L
+    for (i in 0 until 4) {
+      val byte = (data[at + i].toInt() and 0xFF).toLong()
+      value = value or (byte shl (if (littleEndian) i * 8 else (3 - i) * 8))
+    }
+    // Offsets past Int.MAX_VALUE can't index a ByteArray anyway; reject instead of wrapping.
+    return if (value > Int.MAX_VALUE) null else value.toInt()
+  }
+}
