@@ -1,5 +1,6 @@
 package com.alfikri.rizky.avifstudio.model
 
+import com.alfikri.rizky.avifkit.LocationMetadata
 import com.alfikri.rizky.avifkit.PlatformFile
 
 data class SourceImage(
@@ -31,6 +32,14 @@ data class ConversionOutput(
   val frameCount: Int = 1,
   /** Playback time of one loop, 0 for a still. */
   val durationMillis: Long = 0,
+  /**
+   * What the SOURCE said about where it was taken, read only when the user asked to keep metadata.
+   *
+   * [LocationMetadata.REDACTED] is the one the results screen reports: the photo had coordinates,
+   * something removed them before this app opened the file, and the user is entitled to know that
+   * the toggle they switched on could not deliver them.
+   */
+  val sourceLocation: LocationMetadata = LocationMetadata.NONE,
 ) {
   val isAnimated: Boolean
     get() = frameCount > 1
@@ -100,6 +109,8 @@ data class BatchSummary(
   val inputWidth: Int? = null,
   val inputHeight: Int? = null,
   val outputBytes: Long,
+  /** Outputs whose source arrived with its location already stripped. See [ConversionOutput]. */
+  val locationRedacted: Int = 0,
   /**
    * What the batch was written as. Normally one entry — a run has a single output format — so the
    * results header can say "3 converted to WebP" instead of leaving the user to guess.
@@ -122,6 +133,7 @@ data class BatchSummary(
       var skipped = 0
       var inputBytes = 0L
       var outputBytes = 0L
+      var locationRedacted = 0
       val formats = mutableSetOf<OutputFormat>()
       for (job in jobs) {
         when (val status = job.status) {
@@ -132,6 +144,7 @@ data class BatchSummary(
             // back-fills it — a coupling that would break silently.
             inputBytes += status.output.inputBytes
             outputBytes += status.output.sizeBytes
+            if (status.output.sourceLocation == LocationMetadata.REDACTED) locationRedacted++
             formats += status.output.format
           }
           is JobStatus.Failed -> failed++
@@ -146,6 +159,7 @@ data class BatchSummary(
         skipped = skipped,
         inputBytes = inputBytes,
         outputBytes = outputBytes,
+        locationRedacted = locationRedacted,
         outputFormats = formats,
       )
     }

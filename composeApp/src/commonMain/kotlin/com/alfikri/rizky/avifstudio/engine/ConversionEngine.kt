@@ -3,6 +3,7 @@ package com.alfikri.rizky.avifstudio.engine
 import com.alfikri.rizky.avifkit.AvifConverter
 import com.alfikri.rizky.avifkit.AvifFrame
 import com.alfikri.rizky.avifkit.ImageInput
+import com.alfikri.rizky.avifkit.LocationMetadata
 import com.alfikri.rizky.avifkit.PlatformFile
 import com.alfikri.rizky.avifstudio.model.ConversionOutput
 import com.alfikri.rizky.avifstudio.model.ConversionSettings
@@ -113,6 +114,12 @@ class ConversionEngine(
       elapsedMillis = startedAt.elapsedNow().inWholeMilliseconds,
       frameCount = encoded.frameCount,
       durationMillis = encoded.durationMillis,
+      // Only asked when the answer can matter. An Exif header walk, no pixels — but a question
+      // about a promise the user did not make is still noise on every conversion.
+      sourceLocation =
+        if (settings.preserveMetadata && settings.outputFormat == OutputFormat.AVIF) {
+          LocationMetadata.of(sourceBytes)
+        } else LocationMetadata.NONE,
     )
   }
 

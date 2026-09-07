@@ -1,5 +1,6 @@
 package com.alfikri.rizky.avifstudio.model
 
+import com.alfikri.rizky.avifkit.LocationMetadata
 import io.github.vinceglb.filekit.PlatformFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -65,7 +66,33 @@ class BatchSummaryTest {
    * measured bytes. With both set to the same number this fixture could not tell the two apart, so
    * it passed just as happily when the wrong one was being summed.
    */
-  private fun done(inputBytes: Long, outputBytes: Long): ConversionJob {
+  @Test
+  fun countsOnlyTheSourcesWhoseLocationWasStripped() {
+    // The results screen turns this number into a sentence, so PRESENT and NONE must not inflate
+    // it — telling someone their location was removed when it never existed is worse than silence.
+    val jobs =
+      listOf(
+        done(1_000, 500, LocationMetadata.REDACTED),
+        done(1_000, 500, LocationMetadata.REDACTED),
+        done(1_000, 500, LocationMetadata.PRESENT),
+        done(1_000, 500, LocationMetadata.NONE),
+        failed(inputBytes = 1_000),
+      )
+
+    assertEquals(2, BatchSummary.of(jobs).locationRedacted)
+  }
+
+  @Test
+  fun reportsNoStrippedLocationsByDefault() {
+    assertEquals(0, BatchSummary.of(listOf(done(1_000, 500))).locationRedacted)
+    assertEquals(0, BatchSummary.of(emptyList()).locationRedacted)
+  }
+
+  private fun done(
+    inputBytes: Long,
+    outputBytes: Long,
+    location: LocationMetadata = LocationMetadata.NONE,
+  ): ConversionJob {
     val src = source(inputBytes = inputBytes / 2)
     return ConversionJob(
       source = src,
@@ -82,6 +109,7 @@ class BatchSummaryTest {
             height = 1080,
             format = OutputFormat.AVIF,
             elapsedMillis = 100,
+            sourceLocation = location,
           )
         ),
     )

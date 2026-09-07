@@ -74,6 +74,7 @@
     <string name="skip_if_larger_hint">Ada gambar yang memang sudah tidak bisa dikecilkan lagi</string>
     <string name="preserve_metadata">Pertahankan EXIF dan XMP</string>
     <string name="preserve_metadata_hint">Tanggal dan kamera ikut terbawa. Untuk GPS pakai Tambah berkas — pemilih foto sistem menghapusnya lebih dulu.</string>
+    <string name="location_removed">Lokasi %1$d di antaranya dihapus oleh pemilih foto. Tambah berkas mempertahankannya.</string>
 
     <string name="converting">Mengonversi…</string>
     <string name="progress_of">%1$d dari %2$d</string>

@@ -153,6 +153,47 @@ class SourceMetadataTest {
     assertEquals(3000, readU16(normalized, PIXEL_Y_VALUE_AT, le = true))
   }
 
+  // ---- location -------------------------------------------------------------------------------
+
+  /**
+   * The two real payloads differ only in their GPS values, so this pins the exact discriminator: a
+   * detector that keyed off "is there a GPS IFD" would call both PRESENT and the app would never
+   * warn anybody.
+   */
+  @Test
+  fun redactedGps_isDistinguishedFromRealGps() {
+    assertEquals(LocationMetadata.PRESENT, ExifTiff.gpsState(MetadataFixtures.EXIF_WITH_GPS))
+    assertEquals(LocationMetadata.REDACTED, ExifTiff.gpsState(MetadataFixtures.EXIF_GPS_REDACTED))
+  }
+
+  @Test
+  fun imageWithoutGps_reportsNone() {
+    // The oriented fixture has Software/Artist/DateTime but no GPS block at all.
+    assertEquals(LocationMetadata.NONE, LocationMetadata.of(MetadataFixtures.JPEG_ORIENTED))
+    assertEquals(LocationMetadata.NONE, LocationMetadata.of(MetadataFixtures.JPEG_PLAIN))
+  }
+
+  @Test
+  fun formatsWithoutReadableMetadata_reportNone() {
+    // Absence of evidence: AvifKit does not read metadata out of these, so it cannot claim there is
+    // no location in them either — callers are told as much on LocationMetadata.of.
+    assertEquals(LocationMetadata.NONE, LocationMetadata.of(GifFixtures.MOVING_SQUARE))
+    assertEquals(LocationMetadata.NONE, LocationMetadata.of(ByteArray(0)))
+  }
+
+  @Test
+  fun gpsState_survivesTruncatedPayloads() {
+    val exif = MetadataFixtures.EXIF_GPS_REDACTED
+    for (length in 5..exif.size step 37) ExifTiff.gpsState(exif.copyOf(length))
+  }
+
+  /** The orientation rewrite must not disturb the GPS block it walks past. */
+  @Test
+  fun normalize_leavesLocationAlone() {
+    val normalized = assertNotNull(ExifTiff.normalize(MetadataFixtures.EXIF_WITH_GPS, 1200, 1600))
+    assertEquals(LocationMetadata.PRESENT, ExifTiff.gpsState(normalized))
+  }
+
   // ---- XMP ------------------------------------------------------------------------------------
 
   @Test
