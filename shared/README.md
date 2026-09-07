@@ -157,6 +157,21 @@ ratings). It is off by default because EXIF routinely carries the photographer's
 must be JPEG, PNG or WebP; ICC profiles are not carried. Orientation is rewritten to "normal" since
 AvifKit has already baked it into the pixels — see the `EncodingOptions` KDoc for the full contract.
 
+### Knowing when the location was already gone
+
+Android's system photo picker hands your app a copy with the GPS values zeroed — the tags are all
+still there, so "has EXIF" does not mean "knows where it was taken". `LocationMetadata.of(bytes)`
+tells the two apart off an EXIF header walk, without decoding pixels, so an app promising "GPS
+travels with the photo" can notice when it cannot keep that promise:
+
+```kotlin
+when (LocationMetadata.of(sourceBytes)) {
+    LocationMetadata.PRESENT -> Unit // coordinates will be carried over
+    LocationMetadata.REDACTED -> showHint("Pick this file with a document picker to keep its location")
+    LocationMetadata.NONE -> Unit // never tagged, or not a format AvifKit reads metadata from
+}
+```
+
 ```kotlin
 // Convert with custom options
 val resultFile = converter.convertToFile(
