@@ -191,7 +191,7 @@ jobs:
           echo "📝 Release body:"; cat "$OUT"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           # Explicit tag (workflow_dispatch has no tag ref); attaches to the tag created above.
           tag_name: v${{ steps.get_version.outputs.VERSION }}
