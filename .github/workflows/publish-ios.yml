@@ -12,6 +12,10 @@ on:
       version:
         description: 'Version to release, e.g. 0.3.2 (no "v" prefix)'
         required: true
+      publish_to_maven_central:
+        description: 'Also publish avifkit + avifkit-native to Maven Central'
+        type: boolean
+        default: true
 
 permissions:
   contents: write  # Required to create releases, push commits, and create the tag
@@ -19,6 +23,9 @@ permissions:
 jobs:
   publish-ios:
     runs-on: macos-latest
+
+    outputs:
+      version: ${{ steps.get_version.outputs.VERSION }}
 
     steps:
       - name: Checkout main
@@ -225,4 +232,21 @@ jobs:
           echo "### 🔗 Next Steps" >> $GITHUB_STEP_SUMMARY
           echo "1. Verify GitHub release at: https://github.com/alfikri-rizky/AvifKit/releases/tag/v${{ steps.get_version.outputs.VERSION }}" >> $GITHUB_STEP_SUMMARY
           echo "2. Test SPM installation in an iOS project" >> $GITHUB_STEP_SUMMARY
-          echo "3. Publish to Maven Central if not done yet" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ inputs.publish_to_maven_central }}" == "true" ]; then
+            echo "3. Maven Central publishing runs next in this same workflow" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "3. Publish to Maven Central separately (\`Publish to Maven Central\` workflow)" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  # A release that ships the XCFramework but not the matching Gradle artifacts is a half
+  # release: v0.2.4, v0.2.6 and v0.3.0 all have GitHub releases and nothing on Maven Central,
+  # because the second workflow was never dispatched. Chained here rather than left to the
+  # `release` trigger in publish.yml, which cannot fire for the release created above —
+  # GitHub does not start workflow runs from GITHUB_TOKEN events.
+  publish-maven-central:
+    needs: publish-ios
+    if: ${{ inputs.publish_to_maven_central }}
+    uses: ./.github/workflows/publish.yml
+    with:
+      version: ${{ needs.publish-ios.outputs.version }}
+    secrets: inherit

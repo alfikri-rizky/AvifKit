@@ -8,6 +8,25 @@ on:
       version:
         description: 'Version to publish (e.g., 0.1.1)'
         required: true
+  # Lets publish-ios.yml chain straight into this workflow once it has cut the release.
+  # The `release` trigger above cannot do that job: publish-ios.yml creates the release as
+  # github-actions[bot] via GITHUB_TOKEN, and GitHub never starts a workflow run from a
+  # GITHUB_TOKEN event. It has only ever fired for releases a human cut by hand (v0.2.3 and
+  # earlier); every bot-cut release since has needed someone to remember a second dispatch.
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 0.1.1)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never two publishes of the same version at once — Maven Central is immutable.
+  group: publish-maven-central-${{ inputs.version || github.ref }}
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -16,6 +35,81 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # History and tags, so the "Publish from the release tag" step below can find the
+          # tag. fetch-tags is set explicitly rather than relied on as a side effect of
+          # fetch-depth — a missing tag there degrades into publishing the branch head.
+          fetch-depth: 0
+          fetch-tags: true
+
+      # The four steps below run before the ~40 minutes of codec compilation on purpose:
+      # every way this workflow can be misconfigured is knowable in the first minute.
+      - name: Determine version
+        id: version
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [ -z "$VERSION" ]; then
+            # release event: derive from the tag (refs/tags/v0.2.3 → 0.2.3)
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          # Normalize and validate: strip a stray leading "v" and require x.y.z.
+          # Maven Central is immutable — a malformed version (like the v0.3.0 that
+          # slipped through once) can never be removed, so fail fast instead.
+          VERSION="${VERSION#v}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid version '$VERSION' — expected x.y.z (no 'v' prefix)"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Publishing version: $VERSION"
+
+      - name: Check publishing credentials are present
+        env:
+          MAVEN_CENTRAL_USERNAME: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          MAVEN_CENTRAL_PASSWORD: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          SIGNING_IN_MEMORY_KEY: ${{ secrets.SIGNING_IN_MEMORY_KEY }}
+          SIGNING_IN_MEMORY_KEY_PASSWORD: ${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
+        run: |
+          # A missing secret otherwise surfaces as a Gradle signing/auth failure at the very
+          # end of the build, which reads like a code problem rather than repository setup.
+          missing=""
+          for name in MAVEN_CENTRAL_USERNAME MAVEN_CENTRAL_PASSWORD \
+                      SIGNING_IN_MEMORY_KEY SIGNING_IN_MEMORY_KEY_PASSWORD; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secret(s):$missing — see docs/RELEASING.md"
+            exit 1
+          fi
+
+      - name: Refuse to republish an existing version
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          for artifact in avifkit avifkit-native; do
+            url="https://repo1.maven.org/maven2/io/github/alfikri-rizky/$artifact/$VERSION/$artifact-$VERSION.pom"
+            code="$(curl -sS -o /dev/null -w '%{http_code}' "$url" || echo 000)"
+            case "$code" in
+              200)
+                echo "::error::$artifact:$VERSION is already on Maven Central and cannot be replaced — bump the version"
+                exit 1
+                ;;
+              404) ;;  # not published yet, which is what we want
+              *) echo "::warning::Could not tell whether $artifact:$VERSION exists (HTTP $code) — continuing; Central will reject a duplicate" ;;
+            esac
+          done
+
+      - name: Publish from the release tag
+        run: |
+          # workflow_dispatch and workflow_call both start from a branch head, which is the
+          # wrong tree for a release: publish-ios.yml pushes a Package.swift commit and tags
+          # it during its own run, so main has already moved on by the time this starts.
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          if git rev-parse -q --verify "refs/tags/v$VERSION" >/dev/null; then
+            git checkout --detach --quiet "v$VERSION"
+            echo "Building tag v$VERSION ($(git rev-parse --short HEAD))"
+          else
+            echo "::warning::No tag v$VERSION — publishing whatever $GITHUB_REF points at instead"
+          fi
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -55,26 +149,6 @@ jobs:
           chmod +x scripts/build-ios-libavif.sh
           ./scripts/build-ios-libavif.sh
 
-      - name: Determine version
-        id: version
-        run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then
-            VERSION="${{ github.event.inputs.version }}"
-          else
-            # Extract version from release tag (e.g., v0.2.3 → 0.2.3)
-            VERSION="${GITHUB_REF#refs/tags/v}"
-          fi
-          # Normalize and validate: strip a stray leading "v" and require x.y.z.
-          # Maven Central is immutable — a malformed version (like the v0.3.0 that
-          # slipped through once) can never be removed, so fail fast instead.
-          VERSION="${VERSION#v}"
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::Invalid version '$VERSION' — expected x.y.z (no 'v' prefix)"
-            exit 1
-          fi
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "Publishing version: $VERSION"
-
       - name: Create gradle.properties for CI
         run: |
           cat > gradle.properties << 'EOF'
@@ -97,6 +171,13 @@ jobs:
           mavenCentralUsername=${{ secrets.MAVEN_CENTRAL_USERNAME }}
           mavenCentralPassword=${{ secrets.MAVEN_CENTRAL_PASSWORD }}
 
+          # Without this the deployment uploads as USER_MANAGED and waits in the Central
+          # Portal for whoever owns the Sonatype account to click "Publish" — the one step
+          # a maintainer cannot perform. Validation still runs; a rejected deployment fails
+          # this job. Leave mavenCentralDeploymentValidation at its default: PUBLISHED would
+          # wait out the whole release under a 15-minute timeout and report slow as failed.
+          mavenCentralAutomaticPublishing=true
+
           # GPG Signing
           signingInMemoryKey=${{ secrets.SIGNING_IN_MEMORY_KEY }}
           signingInMemoryKeyPassword=${{ secrets.SIGNING_IN_MEMORY_KEY_PASSWORD }}
@@ -112,8 +193,9 @@ jobs:
 
       - name: Publish to Maven Central
         run: |
-          # Native companion artifact (avifkit-native) first, then the main library (avifkit),
-          # whose Android variant references it transitively.
+          # Both modules in one Gradle invocation, deliberately: the publish plugin batches
+          # every module of a single build into one Central Portal deployment, so avifkit and
+          # avifkit-native are validated and released together or not at all.
           ./gradlew :shared-native:publishToMavenCentral :shared:publishToMavenCentral \
             --no-daemon \
             --stacktrace \
@@ -122,13 +204,15 @@ jobs:
       - name: Build Summary
         if: success()
         run: |
-          echo "### ✅ Published to Maven Central!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Artifacts:** \`io.github.alfikri-rizky:avifkit\` + \`io.github.alfikri-rizky:avifkit-native\` (native companion)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "📝 **Next steps:**" >> $GITHUB_STEP_SUMMARY
-          echo "1. Go to https://central.sonatype.com/" >> $GITHUB_STEP_SUMMARY
-          echo "2. Login with your credentials" >> $GITHUB_STEP_SUMMARY
-          echo "3. Go to 'Deployments' section" >> $GITHUB_STEP_SUMMARY
-          echo "4. Find your deployment and click 'Publish'" >> $GITHUB_STEP_SUMMARY
-          echo "5. Wait ~15 minutes for Maven Central to sync" >> $GITHUB_STEP_SUMMARY
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          {
+            echo "### ✅ Published to Maven Central"
+            echo ""
+            echo "\`io.github.alfikri-rizky:avifkit:$VERSION\` and \`io.github.alfikri-rizky:avifkit-native:$VERSION\`"
+            echo ""
+            echo "Central accepted and released the deployment — there is no manual step left."
+            echo "Expect ~15-30 minutes before the artifacts resolve in Gradle and show up in search."
+            echo ""
+            echo "- [Central Portal](https://central.sonatype.com/artifact/io.github.alfikri-rizky/avifkit/$VERSION)"
+            echo "- [repo1](https://repo1.maven.org/maven2/io/github/alfikri-rizky/avifkit/$VERSION/)"
+          } >> $GITHUB_STEP_SUMMARY
