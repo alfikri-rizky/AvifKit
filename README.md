@@ -499,7 +499,8 @@ cd AvifKit
 
 #### Publishing
 
-The library uses a comprehensive publishing setup:
+Cutting an actual release is a GitHub Actions job that any maintainer can run — see
+[docs/RELEASING.md](docs/RELEASING.md). The commands below are for publishing by hand.
 
 **To Maven Central** (publishes the library and its native companion — both required):
 ```bash
