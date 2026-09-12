@@ -307,7 +307,7 @@ Add the dependency to your `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("io.github.alfikri-rizky:avifkit:0.3.2")
+    implementation("io.github.alfikri-rizky:avifkit:1.0.0")
 }
 ```
 
@@ -318,14 +318,14 @@ dependencies {
 **In Xcode:**
 1. File → Add Packages...
 2. Enter repository URL: `https://github.com/alfikri-rizky/AvifKit`
-3. Select version: `0.3.2` or higher
+3. Select version: `1.0.0` or higher
 4. **Important:** After adding the package, **clean build folder** (Cmd+Shift+K) before first build
 
 **Or add to your `Package.swift`:**
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "0.3.2")
+    .package(url: "https://github.com/alfikri-rizky/AvifKit", from: "1.0.0")
 ]
 ```
 
@@ -353,14 +353,14 @@ print("AVIF available:", converter.isAvifSupported())  // true
    ```
 2. **In Xcode:** File → Packages → Reset Package Caches; Product → Clean Build Folder (Cmd+Shift+K); Build.
 
-**Download from GitHub Releases:** [v0.3.2](https://github.com/alfikri-rizky/AvifKit/releases/tag/v0.3.2)
+**Download from GitHub Releases:** [v1.0.0](https://github.com/alfikri-rizky/AvifKit/releases/tag/v1.0.0)
 
 #### iOS (CocoaPods) - Not Recommended ⚠️
 
 CocoaPods support is technically available but **not recommended** due to validation issues:
 
 ```ruby
-pod 'AvifKit', '~> 0.3.2'
+pod 'AvifKit', '~> 1.0.0'
 ```
 
 **Important Notes:**
